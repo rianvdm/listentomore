@@ -1,5 +1,10 @@
 // Spotify service - consolidated API client for Spotify
 
+import { SpotifyAuth } from './auth';
+import { SpotifySearch } from './search';
+import { SpotifyAlbums } from './albums';
+import { SpotifyArtists } from './artists';
+
 export { SpotifyAuth } from './auth';
 export type { SpotifyAuthConfig, SpotifyTokenData } from './auth';
 

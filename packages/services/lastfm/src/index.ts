@@ -1,5 +1,11 @@
 // Last.fm service - consolidated API client for Last.fm
 
+import { RecentTracks } from './recent-tracks';
+import { TopAlbums, type TimePeriod } from './top-albums';
+import { TopArtists } from './top-artists';
+import { ArtistDetails } from './artist-detail';
+import { LovedTracks } from './loved-tracks';
+
 export { RecentTracks } from './recent-tracks';
 export type { RecentTrack } from './recent-tracks';
 
@@ -45,11 +51,11 @@ export class LastfmService {
     return this.recentTracks.getCurrentlyPlaying();
   }
 
-  async getTopAlbums(period: import('./top-albums').TimePeriod = '1month', limit: number = 6) {
+  async getTopAlbums(period: TimePeriod = '1month', limit: number = 6) {
     return this.topAlbums.getTopAlbums(period, limit);
   }
 
-  async getTopArtists(period: import('./top-artists').TimePeriod = '7day', limit: number = 6) {
+  async getTopArtists(period: TimePeriod = '7day', limit: number = 6) {
     return this.topArtists.getTopArtists(period, limit);
   }
 
