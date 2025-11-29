@@ -260,19 +260,19 @@ export const AI_CONFIG = {
   providers: {
     openai: {
       baseUrl: 'https://api.openai.com/v1',
-      defaultModel: 'gpt-4o-mini',
+      defaultModel: 'gpt-5-mini',
     },
     perplexity: {
       baseUrl: 'https://api.perplexity.ai',
-      defaultModel: 'llama-3.1-sonar-small-128k-online',
+      defaultModel: 'sonar',
     },
   },
 
   tasks: {
     artistSummary: {
       provider: 'openai',
-      model: 'gpt-4o-mini',
-      maxTokens: 500,
+      model: 'gpt-5-mini',
+      maxTokens: 10000,
       temperature: 0.7,
       cacheTtlDays: 180,
       systemPrompt: `You are a music expert who writes concise, engaging artist summaries.
@@ -287,7 +287,7 @@ When mentioning albums, wrap them in {{double braces}} like {{Album Title}}.`,
 
     albumDetail: {
       provider: 'perplexity',
-      model: 'llama-3.1-sonar-small-128k-online',
+      model: 'sonar',
       maxTokens: 1000,
       temperature: 0.5,
       cacheTtlDays: 120,
@@ -301,8 +301,8 @@ Keep responses under 300 words.`,
 
     genreSummary: {
       provider: 'perplexity',
-      model: 'llama-3.1-sonar-small-128k-online',
-      maxTokens: 200,
+      model: 'sonar',
+      maxTokens: 1000,
       temperature: 0.5,
       cacheTtlDays: 180,
       systemPrompt: `You are a music historian. Write brief, informative genre descriptions.
@@ -314,7 +314,7 @@ Keep responses to 2-3 sentences.`,
 
     artistSentence: {
       provider: 'perplexity',
-      model: 'llama-3.1-sonar-small-128k-online',
+      model: 'sonar',
       maxTokens: 100,
       temperature: 0.5,
       cacheTtlDays: 180,
@@ -326,8 +326,8 @@ Maximum 38 words. No fluff or superlatives.`,
 
     randomFact: {
       provider: 'openai',
-      model: 'gpt-4o-mini',
-      maxTokens: 200,
+      model: 'gpt-5-mini',
+      maxTokens: 10000,
       temperature: 0.9,
       cacheTtlDays: 0, // No caching - always fresh
       systemPrompt: `You share interesting, lesser-known music facts. Be specific with dates,
@@ -338,8 +338,8 @@ Keep responses to 2-3 sentences.`,
 
     playlistCoverPrompt: {
       provider: 'openai',
-      model: 'gpt-4o-mini',
-      maxTokens: 300,
+      model: 'gpt-5-nano',
+      maxTokens: 10000,
       temperature: 0.8,
       cacheTtlDays: 0,
       systemPrompt: `You create DALL-E prompts for playlist cover art.
@@ -351,8 +351,8 @@ Focus on mood, color, and abstract representation of the music.`,
 
     listenAi: {
       provider: 'openai',
-      model: 'gpt-4o-mini',
-      maxTokens: 600,
+      model: 'gpt-5-mini',
+      maxTokens: 10000,
       temperature: 0.8,
       cacheTtlDays: 0,
       systemPrompt: `You are Rick Rubin, the legendary music producer. You speak thoughtfully
@@ -366,7 +366,7 @@ Keep responses to 4 sentences maximum. Be warm but wise.`,
   imageGeneration: {
     playlistCover: {
       provider: 'openai',
-      model: 'dall-e-3',
+      model: 'gpt-image-1',
       size: '1024x1024',
       quality: 'standard',
     },
@@ -743,24 +743,26 @@ export class DiscogsSyncService {
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Sessions 1-3)
+### Phase 1: Foundation (Sessions 1-3) ✅
 
 **Goal:** Empty monorepo that builds and deploys
 
 **Tasks:**
 
-- [ ] Create new repo `listentomore`
-- [ ] Initialize Turborepo with TypeScript
-- [ ] Set up workspace structure (`apps/`, `packages/`)
-- [ ] Configure base `tsconfig.json`
-- [ ] Set up `packages/shared` with basic types
-- [ ] Set up `packages/config` with AI and cache config
-- [ ] Create `apps/web` with minimal Hono app ("Hello World")
-- [ ] Configure wrangler.toml for web app
-- [ ] Deploy empty app to Cloudflare Workers
+- [x] Create new repo `listentomore`
+- [x] Initialize Turborepo with TypeScript
+- [x] Set up workspace structure (`apps/`, `packages/`)
+- [x] Configure base `tsconfig.json`
+- [x] Set up `packages/shared` with basic types
+- [x] Set up `packages/config` with AI and cache config
+- [x] Create `apps/web` with minimal Hono app ("Hello World")
+- [x] Configure wrangler.toml for web app
+- [x] Deploy empty app to Cloudflare Workers
 - [ ] Set up CI/CD (GitHub Actions)
 
-**Verification:** `turbo run build` succeeds, app deploys to Workers
+**Verification:** `turbo run build` succeeds, app deploys to Workers ✅
+
+**Deployed:** https://listentomore-web.rian-db8.workers.dev
 
 ---
 
