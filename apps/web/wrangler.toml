@@ -1,0 +1,41 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "listentomore-web"
+main = "src/index.tsx"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Smart placement for optimal performance
+[placement]
+mode = "smart"
+
+# Observability
+[observability]
+enabled = true
+
+# KV Namespace for caching (create with: wrangler kv:namespace create CACHE)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "YOUR_KV_NAMESPACE_ID"
+
+# D1 Database (create with: wrangler d1 create listentomore)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "listentomore"
+# database_id = "YOUR_D1_DATABASE_ID"
+
+# Environment variables (non-sensitive defaults)
+[vars]
+ENVIRONMENT = "development"
+
+# Production environment overrides
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+# Note: Secrets should be set with `wrangler secret put`:
+# - SPOTIFY_CLIENT_ID
+# - SPOTIFY_CLIENT_SECRET
+# - SPOTIFY_REFRESH_TOKEN
+# - LASTFM_API_KEY
+# - OPENAI_API_KEY
+# - PERPLEXITY_API_KEY
+# - DISCOGS_API_TOKEN
