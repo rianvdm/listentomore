@@ -4,11 +4,11 @@
 export const AI_PROVIDERS = {
   openai: {
     baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: 'gpt-5-mini',
   },
   perplexity: {
     baseUrl: 'https://api.perplexity.ai',
-    defaultModel: 'llama-3.1-sonar-small-128k-online',
+    defaultModel: 'sonar',
   },
 } as const;
 
@@ -27,8 +27,8 @@ export interface AITaskConfig {
 export const AI_TASKS = {
   artistSummary: {
     provider: 'openai',
-    model: 'gpt-4o-mini',
-    maxTokens: 500,
+    model: 'gpt-5-mini',
+    maxTokens: 10000,
     temperature: 0.7,
     cacheTtlDays: 180,
     systemPrompt: `You are a music expert who writes concise, engaging artist summaries.
@@ -43,7 +43,7 @@ When mentioning albums, wrap them in {{double braces}} like {{Album Title}}.`,
 
   albumDetail: {
     provider: 'perplexity',
-    model: 'llama-3.1-sonar-small-128k-online',
+    model: 'sonar',
     maxTokens: 1000,
     temperature: 0.5,
     cacheTtlDays: 120,
@@ -57,8 +57,8 @@ Keep responses under 300 words.`,
 
   genreSummary: {
     provider: 'perplexity',
-    model: 'llama-3.1-sonar-small-128k-online',
-    maxTokens: 200,
+    model: 'sonar',
+    maxTokens: 1000,
     temperature: 0.5,
     cacheTtlDays: 180,
     systemPrompt: `You are a music historian. Write brief, informative genre descriptions.
@@ -70,7 +70,7 @@ Keep responses to 2-3 sentences.`,
 
   artistSentence: {
     provider: 'perplexity',
-    model: 'llama-3.1-sonar-small-128k-online',
+    model: 'sonar',
     maxTokens: 100,
     temperature: 0.5,
     cacheTtlDays: 180,
@@ -82,8 +82,8 @@ Maximum 38 words. No fluff or superlatives.`,
 
   randomFact: {
     provider: 'openai',
-    model: 'gpt-4o-mini',
-    maxTokens: 200,
+    model: 'gpt-5-mini',
+    maxTokens: 10000,
     temperature: 0.9,
     cacheTtlDays: 0, // No caching - always fresh
     systemPrompt: `You share interesting, lesser-known music facts. Be specific with dates,
@@ -95,8 +95,8 @@ Keep responses to 2-3 sentences.`,
 
   playlistCoverPrompt: {
     provider: 'openai',
-    model: 'gpt-4o-mini',
-    maxTokens: 300,
+    model: 'gpt-5-nano',
+    maxTokens: 10000,
     temperature: 0.8,
     cacheTtlDays: 0,
     systemPrompt: `You create DALL-E prompts for playlist cover art.
@@ -108,8 +108,8 @@ Focus on mood, color, and abstract representation of the music.`,
 
   listenAi: {
     provider: 'openai',
-    model: 'gpt-4o-mini',
-    maxTokens: 600,
+    model: 'gpt-5-mini',
+    maxTokens: 10000,
     temperature: 0.8,
     cacheTtlDays: 0,
     systemPrompt: `You are Rick Rubin, the legendary music producer. You speak thoughtfully
@@ -125,7 +125,7 @@ export type AITask = keyof typeof AI_TASKS;
 export const IMAGE_GENERATION = {
   playlistCover: {
     provider: 'openai',
-    model: 'dall-e-3',
+    model: 'gpt-image-1',
     size: '1024x1024' as const,
     quality: 'standard' as const,
   },
