@@ -99,6 +99,61 @@ const { data, loading, error } = useQuery(() => spotify.getAlbum(id));
 
 ---
 
+## Storage Strategy: KV vs D1
+
+Cloudflare offers two storage options. Use the right one for each use case:
+
+### KV (Key-Value Store) - Use for Caching
+
+KV is optimized for **read-heavy, low-latency lookups** by key. Use it for:
+
+| Data Type | Key Pattern | TTL | Notes |
+|-----------|-------------|-----|-------|
+| AI responses | `ai:{task}:{hash}` | 90-180 days | Expensive to regenerate |
+| Spotify tokens | `spotify:token` | 55 min | Refresh before expiry |
+| Spotify API cache | `spotify:{endpoint}:{id}` | 30 days | Album/artist data rarely changes |
+| Last.fm API cache | `lastfm:{endpoint}:{params}` | 5 min - 7 days | Varies by endpoint volatility |
+| Songlink cache | `songlink:{spotifyId}` | 30 days | Links rarely change |
+| Rate limits | `ratelimit:{service}` | 1 min | Atomic counters, auto-expire |
+
+**Why KV for rate limits:** KV supports atomic increment operations and automatic TTL expiry. No need to manually clean up expired windows. Simpler than D1 for this use case.
+
+### D1 (SQLite Database) - Use for Queryable Data
+
+D1 is a **relational database**. Use it for data that needs filtering, sorting, or relationships:
+
+| Table | Why D1 |
+|-------|--------|
+| `users` | Need to query by email, join with other tables |
+| `searches` | Need to query by user, sort by time, aggregate stats |
+| `recent_searches` | Need to sort by time, limit results |
+| `discogs_releases` | Need complex filtering (by genre, year, artist), sorting, full-text search |
+| `discogs_sync_state` | Transactional updates, need to track multiple fields atomically |
+
+### Decision Flowchart
+
+```
+Is it a cache of external API data or AI output?
+  → Yes → KV (with appropriate TTL)
+  → No ↓
+
+Do you need to query/filter/sort the data?
+  → Yes → D1
+  → No ↓
+
+Is it a simple counter or flag?
+  → Yes → KV (with atomic operations)
+  → No → D1 (default to structured storage)
+```
+
+### Migration Note
+
+The 8 "kv-fetch" workers in the old architecture were a workaround for slow API calls. In the new architecture:
+- **Caching** happens in KV (same as before, but unified)
+- **Querying** happens in D1 (new capability - we can now filter/sort server-side)
+
+---
+
 ## Project Structure
 
 ```
@@ -176,7 +231,7 @@ listentomore/
 │   │   │   │   ├── sync.ts           # Collection sync (state machine)
 │   │   │   │   ├── enrichment.ts     # Master data enrichment
 │   │   │   │   ├── collection.ts     # Collection queries
-│   │   │   │   └── rate-limiter.ts   # Centralized rate limiting
+│   │   │   │   └── rate-limiter.ts   # KV-backed rate limiting
 │   │   │   └── package.json
 │   │   │
 │   │   ├── ai/
@@ -190,7 +245,7 @@ listentomore/
 │   │   │   │   │   ├── genre-summary.ts
 │   │   │   │   │   ├── random-fact.ts
 │   │   │   │   │   └── playlist-cover.ts
-│   │   │   │   └── cache.ts          # AI response caching
+│   │   │   │   └── cache.ts          # KV-backed AI response caching
 │   │   │   └── package.json
 │   │   │
 │   │   ├── songlink/
@@ -531,20 +586,21 @@ CREATE TABLE discogs_releases (
 CREATE INDEX idx_discogs_user ON discogs_releases(user_id);
 CREATE INDEX idx_discogs_added ON discogs_releases(user_id, date_added DESC);
 CREATE INDEX idx_discogs_master ON discogs_releases(master_id) WHERE master_enriched = 0;
+```
 
--- Rate limit tracking (shared across services)
-CREATE TABLE rate_limits (
-  service TEXT PRIMARY KEY, -- 'discogs', 'spotify', 'openai', 'perplexity'
-  requests_remaining INTEGER,
-  window_reset_at TEXT,
-  updated_at TEXT DEFAULT (datetime('now'))
-);
+### KV Keys (for caching and rate limits)
 
-INSERT INTO rate_limits (service, requests_remaining) VALUES
-  ('discogs', 60),
-  ('spotify', 100),
-  ('openai', 60),
-  ('perplexity', 30);
+```typescript
+// Rate limiting - uses KV atomic counters with auto-expiry
+// Key: `ratelimit:{service}:{window}`
+// Value: request count
+// TTL: 60 seconds (auto-expires each window)
+
+// Example rate limit keys:
+// ratelimit:discogs:1699123456 → 45 (45 requests in this minute window)
+// ratelimit:spotify:1699123456 → 12
+
+// Cache keys follow the pattern from Storage Strategy section above
 ```
 
 ---
@@ -723,18 +779,24 @@ export class DiscogsSyncService {
   }
 
   private async waitForRateLimit(): Promise<void> {
-    const limit = await this.db
-      .prepare('SELECT * FROM rate_limits WHERE service = ?')
-      .bind('discogs')
-      .first();
+    // Rate limiting uses KV with minute-window keys
+    // Discogs allows 60 requests per minute
+    const windowKey = `ratelimit:discogs:${Math.floor(Date.now() / 60000)}`;
+    const count = await this.kv.get(windowKey);
 
-    if (limit && limit.requests_remaining <= 0) {
-      const resetAt = new Date(limit.window_reset_at).getTime();
-      const waitMs = Math.max(0, resetAt - Date.now());
-      if (waitMs > 0) {
-        await new Promise(resolve => setTimeout(resolve, waitMs));
-      }
+    if (count && parseInt(count) >= 60) {
+      // Wait for next minute window
+      const msUntilNextWindow = 60000 - (Date.now() % 60000);
+      await new Promise(resolve => setTimeout(resolve, msUntilNextWindow));
     }
+  }
+
+  private async incrementRateLimit(): Promise<void> {
+    const windowKey = `ratelimit:discogs:${Math.floor(Date.now() / 60000)}`;
+    const current = await this.kv.get(windowKey);
+    const newCount = current ? parseInt(current) + 1 : 1;
+    // TTL of 120 seconds ensures cleanup (2 windows)
+    await this.kv.put(windowKey, newCount.toString(), { expirationTtl: 120 });
   }
 }
 ```
@@ -766,29 +828,32 @@ export class DiscogsSyncService {
 
 ---
 
-### Phase 2: Database & Core Services (Sessions 4-7)
+### Phase 2: Database & Core Services (Sessions 4-7) ✅
 
 **Goal:** D1 database and core service packages working
 
 **Tasks:**
 
-- [ ] Set up `packages/db` with D1 schema
-- [ ] Create and run migrations
-- [ ] Implement `packages/services/spotify`:
-  - [ ] Token management (port from `api-spotify-getspotifytoken`)
-  - [ ] Search (port from `api-spotify-search`)
-  - [ ] Albums (port from `api-spotify-albums`)
-  - [ ] Artists (port from `api-spotify-artists`)
-- [ ] Implement `packages/services/lastfm`:
-  - [ ] Recent tracks (port from `api-lastfm-recenttracks`)
-  - [ ] Top albums/artists (port from `api-lastfm-topalbums`, `api-lastfm-topartists`)
-  - [ ] Artist detail (port from `api-lastfm-artistdetail`)
-  - [ ] Loved tracks (port from `api-lastfm-lovedtracks`)
-- [ ] Implement `packages/services/songlink`:
-  - [ ] Link aggregation (port from `api-songlink`)
+- [x] Set up `packages/db` with D1 schema
+- [x] Create and run migrations
+- [x] Implement `packages/services/spotify`:
+  - [x] Token management (port from `api-spotify-getspotifytoken`)
+  - [x] Search (port from `api-spotify-search`)
+  - [x] Albums (port from `api-spotify-albums`)
+  - [x] Artists (port from `api-spotify-artists`)
+- [x] Implement `packages/services/lastfm`:
+  - [x] Recent tracks (port from `api-lastfm-recenttracks`)
+  - [x] Top albums/artists (port from `api-lastfm-topalbums`, `api-lastfm-topartists`)
+  - [x] Artist detail (port from `api-lastfm-artistdetail`)
+  - [x] Loved tracks (port from `api-lastfm-lovedtracks`)
+- [x] Implement `packages/services/songlink`:
+  - [x] Link aggregation (port from `api-songlink`)
 - [ ] Write tests for each service
 
-**Verification:** Services can be imported and called from `apps/web`
+**Verification:** Services can be imported and called from `apps/web` ✅
+
+**Database:** D1 database `listentomore` (512d0c41-502c-41ba-82ff-635d0413b071)
+**KV:** CACHE namespace (a6011a8b5bac4be9a472ff86f8d5fd91)
 
 ---
 

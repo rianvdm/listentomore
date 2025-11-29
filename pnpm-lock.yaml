@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20241127.0
+        version: 4.20251128.0
       turbo:
         specifier: ^2.3.0
         version: 2.6.1
@@ -20,9 +23,21 @@ importers:
       '@listentomore/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@listentomore/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@listentomore/lastfm':
+        specifier: workspace:*
+        version: link:../../packages/services/lastfm
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@listentomore/songlink':
+        specifier: workspace:*
+        version: link:../../packages/services/songlink
+      '@listentomore/spotify':
+        specifier: workspace:*
+        version: link:../../packages/services/spotify
       hono:
         specifier: ^4.6.0
         version: 4.10.7
@@ -41,6 +56,55 @@ importers:
         version: 3.114.15(@cloudflare/workers-types@4.20251128.0)
 
   packages/config:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/db:
+    dependencies:
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/services/lastfm:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/services/songlink:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/services/spotify:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
     devDependencies:
       typescript:
         specifier: ^5.7.2

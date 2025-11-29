@@ -12,16 +12,16 @@ mode = "smart"
 [observability]
 enabled = true
 
-# KV Namespace for caching (create with: wrangler kv:namespace create CACHE)
-# [[kv_namespaces]]
-# binding = "CACHE"
-# id = "YOUR_KV_NAMESPACE_ID"
+# KV Namespace for caching
+[[kv_namespaces]]
+binding = "CACHE"
+id = "a6011a8b5bac4be9a472ff86f8d5fd91"
 
-# D1 Database (create with: wrangler d1 create listentomore)
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "listentomore"
-# database_id = "YOUR_D1_DATABASE_ID"
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "listentomore"
+database_id = "512d0c41-502c-41ba-82ff-635d0413b071"
 
 # Environment variables (non-sensitive defaults)
 [vars]
