@@ -3,7 +3,7 @@
 > **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
 > - **Current phase:** Phase 5 in progress (Web App - Core Pages). Skipped Phase 4 (Discogs) for now.
 > - **Architecture:** Server-side rendering with progressive loading. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
-> - **Progressive loading:** Album detail page loads instantly with basic Spotify data, then streams in AI summary and streaming links via client-side JS calling `/api/internal/*` endpoints. **TODO: Apply same pattern to artist detail page.**
+> - **Progressive loading:** Album and artist detail pages load instantly with basic Spotify data (~0.3s), then stream in AI summary and additional data via client-side JS calling `/api/internal/*` endpoints (songlink, album-summary, artist-summary, artist-lastfm).
 > - **Don't:** Create new workers, use client-side data fetching for pages (except progressive loading), or expose API keys to browser.
 > - **Do:** Add page routes to `apps/web/src/index.tsx`, use `c.get('serviceName')` for data, return HTML with `c.html()`.
 

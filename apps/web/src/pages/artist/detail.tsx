@@ -1,18 +1,15 @@
 // Artist detail page component
-// Shows artist info, top albums, similar artists, and AI overview using image-text-wrapper layout
+// Loads basic data immediately, then progressively loads AI summary and Last.fm data
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import type { SpotifyService } from '@listentomore/spotify';
-import type { LastfmService } from '@listentomore/lastfm';
-import type { AIService } from '@listentomore/ai';
 
 interface ArtistData {
   id: string;
   name: string;
   image?: string;
   genres: string[];
-  userPlaycount?: number;
   spotifyUrl: string;
 }
 
@@ -24,16 +21,12 @@ interface TopAlbum {
 interface ArtistDetailProps {
   artist: ArtistData | null;
   topAlbums: TopAlbum[];
-  similarArtists: string[];
-  aiSummary?: string;
   error?: string;
 }
 
 export function ArtistDetailPage({
   artist,
   topAlbums,
-  similarArtists,
-  aiSummary,
   error,
 }: ArtistDetailProps) {
   if (error || !artist) {
@@ -54,9 +47,6 @@ export function ArtistDetailPage({
 
   const artistImage = artist.image || 'https://file.elezea.com/noun-no-image.png';
   const genre = artist.genres[0] || 'No genres found';
-  const formattedPlaycount = artist.userPlaycount
-    ? new Intl.NumberFormat().format(artist.userPlaycount)
-    : '0';
 
   return (
     <Layout title={artist.name} description={`Learn about ${artist.name} - discography, bio, and more`}>
@@ -86,8 +76,10 @@ export function ArtistDetailPage({
                 )}
               </p>
 
-              <p>
-                <strong>My playcount:</strong> {formattedPlaycount} plays
+              {/* Playcount - loaded via JS */}
+              <p id="playcount-section">
+                <strong>My playcount:</strong>{' '}
+                <span class="text-muted">Loading...</span>
               </p>
 
               <p style={{ marginBottom: '0.2em' }}>
@@ -107,49 +99,81 @@ export function ArtistDetailPage({
             </div>
           </div>
 
-          {/* Similar Artists */}
-          {similarArtists.length > 0 && (
-            <>
-              <p style={{ marginBottom: '0.2em' }}>
-                <strong>Similar Artists:</strong>
-              </p>
-              <ul style={{ listStyleType: 'none', paddingLeft: '0', marginTop: '0' }}>
-                {similarArtists.map((name) => (
-                  <li key={name}>
-                    <a href={`/artist?q=${encodeURIComponent(name)}`}>{name}</a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+          {/* Similar Artists - loaded via JS */}
+          <div id="similar-artists"></div>
 
-          {/* AI Overview */}
-          {aiSummary && (
-            <>
-              <p style={{ marginTop: '1.5em', marginBottom: '0.2em' }}>
-                <strong>Overview:</strong>
-              </p>
-              <div dangerouslySetInnerHTML={{ __html: formatArtistLinks(aiSummary) }} />
-            </>
-          )}
+          {/* AI Overview - loaded via JS */}
+          <div id="ai-summary" class="ai-summary">
+            <p class="text-muted">Loading AI summary...</p>
+          </div>
         </section>
       </main>
+
+      {/* Progressive loading script */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        (function() {
+          var artistName = ${JSON.stringify(artist.name)};
+
+          // Fetch Last.fm data (playcount and similar artists)
+          fetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              var lastfm = data.data;
+
+              // Update playcount
+              var playcount = lastfm.userPlaycount || 0;
+              var formatted = new Intl.NumberFormat().format(playcount);
+              document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> ' + formatted + ' plays';
+
+              // Update similar artists
+              if (lastfm.similar && lastfm.similar.length > 0) {
+                var html = '<p style="margin-bottom:0.2em"><strong>Similar Artists:</strong></p>';
+                html += '<ul style="list-style-type:none;padding-left:0;margin-top:0">';
+                lastfm.similar.forEach(function(name) {
+                  html += '<li><a href="/artist?q=' + encodeURIComponent(name) + '">' + name + '</a></li>';
+                });
+                html += '</ul>';
+                document.getElementById('similar-artists').innerHTML = html;
+              }
+            })
+            .catch(function(e) {
+              console.error('Last.fm error:', e);
+              document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> 0 plays';
+            });
+
+          // Fetch AI summary
+          fetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              var summary = data.data;
+              var text = summary.text || summary.summary || '';
+              var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
+              html += '<div>' + formatArtistLinks(text) + '</div>';
+              document.getElementById('ai-summary').innerHTML = html;
+            })
+            .catch(function(e) {
+              console.error('AI summary error:', e);
+              document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
+            });
+
+          function formatArtistLinks(text) {
+            return text
+              .replace(/\\[\\[([^\\]]+)\\]\\]/g, function(_, name) {
+                return '<a href="/artist?q=' + encodeURIComponent(name) + '">' + name + '</a>';
+              })
+              .replace(/\\{\\{([^}]+)\\}\\}/g, function(_, name) {
+                return '<em>' + name + '</em>';
+              });
+          }
+        })();
+      ` }} />
     </Layout>
   );
 }
 
-// Convert [[Artist Name]] to links and {{Album Name}} to italic
-function formatArtistLinks(text: string): string {
-  return text
-    .replace(/\[\[([^\]]+)\]\]/g, (_, name) => {
-      return `<a href="/artist?q=${encodeURIComponent(name)}">${name}</a>`;
-    })
-    .replace(/\{\{([^}]+)\}\}/g, (_, name) => {
-      return `<em>${name}</em>`;
-    });
-}
-
-// Route handler
+// Route handler - now only fetches Spotify data (fast)
 export async function handleArtistDetail(c: Context) {
   const idParam = c.req.param('id');
 
@@ -160,19 +184,19 @@ export async function handleArtistDetail(c: Context) {
   }
 
   const spotify = c.get('spotify') as SpotifyService;
-  const lastfm = c.get('lastfm') as LastfmService;
-  const ai = c.get('ai') as AIService;
 
   try {
-    // Fetch artist data from Spotify
-    const artistData = await spotify.getArtist(spotifyId);
+    // Fetch artist data and top albums from Spotify (fast)
+    const [artistData, topAlbumsData] = await Promise.all([
+      spotify.getArtist(spotifyId),
+      spotify.getArtistAlbums(spotifyId, 3).catch(() => []),
+    ]);
 
     if (!artistData) {
       return c.html(
         <ArtistDetailPage
           artist={null}
           topAlbums={[]}
-          similarArtists={[]}
           error="Artist not found"
         />
       );
@@ -186,45 +210,19 @@ export async function handleArtistDetail(c: Context) {
       spotifyUrl: artistData.url,
     };
 
-    // Fetch additional data in parallel
-    const [lastfmData, topAlbumsData, aiSummary] = await Promise.all([
-      // Last.fm for playcount and similar artists
-      lastfm.getArtistDetail(artist.name).catch(() => null),
-      // Spotify for top albums
-      spotify.getArtistAlbums(spotifyId, 3).catch(() => []),
-      // AI for overview
-      ai.getArtistSummary(artist.name).catch(() => null),
-    ]);
-
-    // Add playcount from Last.fm
-    if (lastfmData) {
-      artist.userPlaycount = lastfmData.userPlaycount;
-    }
-
     // Format top albums
     const topAlbums: TopAlbum[] = topAlbumsData.map((album) => ({
       id: album.id,
       name: album.name,
     }));
 
-    // Get similar artists from Last.fm
-    const similarArtists = lastfmData?.similar || [];
-
-    return c.html(
-      <ArtistDetailPage
-        artist={artist}
-        topAlbums={topAlbums}
-        similarArtists={similarArtists}
-        aiSummary={aiSummary?.text}
-      />
-    );
+    return c.html(<ArtistDetailPage artist={artist} topAlbums={topAlbums} />);
   } catch (error) {
     console.error('Artist detail error:', error);
     return c.html(
       <ArtistDetailPage
         artist={null}
         topAlbums={[]}
-        similarArtists={[]}
         error="Failed to load artist"
       />
     );

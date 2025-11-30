@@ -294,6 +294,23 @@ app.get('/api/internal/artist-summary', async (c) => {
   }
 });
 
+app.get('/api/internal/artist-lastfm', async (c) => {
+  const name = c.req.query('name');
+
+  if (!name) {
+    return c.json({ error: 'Missing name parameter' }, 400);
+  }
+
+  try {
+    const lastfm = c.get('lastfm');
+    const result = await lastfm.getArtistDetail(name);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal lastfm artist error:', error);
+    return c.json({ error: 'Failed to fetch Last.fm data' }, 500);
+  }
+});
+
 // API routes overview
 app.get('/api', (c) => {
   const apiKey = c.get('apiKey');
