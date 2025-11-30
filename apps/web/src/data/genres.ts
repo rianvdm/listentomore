@@ -1,5 +1,5 @@
 // Comprehensive list of music genres in slug format
-// Used for genre search and random genre selection
+// Used for random genre selection
 
 export const GENRES = [
   'acid-jazz',
@@ -98,6 +98,26 @@ export const GENRES = [
   'trip-hop',
   'vaporwave',
   'world-music',
+] as const;
+
+// Popular genres to display on the browse page
+export const POPULAR_GENRES = [
+  'rock',
+  'pop',
+  'hip-hop',
+  'jazz',
+  'electronic',
+  'classical',
+  'r-n-b',
+  'metal',
+  'indie',
+  'folk',
+  'punk',
+  'soul',
+  'blues',
+  'country',
+  'reggae',
+  'funk',
 ] as const;
 
 export type GenreSlug = (typeof GENRES)[number];
