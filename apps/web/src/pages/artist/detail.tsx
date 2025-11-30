@@ -150,7 +150,7 @@ export function ArtistDetailPage({
               var summary = data.data;
               var text = summary.text || summary.summary || '';
               var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
-              html += '<div>' + formatArtistLinks(text) + '</div>';
+              html += '<div>' + formatMarkdown(text) + '</div>';
               document.getElementById('ai-summary').innerHTML = html;
             })
             .catch(function(e) {
@@ -158,14 +158,17 @@ export function ArtistDetailPage({
               document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
             });
 
-          function formatArtistLinks(text) {
+          function formatMarkdown(text) {
             return text
-              .replace(/\\[\\[([^\\]]+)\\]\\]/g, function(_, name) {
-                return '<a href="/artist?q=' + encodeURIComponent(name) + '">' + name + '</a>';
-              })
-              .replace(/\\{\\{([^}]+)\\}\\}/g, function(_, name) {
-                return '<em>' + name + '</em>';
-              });
+              // Markdown links [text](url)
+              .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+              // Bold
+              .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+              // Italic
+              .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+              // Paragraphs
+              .replace(/\\n\\n/g, '</p><p>')
+              .replace(/\\n/g, '<br/>');
           }
         })();
       ` }} />
