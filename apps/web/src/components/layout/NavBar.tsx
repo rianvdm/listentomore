@@ -10,20 +10,17 @@ export function NavBar() {
         </a>
 
         <div class="nav-links">
-          <a href="/stats" class="nav-link">
-            My Stats
+          <a href="/album" class="nav-link">
+            Albums
           </a>
           <a href="/artist" class="nav-link">
             Artists
           </a>
-          <a href="/album" class="nav-link">
-            Albums
-          </a>
-          <a href="/genre" class="nav-link">
-            Genres
+          <a href="/stats" class="nav-link">
+            Stats
           </a>
           <a href="/discord" class="nav-link">
-            Discord Bot
+            Discord
           </a>
           <a href="/about" class="nav-link">
             About
