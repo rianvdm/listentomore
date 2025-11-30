@@ -140,11 +140,7 @@ app.get('/health', (c) => {
 
 // Home page - matches original my-music-next structure
 app.get('/', async (c) => {
-  const ai = c.get('ai');
   const db = c.get('db');
-
-  // Fetch random fact
-  const randomFact = await ai.getRandomFact().catch(() => ({ text: '' }));
 
   // Get day greeting (e.g., "Happy Friday, friend!")
   const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
@@ -184,7 +180,6 @@ app.get('/', async (c) => {
             Or maybe explore the history and seminal albums of a random genre like{' '}
             <strong><a href={`/genre/${randomGenre}`}>{displayGenre}</a></strong>.
           </p>
-          {randomFact.text && <p>🧠 {randomFact.text}</p>}
         </section>
 
         {/* Album Search */}
