@@ -138,94 +138,99 @@ app.get('/health', (c) => {
   });
 });
 
-// Home page - shows recent tracks and top albums
+// Home page - matches original my-music-next structure
 app.get('/', async (c) => {
-  const lastfm = c.get('lastfm');
   const ai = c.get('ai');
+  const db = c.get('db');
 
-  // Fetch data in parallel
-  const [recentTracks, topAlbums, randomFact] = await Promise.all([
-    lastfm.recentTracks.getRecentTracks(6).catch(() => []),
-    lastfm.getTopAlbums('1month', 6).catch(() => []),
-    ai.getRandomFact().catch(() => ({ text: '' })),
-  ]);
+  // Fetch random fact
+  const randomFact = await ai.getRandomFact().catch(() => ({ text: '' }));
 
-  // Get time-based greeting
-  const hour = new Date().getUTCHours();
-  const greeting =
-    hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  // Get day greeting (e.g., "Happy Friday, friend!")
+  const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+
+  // Random genre for exploration link
+  const genres = ['rock', 'jazz', 'hip-hop', 'electronic', 'classical', 'indie', 'metal', 'soul', 'punk', 'folk'];
+  const randomGenre = genres[Math.floor(Math.random() * genres.length)];
+  const displayGenre = randomGenre.charAt(0).toUpperCase() + randomGenre.slice(1);
+
+  // Get recent community searches from D1 (if available)
+  let recentSearches: Array<{ id: string; name: string; artist: string; image?: string }> = [];
+  try {
+    const result = await db.getRecentSearches(6);
+    recentSearches = result.map(s => ({
+      id: s.spotify_id,
+      name: s.album_name,
+      artist: s.artist_name,
+      image: s.image_url || undefined,
+    }));
+  } catch {
+    // Table might not exist yet or be empty
+  }
 
   return c.html(
     <Layout title="Home" description="Discover music, explore albums, and track your listening habits">
-      {/* Hero Section */}
-      <div class="text-center mb-4">
-        <h1>{greeting}</h1>
-        <p>{SITE_CONFIG.description}</p>
-      </div>
+      {/* Day Greeting */}
+      <header>
+        <h1>Happy {dayName}, friend!</h1>
+      </header>
 
-      {/* Random Fact Card */}
-      {randomFact.text && (
-        <div class="card mb-4">
-          <p class="text-muted mb-1">Did you know?</p>
-          <p>{randomFact.text}</p>
-        </div>
-      )}
+      <main>
+        {/* Welcome Section */}
+        <section id="lastfm-stats">
+          <p>
+            ✨ Welcome, music traveler. If you're looking for something new to listen to, you should{' '}
+            <strong><a href="/recommendations">get rec'd</a></strong>.
+            Or maybe explore the history and seminal albums of a random genre like{' '}
+            <strong><a href={`/genre/${randomGenre}`}>{displayGenre}</a></strong>.
+          </p>
+          {randomFact.text && <p>🧠 {randomFact.text}</p>}
+        </section>
 
-      {/* Search Section */}
-      <div class="section">
-        <h2 class="section-title">Search</h2>
-        <div class="search-form">
-          <form action="/album" method="get" class="search-form">
-            <input
-              type="search"
-              name="q"
-              placeholder="Search for albums..."
-              class="input"
-              autofocus
-            />
-            <button type="submit" class="button">
-              Search Albums
-            </button>
-          </form>
-        </div>
-      </div>
+        {/* Album Search */}
+        <h2 style={{ marginBottom: 0, marginTop: '2em' }}>💿 Learn more about an album</h2>
+        <form id="search-form" action="/album" method="get">
+          <input
+            type="text"
+            name="album"
+            placeholder="Enter album name..."
+            class="input"
+            style={{ maxWidth: '200px' }}
+          />
+          <input
+            type="text"
+            name="artist"
+            placeholder="Enter artist name..."
+            class="input"
+            style={{ maxWidth: '200px' }}
+          />
+          <button type="submit" class="button">Search</button>
+        </form>
 
-      {/* Recently Played */}
-      {recentTracks.length > 0 && (
-        <div class="section">
-          <h2 class="section-title">Recently Played</h2>
+        {/* Recent Community Searches */}
+        <h2>👀 From the community</h2>
+        <p style={{ textAlign: 'center' }}>
+          <strong>
+            Here are some albums that <a href="/about">Discord Bot</a> users recently shared with their friends.
+          </strong>
+        </p>
+
+        {recentSearches.length > 0 ? (
           <div class="track-grid">
-            {recentTracks.map((track: { artist: string; name: string; album: string; image?: string }) => (
+            {recentSearches.map((album) => (
               <TrackCard
-                artist={track.artist}
-                name={track.name}
-                album={track.album}
-                imageUrl={track.image}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Top Albums This Month */}
-      {topAlbums.length > 0 && (
-        <div class="section">
-          <h2 class="section-title">Top Albums This Month</h2>
-          <div class="track-grid">
-            {topAlbums.map((album: { artist: string; name: string; playcount: number; image?: string }) => (
-              <TrackCard
+                key={album.id}
                 artist={album.artist}
                 name={album.name}
-                playcount={album.playcount}
                 imageUrl={album.image}
+                href={`/album/spotify:${album.id}`}
               />
             ))}
           </div>
-          <p class="text-center mt-2">
-            <a href="/stats">View all stats</a>
-          </p>
-        </div>
-      )}
+        ) : (
+          <p class="text-center text-muted">No recent searches yet.</p>
+        )}
+      </main>
     </Layout>
   );
 });

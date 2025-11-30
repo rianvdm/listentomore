@@ -1,33 +1,34 @@
 // Artist search page component
-// Shows search form and results
+// Simple search form that shows results in a grid
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { Input, Button } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
+import type { AIService } from '@listentomore/ai';
 
 interface ArtistResult {
   id: string;
   name: string;
   image?: string;
   genres: string[];
-  followers?: number;
 }
 
 interface ArtistSearchProps {
   query: string;
   results: ArtistResult[];
+  randomFact?: string;
 }
 
-export function ArtistSearchPage({ query, results }: ArtistSearchProps) {
+export function ArtistSearchPage({ query, results, randomFact }: ArtistSearchProps) {
   return (
     <Layout title="Search Artists" description="Search for artists on Spotify">
-      <h1>Search Artists</h1>
+      <h1>🎤 Search Artists</h1>
 
       {/* Search Form */}
-      <form action="/artist" method="get" class="search-form">
+      <form id="search-form" action="/artist" method="get">
         <Input
-          type="search"
+          type="text"
           name="q"
           placeholder="Enter artist name..."
           value={query}
@@ -41,9 +42,7 @@ export function ArtistSearchPage({ query, results }: ArtistSearchProps) {
         <div class="section">
           {results.length > 0 ? (
             <>
-              <h2 class="section-title">
-                Results for "{query}"
-              </h2>
+              <h2 class="section-title">Results for "{query}"</h2>
               <div class="track-grid">
                 {results.map((artist) => (
                   <a href={`/artist/spotify:${artist.id}`} key={artist.id} class="track">
@@ -93,9 +92,8 @@ export function ArtistSearchPage({ query, results }: ArtistSearchProps) {
       {/* Empty State */}
       {!query && (
         <div class="section text-center">
-          <p class="text-muted">
-            Enter an artist name to search.
-          </p>
+          <p class="text-muted">Enter an artist name to search.</p>
+          {randomFact && <p style={{ marginTop: '2rem' }}>🧠 {randomFact}</p>}
         </div>
       )}
     </Layout>
@@ -106,24 +104,35 @@ export function ArtistSearchPage({ query, results }: ArtistSearchProps) {
 export async function handleArtistSearch(c: Context) {
   const query = c.req.query('q') || '';
   const spotify = c.get('spotify') as SpotifyService;
+  const ai = c.get('ai') as AIService;
 
   let results: ArtistResult[] = [];
+  let randomFact: string | undefined;
+
+  // Fetch random fact for empty state
+  if (!query) {
+    try {
+      const fact = await ai.getRandomFact();
+      randomFact = fact.text;
+    } catch {
+      // Ignore
+    }
+  }
 
   if (query) {
     try {
-      // SpotifySearch already transforms the results (but doesn't include genres/followers)
+      // SpotifySearch already transforms the results
       const searchResults = await spotify.search.search(query, 'artist', 12);
       results = searchResults.map((artist) => ({
         id: artist.id,
         name: artist.name,
         image: artist.image || undefined,
         genres: [], // Basic search doesn't include genres
-        followers: undefined,
       }));
     } catch (error) {
       console.error('Artist search error:', error);
     }
   }
 
-  return c.html(<ArtistSearchPage query={query} results={results} />);
+  return c.html(<ArtistSearchPage query={query} results={results} randomFact={randomFact} />);
 }

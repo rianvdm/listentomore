@@ -1,5 +1,5 @@
 // Album detail page component
-// Shows album info, AI summary, and streaming links
+// Shows album info, streaming links, and AI summary using image-text-wrapper layout
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
@@ -13,15 +13,14 @@ interface AlbumData {
   artist: string;
   artistId?: string;
   image?: string;
-  releaseDate?: string;
-  totalTracks: number;
+  releaseYear?: string;
   genres: string[];
   spotifyUrl: string;
-  tracks: Array<{
-    number: number;
-    name: string;
-    duration: string;
-  }>;
+}
+
+interface StreamingLink {
+  platform: string;
+  url: string;
 }
 
 interface AlbumDetailProps {
@@ -30,10 +29,7 @@ interface AlbumDetailProps {
     text: string;
     citations?: string[];
   };
-  streamingLinks?: Array<{
-    platform: string;
-    url: string;
-  }>;
+  streamingLinks: StreamingLink[];
   error?: string;
 }
 
@@ -43,123 +39,119 @@ export function AlbumDetailPage({ album, aiSummary, streamingLinks, error }: Alb
       <Layout title="Album Not Found">
         <div class="text-center" style={{ paddingTop: '4rem' }}>
           <h1>Album Not Found</h1>
-          <p class="text-muted">{error || 'The album you requested could not be found.'}</p>
+          <p class="text-muted">
+            {error || 'The album you requested could not be found.'} This either means it's not
+            available to stream, or I am doing something wrong with the search.
+          </p>
           <p class="mt-2">
-            <a href="/album" class="button">Search Albums</a>
+            You can also <a href="/album">try the search manually</a> and see if that works.
           </p>
         </div>
       </Layout>
     );
   }
 
-  return (
-    <Layout title={`${album.name} by ${album.artist}`} description={`Listen to ${album.name} by ${album.artist}`}>
-      {/* Album Header */}
-      <div class="detail-header">
-        {album.image && (
-          <img src={album.image} alt={album.name} class="detail-image" />
-        )}
-        <div class="detail-info">
-          <h1 class="detail-title">{album.name}</h1>
-          <p class="detail-subtitle">
-            <a href={album.artistId ? `/artist/spotify:${album.artistId}` : '#'}>{album.artist}</a>
-          </p>
-          <p class="detail-meta">
-            {album.releaseDate && `Released ${album.releaseDate}`}
-            {album.totalTracks && ` · ${album.totalTracks} tracks`}
-          </p>
+  const albumImage = album.image || 'https://file.elezea.com/noun-no-image.png';
 
-          {/* Genre Tags */}
-          {album.genres.length > 0 && (
-            <div class="genre-tags">
-              {album.genres.map((genre) => (
-                <a href={`/genre/${encodeURIComponent(genre.toLowerCase().replace(/\s+/g, '-'))}`} class="genre-tag">
-                  {genre}
-                </a>
-              ))}
+  return (
+    <Layout
+      title={`${album.name} by ${album.artist}`}
+      description={`Listen to ${album.name} by ${album.artist}`}
+    >
+      {/* Header with linked artist */}
+      <header>
+        <h1>
+          {album.name} by{' '}
+          {album.artistId ? (
+            <a href={`/artist/spotify:${album.artistId}`}>{album.artist}</a>
+          ) : (
+            album.artist
+          )}
+        </h1>
+      </header>
+
+      <main>
+        {/* Image + Info Layout */}
+        <section class="track_ul2">
+          <div class="image-text-wrapper">
+            <img
+              src={albumImage}
+              alt={album.name}
+              style={{ maxWidth: '100%', width: '220px', height: 'auto' }}
+            />
+            <div class="no-wrap-text">
+              <p>
+                <strong>Released:</strong> {album.releaseYear || 'Unknown'}
+              </p>
+
+              {album.genres.length > 0 && (
+                <p>
+                  <strong>Genres:</strong>{' '}
+                  {album.genres.slice(0, 3).map((genre, index) => (
+                    <>
+                      <a href={`/genre/${encodeURIComponent(genre.toLowerCase().replace(/\s+/g, '-'))}`}>
+                        {genre}
+                      </a>
+                      {index < Math.min(album.genres.length, 3) - 1 ? ' | ' : ''}
+                    </>
+                  ))}
+                </p>
+              )}
+
+              <p>
+                <strong>Streaming:</strong>
+                <br />
+                {streamingLinks.length > 0 ? (
+                  streamingLinks.map((link) => (
+                    <>
+                      <a href={link.url} target="_blank" rel="noopener noreferrer">
+                        {link.platform} ↗
+                      </a>
+                      <br />
+                    </>
+                  ))
+                ) : (
+                  <a href={album.spotifyUrl} target="_blank" rel="noopener noreferrer">
+                    Spotify ↗
+                  </a>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* AI Summary */}
+          {aiSummary?.text && (
+            <div>
+              <p>{aiSummary.text}</p>
+              {aiSummary.citations && aiSummary.citations.length > 0 && (
+                <div class="citations" style={{ marginTop: '1rem' }}>
+                  <h4>Sources</h4>
+                  <ul>
+                    {aiSummary.citations.map((citation, i) => {
+                      let hostname = '';
+                      try {
+                        hostname = new URL(citation).hostname.replace('www.', '');
+                      } catch {
+                        hostname = citation;
+                      }
+                      return (
+                        <li key={i}>
+                          <span class="citation-number">[{i + 1}]</span>{' '}
+                          <a href={citation} target="_blank" rel="noopener noreferrer">
+                            {hostname}
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Streaming Links */}
-      {streamingLinks && streamingLinks.length > 0 && (
-        <div class="section">
-          <h3>Listen on</h3>
-          <div class="streaming-links">
-            {streamingLinks.map((link) => (
-              <a href={link.url} target="_blank" rel="noopener noreferrer" class="streaming-link">
-                {link.platform}
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* AI Summary */}
-      {aiSummary?.text && (
-        <div class="section">
-          <h3>About this album</h3>
-          <div class="card">
-            <p>{aiSummary.text}</p>
-            {aiSummary.citations && aiSummary.citations.length > 0 && (
-              <div class="mt-2">
-                <p class="text-muted footnote">Sources:</p>
-                <ul style={{ fontSize: '12px', opacity: 0.7 }}>
-                  {aiSummary.citations.map((citation, i) => (
-                    <li key={i}>
-                      <a href={citation} target="_blank" rel="noopener noreferrer">
-                        {new URL(citation).hostname}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Track List */}
-      {album.tracks.length > 0 && (
-        <div class="section">
-          <h3>Tracks</h3>
-          <table>
-            <tbody>
-              {album.tracks.map((track) => (
-                <tr key={track.number}>
-                  <td style={{ width: '30px', opacity: 0.5 }}>{track.number}</td>
-                  <td>{track.name}</td>
-                  <td style={{ width: '60px', textAlign: 'right', opacity: 0.5 }}>{track.duration}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Spotify Embed */}
-      <div class="section">
-        <iframe
-          src={`https://open.spotify.com/embed/album/${album.id}?utm_source=generator&theme=0`}
-          width="100%"
-          height="352"
-          frameBorder="0"
-          allowFullScreen
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-          loading="lazy"
-          class="spotify-iframe"
-        />
-      </div>
+        </section>
+      </main>
     </Layout>
   );
-}
-
-// Format duration from ms to mm:ss
-function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 // Route handler
@@ -177,11 +169,11 @@ export async function handleAlbumDetail(c: Context) {
   const songlink = c.get('songlink') as SonglinkService;
 
   try {
-    // Fetch album data (already transformed by SpotifyAlbums)
+    // Fetch album data
     const albumData = await spotify.getAlbum(spotifyId);
 
     if (!albumData) {
-      return c.html(<AlbumDetailPage album={null} error="Album not found" />);
+      return c.html(<AlbumDetailPage album={null} streamingLinks={[]} error="Album not found" />);
     }
 
     const album: AlbumData = {
@@ -190,15 +182,9 @@ export async function handleAlbumDetail(c: Context) {
       artist: albumData.artist,
       artistId: albumData.artistIds[0],
       image: albumData.image || undefined,
-      releaseDate: albumData.releaseDate,
-      totalTracks: albumData.tracks,
+      releaseYear: albumData.releaseDate?.split('-')[0],
       genres: albumData.genres || [],
       spotifyUrl: albumData.url,
-      tracks: albumData.trackList.map((track) => ({
-        number: track.number,
-        name: track.name,
-        duration: formatDuration(track.duration),
-      })),
     };
 
     // Fetch AI summary and streaming links in parallel
@@ -208,27 +194,36 @@ export async function handleAlbumDetail(c: Context) {
     ]);
 
     // Format streaming links
-    const streamingLinks: AlbumDetailProps['streamingLinks'] = [];
+    const streamingLinks: StreamingLink[] = [];
     if (songlinkData?.linksByPlatform) {
       const platformNames: Record<string, string> = {
         spotify: 'Spotify',
         appleMusic: 'Apple Music',
         youtube: 'YouTube',
-        youtubeMusic: 'YouTube Music',
         amazonMusic: 'Amazon Music',
         tidal: 'Tidal',
         deezer: 'Deezer',
-        soundcloud: 'SoundCloud',
       };
 
+      // Add Spotify first (from our album data)
+      streamingLinks.push({ platform: 'Spotify', url: album.spotifyUrl });
+
       for (const [platform, data] of Object.entries(songlinkData.linksByPlatform)) {
-        if (platformNames[platform] && data?.url) {
+        if (platform !== 'spotify' && platformNames[platform] && data?.url) {
           streamingLinks.push({
             platform: platformNames[platform],
             url: data.url,
           });
         }
       }
+
+      // Add Songlink page
+      if (songlinkData.pageUrl) {
+        streamingLinks.push({ platform: 'Songlink', url: songlinkData.pageUrl });
+      }
+    } else {
+      // Fallback to just Spotify
+      streamingLinks.push({ platform: 'Spotify', url: album.spotifyUrl });
     }
 
     return c.html(
@@ -240,6 +235,6 @@ export async function handleAlbumDetail(c: Context) {
     );
   } catch (error) {
     console.error('Album detail error:', error);
-    return c.html(<AlbumDetailPage album={null} error="Failed to load album" />);
+    return c.html(<AlbumDetailPage album={null} streamingLinks={[]} error="Failed to load album" />);
   }
 }

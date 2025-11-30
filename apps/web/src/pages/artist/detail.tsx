@@ -1,40 +1,41 @@
 // Artist detail page component
-// Shows artist info, AI summary, top albums, and related artists
+// Shows artist info, top albums, similar artists, and AI overview using image-text-wrapper layout
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
-import { TrackCard } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
-import type { AIService } from '@listentomore/ai';
 import type { LastfmService } from '@listentomore/lastfm';
+import type { AIService } from '@listentomore/ai';
 
 interface ArtistData {
   id: string;
   name: string;
   image?: string;
   genres: string[];
-  followers?: number;
+  userPlaycount?: number;
   spotifyUrl: string;
 }
 
 interface TopAlbum {
   id: string;
   name: string;
-  image?: string;
-  year?: string;
 }
 
 interface ArtistDetailProps {
   artist: ArtistData | null;
-  aiSummary?: {
-    text: string;
-    formattedText?: string;
-  };
-  topAlbums?: TopAlbum[];
+  topAlbums: TopAlbum[];
+  similarArtists: string[];
+  aiSummary?: string;
   error?: string;
 }
 
-export function ArtistDetailPage({ artist, aiSummary, topAlbums, error }: ArtistDetailProps) {
+export function ArtistDetailPage({
+  artist,
+  topAlbums,
+  similarArtists,
+  aiSummary,
+  error,
+}: ArtistDetailProps) {
   if (error || !artist) {
     return (
       <Layout title="Artist Not Found">
@@ -42,120 +43,110 @@ export function ArtistDetailPage({ artist, aiSummary, topAlbums, error }: Artist
           <h1>Artist Not Found</h1>
           <p class="text-muted">{error || 'The artist you requested could not be found.'}</p>
           <p class="mt-2">
-            <a href="/artist" class="button">Search Artists</a>
+            <a href="/artist" class="button">
+              Search Artists
+            </a>
           </p>
         </div>
       </Layout>
     );
   }
 
+  const artistImage = artist.image || 'https://file.elezea.com/noun-no-image.png';
+  const genre = artist.genres[0] || 'No genres found';
+  const formattedPlaycount = artist.userPlaycount
+    ? new Intl.NumberFormat().format(artist.userPlaycount)
+    : '0';
+
   return (
     <Layout title={artist.name} description={`Learn about ${artist.name} - discography, bio, and more`}>
-      {/* Artist Header */}
-      <div class="detail-header">
-        {artist.image ? (
-          <img src={artist.image} alt={artist.name} class="detail-image" style={{ borderRadius: '50%' }} />
-        ) : (
-          <div
-            class="detail-image"
-            style={{
-              borderRadius: '50%',
-              backgroundColor: 'rgba(var(--c-accent-rgb), 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '4rem',
-            }}
-          >
-            {artist.name.charAt(0)}
-          </div>
-        )}
-        <div class="detail-info">
-          <h1 class="detail-title">{artist.name}</h1>
-          {artist.followers && (
-            <p class="detail-meta">
-              {artist.followers.toLocaleString()} followers on Spotify
-            </p>
-          )}
+      {/* Header */}
+      <header>
+        <h1>{artist.name}</h1>
+      </header>
 
-          {/* Genre Tags */}
-          {artist.genres.length > 0 && (
-            <div class="genre-tags">
-              {artist.genres.slice(0, 5).map((genre) => (
-                <a href={`/genre/${encodeURIComponent(genre.toLowerCase().replace(/\s+/g, '-'))}`} class="genre-tag">
-                  {genre}
-                </a>
-              ))}
+      <main>
+        {/* Image + Info Layout */}
+        <section class="track_ul2">
+          <div class="image-text-wrapper">
+            <img
+              src={artistImage}
+              alt={artist.name}
+              style={{ maxWidth: '100%', width: '220px', height: 'auto' }}
+            />
+            <div class="no-wrap-text">
+              <p>
+                <strong>Genre:</strong>{' '}
+                {genre !== 'No genres found' ? (
+                  <a href={`/genre/${encodeURIComponent(genre.toLowerCase().replace(/\s+/g, '-'))}`}>
+                    {genre}
+                  </a>
+                ) : (
+                  genre
+                )}
+              </p>
+
+              <p>
+                <strong>My playcount:</strong> {formattedPlaycount} plays
+              </p>
+
+              <p style={{ marginBottom: '0.2em' }}>
+                <strong>Popular Albums:</strong>
+              </p>
+              <ul>
+                {topAlbums.length > 0 ? (
+                  topAlbums.map((album) => (
+                    <li key={album.id}>
+                      <a href={`/album/spotify:${album.id}`}>{album.name}</a>
+                    </li>
+                  ))
+                ) : (
+                  <li>No albums found</li>
+                )}
+              </ul>
             </div>
+          </div>
+
+          {/* Similar Artists */}
+          {similarArtists.length > 0 && (
+            <>
+              <p style={{ marginBottom: '0.2em' }}>
+                <strong>Similar Artists:</strong>
+              </p>
+              <ul style={{ listStyleType: 'none', paddingLeft: '0', marginTop: '0' }}>
+                {similarArtists.map((name) => (
+                  <li key={name}>
+                    <a href={`/artist?q=${encodeURIComponent(name)}`}>{name}</a>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
-          {/* Spotify Link */}
-          <div class="mt-2">
-            <a href={artist.spotifyUrl} target="_blank" rel="noopener noreferrer" class="button button--secondary">
-              Open in Spotify
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Summary */}
-      {aiSummary?.text && (
-        <div class="section">
-          <h3>About {artist.name}</h3>
-          <div class="card">
-            {aiSummary.formattedText ? (
-              <div dangerouslySetInnerHTML={{ __html: aiSummary.formattedText }} />
-            ) : (
-              <p>{aiSummary.text}</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Top Albums */}
-      {topAlbums && topAlbums.length > 0 && (
-        <div class="section">
-          <h3>Popular Albums</h3>
-          <div class="track-grid">
-            {topAlbums.map((album) => (
-              <TrackCard
-                key={album.id}
-                artist={artist.name}
-                name={album.name}
-                album={album.year}
-                imageUrl={album.image}
-                href={`/album/spotify:${album.id}`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Spotify Embed */}
-      <div class="section">
-        <iframe
-          src={`https://open.spotify.com/embed/artist/${artist.id}?utm_source=generator&theme=0`}
-          width="100%"
-          height="352"
-          frameBorder="0"
-          allowFullScreen
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-          loading="lazy"
-          class="spotify-iframe"
-        />
-      </div>
+          {/* AI Overview */}
+          {aiSummary && (
+            <>
+              <p style={{ marginTop: '1.5em', marginBottom: '0.2em' }}>
+                <strong>Overview:</strong>
+              </p>
+              <div dangerouslySetInnerHTML={{ __html: formatArtistLinks(aiSummary) }} />
+            </>
+          )}
+        </section>
+      </main>
     </Layout>
   );
 }
 
-// Convert [[Artist Name]] to links
+// Convert [[Artist Name]] to links and {{Album Name}} to italic
 function formatArtistLinks(text: string): string {
-  return text.replace(/\[\[([^\]]+)\]\]/g, (_, name) => {
-    const slug = name.toLowerCase().replace(/\s+/g, '-');
-    return `<a href="/artist?q=${encodeURIComponent(name)}">${name}</a>`;
-  }).replace(/\{\{([^}]+)\}\}/g, (_, name) => {
-    return `<em>${name}</em>`;
-  });
+  return text
+    .replace(/\[\[([^\]]+)\]\]/g, (_, name) => {
+      return `<a href="/artist?q=${encodeURIComponent(name)}">${name}</a>`;
+    })
+    .replace(/\{\{([^}]+)\}\}/g, (_, name) => {
+      return `<em>${name}</em>`;
+    });
 }
 
 // Route handler
@@ -169,14 +160,22 @@ export async function handleArtistDetail(c: Context) {
   }
 
   const spotify = c.get('spotify') as SpotifyService;
+  const lastfm = c.get('lastfm') as LastfmService;
   const ai = c.get('ai') as AIService;
 
   try {
-    // Fetch artist data (already transformed by SpotifyArtists)
+    // Fetch artist data from Spotify
     const artistData = await spotify.getArtist(spotifyId);
 
     if (!artistData) {
-      return c.html(<ArtistDetailPage artist={null} error="Artist not found" />);
+      return c.html(
+        <ArtistDetailPage
+          artist={null}
+          topAlbums={[]}
+          similarArtists={[]}
+          error="Artist not found"
+        />
+      );
     }
 
     const artist: ArtistData = {
@@ -184,36 +183,50 @@ export async function handleArtistDetail(c: Context) {
       name: artistData.name,
       image: artistData.image || undefined,
       genres: artistData.genres || [],
-      followers: artistData.followers,
       spotifyUrl: artistData.url,
     };
 
-    // Fetch AI summary and top albums in parallel
-    const [aiSummary, topAlbumsData] = await Promise.all([
+    // Fetch additional data in parallel
+    const [lastfmData, topAlbumsData, aiSummary] = await Promise.all([
+      // Last.fm for playcount and similar artists
+      lastfm.getArtistDetail(artist.name).catch(() => null),
+      // Spotify for top albums
+      spotify.getArtistAlbums(spotifyId, 3).catch(() => []),
+      // AI for overview
       ai.getArtistSummary(artist.name).catch(() => null),
-      spotify.getArtistAlbums(spotifyId, 6).catch(() => []),
     ]);
 
-    // Format top albums (getArtistAlbums returns raw Spotify format)
+    // Add playcount from Last.fm
+    if (lastfmData) {
+      artist.userPlaycount = lastfmData.userPlaycount;
+    }
+
+    // Format top albums
     const topAlbums: TopAlbum[] = topAlbumsData.map((album) => ({
       id: album.id,
       name: album.name,
-      image: album.images[0]?.url,
-      year: album.release_date?.split('-')[0],
     }));
+
+    // Get similar artists from Last.fm
+    const similarArtists = lastfmData?.similar || [];
 
     return c.html(
       <ArtistDetailPage
         artist={artist}
-        aiSummary={aiSummary ? {
-          text: aiSummary.text,
-          formattedText: formatArtistLinks(aiSummary.text),
-        } : undefined}
         topAlbums={topAlbums}
+        similarArtists={similarArtists}
+        aiSummary={aiSummary?.text}
       />
     );
   } catch (error) {
     console.error('Artist detail error:', error);
-    return c.html(<ArtistDetailPage artist={null} error="Failed to load artist" />);
+    return c.html(
+      <ArtistDetailPage
+        artist={null}
+        topAlbums={[]}
+        similarArtists={[]}
+        error="Failed to load artist"
+      />
+    );
   }
 }

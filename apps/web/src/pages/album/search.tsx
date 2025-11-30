@@ -1,5 +1,5 @@
 // Album search page component
-// Shows search form and results
+// Accepts album and artist query parameters, searches Spotify
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
@@ -7,7 +7,8 @@ import { TrackCard, Input, Button } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 
 interface AlbumSearchProps {
-  query: string;
+  albumQuery: string;
+  artistQuery: string;
   results: Array<{
     id: string;
     name: string;
@@ -15,32 +16,47 @@ interface AlbumSearchProps {
     image?: string;
     year?: string;
   }>;
+  error?: string;
 }
 
-export function AlbumSearchPage({ query, results }: AlbumSearchProps) {
+export function AlbumSearchPage({ albumQuery, artistQuery, results, error }: AlbumSearchProps) {
+  const hasQuery = albumQuery || artistQuery;
+
   return (
     <Layout title="Search Albums" description="Search for albums on Spotify">
-      <h1>Search Albums</h1>
+      <h1>💿 Search Albums</h1>
 
-      {/* Search Form */}
-      <form action="/album" method="get" class="search-form">
+      {/* Search Form - Two inputs like original */}
+      <form id="search-form" action="/album" method="get">
         <Input
-          type="search"
-          name="q"
-          placeholder="Enter album or artist name..."
-          value={query}
-          autofocus
+          type="text"
+          name="album"
+          placeholder="Enter album name..."
+          value={albumQuery}
+          style={{ maxWidth: '200px' }}
+        />
+        <Input
+          type="text"
+          name="artist"
+          placeholder="Enter artist name..."
+          value={artistQuery}
+          style={{ maxWidth: '200px' }}
         />
         <Button type="submit">Search</Button>
       </form>
 
+      {/* Error */}
+      {error && (
+        <p class="error-message">{error}</p>
+      )}
+
       {/* Results */}
-      {query && (
+      {hasQuery && !error && (
         <div class="section">
           {results.length > 0 ? (
             <>
               <h2 class="section-title">
-                Results for "{query}"
+                Results for "{[albumQuery, artistQuery].filter(Boolean).join(' by ')}"
               </h2>
               <div class="track-grid">
                 {results.map((album) => (
@@ -57,17 +73,17 @@ export function AlbumSearchPage({ query, results }: AlbumSearchProps) {
             </>
           ) : (
             <p class="text-center text-muted mt-4">
-              No albums found for "{query}". Try a different search term.
+              No albums found for "{[albumQuery, artistQuery].filter(Boolean).join(' by ')}". Try a different search term.
             </p>
           )}
         </div>
       )}
 
       {/* Empty State */}
-      {!query && (
+      {!hasQuery && (
         <div class="section text-center">
           <p class="text-muted">
-            Enter an album or artist name to search.
+            Enter an album name and/or artist name to search.
           </p>
         </div>
       )}
@@ -77,15 +93,34 @@ export function AlbumSearchPage({ query, results }: AlbumSearchProps) {
 
 // Route handler
 export async function handleAlbumSearch(c: Context) {
-  const query = c.req.query('q') || '';
+  // Support both single query param and separate album/artist params
+  const albumQuery = c.req.query('album') || '';
+  const artistQuery = c.req.query('artist') || '';
+  const legacyQuery = c.req.query('q') || '';
+
+  // Use legacy 'q' param if no album/artist specified
+  const searchAlbum = albumQuery || legacyQuery;
+  const searchArtist = artistQuery;
+
   const spotify = c.get('spotify') as SpotifyService;
 
   let results: AlbumSearchProps['results'] = [];
+  let error: string | undefined;
 
-  if (query) {
+  if (searchAlbum || searchArtist) {
     try {
+      // Build Spotify search query
+      let spotifyQuery = '';
+      if (searchAlbum && searchArtist) {
+        spotifyQuery = `album:"${searchAlbum}" artist:${searchArtist}`;
+      } else if (searchAlbum) {
+        spotifyQuery = searchAlbum;
+      } else if (searchArtist) {
+        spotifyQuery = `artist:${searchArtist}`;
+      }
+
       // SpotifySearch already transforms the results
-      const searchResults = await spotify.search.search(query, 'album', 12);
+      const searchResults = await spotify.search.search(spotifyQuery, 'album', 12);
       results = searchResults.map((album) => ({
         id: album.id,
         name: album.name,
@@ -93,10 +128,18 @@ export async function handleAlbumSearch(c: Context) {
         image: album.image || undefined,
         year: album.releaseDate?.split('-')[0],
       }));
-    } catch (error) {
-      console.error('Album search error:', error);
+    } catch (err) {
+      console.error('Album search error:', err);
+      error = 'Search failed. Please try again.';
     }
   }
 
-  return c.html(<AlbumSearchPage query={query} results={results} />);
+  return c.html(
+    <AlbumSearchPage
+      albumQuery={searchAlbum}
+      artistQuery={searchArtist}
+      results={results}
+      error={error}
+    />
+  );
 }
