@@ -519,7 +519,7 @@ app.get('/api/songlink', async (c) => {
 
 // AI API routes
 
-// Artist summary (uses OpenAI)
+// Artist summary (uses Perplexity)
 app.get('/api/ai/artist-summary', async (c) => {
   const name = c.req.query('name');
 

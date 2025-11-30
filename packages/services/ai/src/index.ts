@@ -70,11 +70,11 @@ export class AIService {
   // Convenience methods that use the appropriate client
 
   /**
-   * Generate an artist summary (uses OpenAI)
+   * Generate an artist summary (uses Perplexity)
    */
   async getArtistSummary(artistName: string) {
     const { generateArtistSummary } = await import('./prompts/artist-summary');
-    return generateArtistSummary(artistName, this.openai, this.cache);
+    return generateArtistSummary(artistName, this.perplexity, this.cache);
   }
 
   /**

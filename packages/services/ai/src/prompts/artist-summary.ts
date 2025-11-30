@@ -1,11 +1,12 @@
 // Artist summary prompt - generates detailed artist summaries with linked references
 
 import { AI_TASKS } from '@listentomore/config';
-import type { OpenAIClient } from '../openai';
+import type { PerplexityClient } from '../perplexity';
 import type { AICache } from '../cache';
 
 export interface ArtistSummaryResult {
   summary: string;
+  citations: string[];
 }
 
 /**
@@ -30,11 +31,11 @@ function replacePlaceholders(summary: string, artistName: string): string {
 }
 
 /**
- * Generate an artist summary using OpenAI
+ * Generate an artist summary using Perplexity
  */
 export async function generateArtistSummary(
   artistName: string,
-  client: OpenAIClient,
+  client: PerplexityClient,
   cache: AICache
 ): Promise<ArtistSummaryResult> {
   const normalizedName = artistName.toLowerCase().trim();
@@ -73,7 +74,10 @@ If no verifiable facts are available for the artist, simply state "I don't have 
   // Process the response to replace placeholders with links
   const formattedSummary = replacePlaceholders(response.content, artistName);
 
-  const result: ArtistSummaryResult = { summary: formattedSummary };
+  const result: ArtistSummaryResult = {
+    summary: formattedSummary,
+    citations: response.citations,
+  };
 
   // Cache the result
   await cache.set('artistSummary', [normalizedName], result);

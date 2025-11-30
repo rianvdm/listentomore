@@ -26,10 +26,10 @@ export interface AITaskConfig {
 
 export const AI_TASKS = {
   artistSummary: {
-    provider: 'openai',
-    model: 'gpt-5-mini',
-    maxTokens: 10000,
-    temperature: 1, // gpt-5-mini only supports temperature=1
+    provider: 'perplexity',
+    model: 'sonar',
+    maxTokens: 1000,
+    temperature: 0.5,
     cacheTtlDays: 180,
     systemPrompt: `You are a music expert who writes concise, engaging artist summaries.
 Use plain language without hyperbole. Focus on the artist's musical style,
