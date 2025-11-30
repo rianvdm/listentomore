@@ -39,7 +39,6 @@ export function ArtistDetailPage({
   }
 
   const artistImage = artist.image || 'https://file.elezea.com/noun-no-image.png';
-  const genre = artist.genres[0] || 'No genres found';
 
   return (
     <Layout title={artist.name} description={`Learn about ${artist.name} - discography, bio, and more`}>
@@ -58,15 +57,10 @@ export function ArtistDetailPage({
               style={{ maxWidth: '100%', width: '220px', height: 'auto' }}
             />
             <div class="no-wrap-text">
-              <p>
+              {/* Genre - loaded via JS from Last.fm tags */}
+              <p id="genre-section">
                 <strong>Genre:</strong>{' '}
-                {genre !== 'No genres found' ? (
-                  <a href={`/genre/${encodeURIComponent(genre.toLowerCase().replace(/\s+/g, '-'))}`}>
-                    {genre}
-                  </a>
-                ) : (
-                  genre
-                )}
+                <span class="text-muted">Loading...</span>
               </p>
 
               {/* Playcount - loaded via JS */}
@@ -103,12 +97,39 @@ export function ArtistDetailPage({
           var artistName = ${JSON.stringify(artist.name)};
           var artistId = '${artist.id}';
 
-          // Fetch Last.fm data (playcount and similar artists)
+          // Tags to filter out (not real genres)
+          var excludedTags = ['seen live', 'live', 'favorite', 'favorites', 'favourite', 'favourites',
+            'female vocalists', 'male vocalists', 'singer-songwriter', 'under 2000 listeners',
+            'spotify', 'albums i own', 'my favorite', 'check out', 'vinyl', 'cd'];
+
+          function isRealGenre(tag) {
+            var lower = tag.toLowerCase();
+            return !excludedTags.some(function(excluded) { return lower.includes(excluded); });
+          }
+
+          // Fetch Last.fm data (playcount, genres, and similar artists)
           fetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName))
             .then(function(r) { return r.json(); })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var lastfm = data.data;
+
+              // Update genres from Last.fm tags
+              if (lastfm.tags && lastfm.tags.length > 0) {
+                var realGenres = lastfm.tags.filter(isRealGenre).slice(0, 3);
+                if (realGenres.length > 0) {
+                  var genreHtml = '<strong>Genre:</strong> ';
+                  genreHtml += realGenres.map(function(genre) {
+                    var slug = genre.toLowerCase().replace(/\\s+/g, '-');
+                    return '<a href="/genre/' + encodeURIComponent(slug) + '">' + genre + '</a>';
+                  }).join(' | ');
+                  document.getElementById('genre-section').innerHTML = genreHtml;
+                } else {
+                  document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
+                }
+              } else {
+                document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
+              }
 
               // Update playcount
               var playcount = lastfm.userPlaycount || 0;
@@ -141,6 +162,7 @@ export function ArtistDetailPage({
             })
             .catch(function(e) {
               console.error('Last.fm error:', e);
+              document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
               document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> 0 plays';
             });
 
