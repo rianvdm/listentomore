@@ -10,11 +10,17 @@ interface LayoutProps {
   children: Child;
   title?: string;
   description?: string;
+  image?: string;
+  url?: string;
 }
 
-export function Layout({ children, title, description }: LayoutProps) {
+// Default fallback image for social sharing
+const DEFAULT_OG_IMAGE = 'https://file.elezea.com/listentomore-og.png';
+
+export function Layout({ children, title, description, image, url }: LayoutProps) {
   const pageTitle = title ? `${title} | ${SITE_CONFIG.name}` : SITE_CONFIG.name;
   const pageDescription = description || SITE_CONFIG.description;
+  const ogImage = image || DEFAULT_OG_IMAGE;
 
   return (
     <html lang="en">
@@ -29,11 +35,14 @@ export function Layout({ children, title, description }: LayoutProps) {
         <meta property="og:description" content={pageDescription} />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content={SITE_CONFIG.name} />
+        <meta property="og:image" content={ogImage} />
+        {url && <meta property="og:url" content={url} />}
 
         {/* Twitter Card */}
-        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={pageTitle} />
         <meta name="twitter:description" content={pageDescription} />
+        <meta name="twitter:image" content={ogImage} />
 
         {/* Favicon */}
         <link rel="icon" href="/favicon.ico" />

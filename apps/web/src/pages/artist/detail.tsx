@@ -42,7 +42,12 @@ export function ArtistDetailPage({
   const artistImage = artist.image || 'https://file.elezea.com/noun-no-image.png';
 
   return (
-    <Layout title={artist.name} description={`Learn about ${artist.name} - discography, bio, and more`}>
+    <Layout
+      title={artist.name}
+      description={`Learn about ${artist.name} - discography, bio, and more`}
+      image={artistImage}
+      url={`https://listentomore.com/artist/${artist.id}`}
+    >
       {/* Header */}
       <header>
         <h1>{artist.name}</h1>

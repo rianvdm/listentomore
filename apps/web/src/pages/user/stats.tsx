@@ -17,10 +17,15 @@ interface UserStatsPageProps {
 }
 
 export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtists, topAlbums }: UserStatsPageProps) {
+  // Use recent track image, or first top artist image for social sharing
+  const ogImage = recentTrack?.image || topArtists[0]?.image || undefined;
+
   return (
     <Layout
       title={`${username}'s Stats`}
       description={`Real-time listening statistics for ${username}`}
+      image={ogImage}
+      url={`https://listentomore.com/u/${username}`}
     >
       <header>
         <h1>

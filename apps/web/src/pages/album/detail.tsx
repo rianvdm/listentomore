@@ -46,6 +46,8 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
     <Layout
       title={`${album.name} by ${album.artist}`}
       description={`Listen to ${album.name} by ${album.artist}`}
+      image={albumImage}
+      url={`https://listentomore.com/album/${album.id}`}
     >
       {/* Header with linked artist */}
       <header>

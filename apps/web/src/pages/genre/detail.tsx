@@ -8,13 +8,15 @@ import { formatMarkdownScript, enrichLinksScript, renderCitationsScript } from '
 
 interface GenreDetailProps {
   displayName: string;
+  slug: string;
 }
 
-export function GenreDetailPage({ displayName }: GenreDetailProps) {
+export function GenreDetailPage({ displayName, slug }: GenreDetailProps) {
   return (
     <Layout
       title={displayName}
       description={`Learn about the history, musical elements, and seminal albums of ${displayName} music`}
+      url={`https://listentomore.com/genre/${slug}`}
     >
       <header>
         <h1>{displayName}</h1>
@@ -83,6 +85,6 @@ export async function handleGenreDetail(c: Context) {
   const displayName = slugToDisplayName(slug);
 
   return c.html(
-    <GenreDetailPage displayName={displayName} />
+    <GenreDetailPage displayName={displayName} slug={slug} />
   );
 }

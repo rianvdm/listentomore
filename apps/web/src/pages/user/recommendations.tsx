@@ -30,6 +30,7 @@ export function UserRecommendationsPage({
     <Layout
       title={`Recommendations from ${username}`}
       description={`Music recommendations from ${username} - loved tracks and artist discoveries`}
+      url={`https://listentomore.com/u/${username}/recommendations`}
     >
       <header>
         <h1>
