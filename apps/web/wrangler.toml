@@ -32,6 +32,10 @@ ENVIRONMENT = "development"
 [env.production]
 vars = { ENVIRONMENT = "production" }
 
+# Scheduled triggers (CRON jobs)
+[triggers]
+crons = ["0 * * * *"]  # Run every hour at minute 0
+
 # Note: Secrets should be set with `wrangler secret put`:
 # - SPOTIFY_CLIENT_ID
 # - SPOTIFY_CLIENT_SECRET

@@ -601,4 +601,31 @@ app.notFound((c) => {
   );
 });
 
-export default app;
+// Scheduled handler for CRON jobs
+async function scheduled(
+  event: ScheduledEvent,
+  env: Bindings,
+  ctx: ExecutionContext
+): Promise<void> {
+  console.log(`[CRON] Running scheduled task at ${new Date().toISOString()}`);
+
+  // Initialize AI service for CRON
+  const ai = new AIService({
+    openaiApiKey: env.OPENAI_API_KEY,
+    perplexityApiKey: env.PERPLEXITY_API_KEY,
+    cache: env.CACHE,
+  });
+
+  // Generate and store a new random fact
+  try {
+    const result = await ai.generateAndStoreRandomFact();
+    console.log(`[CRON] Generated new fact: ${result.fact.substring(0, 50)}...`);
+  } catch (error) {
+    console.error('[CRON] Failed to generate random fact:', error);
+  }
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled,
+};

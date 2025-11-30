@@ -14,7 +14,12 @@ export {
   type ArtistSentenceResult,
 } from './artist-sentence';
 
-export { generateRandomFact, type RandomFactResult } from './random-fact';
+export {
+  generateRandomFact,
+  generateAndStoreFact,
+  getRandomCachedFact,
+  type RandomFactResult,
+} from './random-fact';
 
 export {
   generatePlaylistCoverPrompt,

@@ -30,6 +30,8 @@ export {
   generateGenreSummary,
   generateArtistSentence,
   generateRandomFact,
+  generateAndStoreFact,
+  getRandomCachedFact,
   generatePlaylistCoverPrompt,
   generatePlaylistCoverImage,
   generateListenAIResponse,
@@ -56,11 +58,13 @@ export class AIService {
   public readonly openai: OpenAIClient;
   public readonly perplexity: PerplexityClient;
   public readonly cache: AICache;
+  public readonly kv: KVNamespace;
 
   constructor(config: AIServiceConfig) {
     this.openai = new OpenAIClient(config.openaiApiKey);
     this.perplexity = new PerplexityClient(config.perplexityApiKey);
     this.cache = new AICache(config.cache);
+    this.kv = config.cache;
   }
 
   // Convenience methods that use the appropriate client
@@ -98,11 +102,19 @@ export class AIService {
   }
 
   /**
-   * Generate a random music fact (uses OpenAI, cached hourly in KV)
+   * Get a random music fact from the cached pool (fast - just KV read)
    */
   async getRandomFact() {
     const { generateRandomFact } = await import('./prompts/random-fact');
-    return generateRandomFact(this.openai, this.cache);
+    return generateRandomFact(this.openai, this.kv);
+  }
+
+  /**
+   * Generate and store a new random fact (called by CRON job)
+   */
+  async generateAndStoreRandomFact() {
+    const { generateAndStoreFact } = await import('./prompts/random-fact');
+    return generateAndStoreFact(this.openai, this.kv);
   }
 
   /**

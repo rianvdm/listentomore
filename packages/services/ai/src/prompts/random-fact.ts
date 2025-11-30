@@ -1,14 +1,21 @@
 // Random fact prompt - generates interesting music facts
-// Cached in KV with hourly rotation per the implementation plan
+// Uses CRON job to generate hourly and stores 10 rotating facts in KV
 
 import { AI_TASKS } from '@listentomore/config';
 import type { OpenAIClient } from '../openai';
-import type { AICache } from '../cache';
 
 export interface RandomFactResult {
   fact: string;
   timestamp: string;
 }
+
+interface StoredFacts {
+  facts: RandomFactResult[];
+  lastUpdated: string;
+}
+
+const KV_KEY = 'random-facts:pool';
+const MAX_FACTS = 10;
 
 // Categories for randomizing fact requests
 const GENRES = [
@@ -49,37 +56,27 @@ const FOCUSES = [
 ];
 
 /**
- * Get a random element from an array using a seed
+ * Get a random element from an array
  */
-function seededChoice<T>(arr: T[], seed: number): T {
-  return arr[seed % arr.length];
+function randomChoice<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
 /**
- * Generate a random music fact using OpenAI
- * Cached in KV with hourly rotation - uses hour-based slots for variety
- * while keeping page loads fast
+ * Generate a new random fact and add it to the rotating pool in KV
+ * Called by CRON job every hour
  */
-export async function generateRandomFact(
+export async function generateAndStoreFact(
   client: OpenAIClient,
-  cache: AICache
+  kv: KVNamespace
 ): Promise<RandomFactResult> {
-  // Use current hour as cache slot (rotates every hour, 24 variations per day)
-  const hourSlot = new Date().getUTCHours();
-
-  // Check cache first
-  const cached = await cache.get<RandomFactResult>('randomFact', `slot`, `${hourSlot}`);
-  if (cached) {
-    return cached;
-  }
-
   const config = AI_TASKS.randomFact;
 
-  // Build a deterministic prompt based on hour slot for consistency
-  const genre = seededChoice(GENRES, hourSlot);
-  const unit = seededChoice(UNITS, hourSlot + 1);
-  const decade = seededChoice(DECADES, hourSlot + 2);
-  const focus = seededChoice(FOCUSES, hourSlot + 3);
+  // Build a random prompt for variety
+  const genre = randomChoice(GENRES);
+  const unit = randomChoice(UNITS);
+  const decade = randomChoice(DECADES);
+  const focus = randomChoice(FOCUSES);
 
   const prompt = `Give me an interesting, verifiable fact about a ${genre} ${unit} from the ${decade}, focusing on ${focus}. Use two sentences or less, and start with the phrase "Did you know". Use plain text with no Markdown formatting. Critical instruction: Responses MUST be less than 300 characters in total length.`;
 
@@ -97,13 +94,72 @@ export async function generateRandomFact(
     temperature: config.temperature,
   });
 
-  const result: RandomFactResult = {
+  const newFact: RandomFactResult = {
     fact: response.content.trim(),
     timestamp: new Date().toISOString(),
   };
 
-  // Cache with 2 hour TTL (overlapping ensures fresh facts each hour)
-  await cache.set('randomFact', [`slot`, `${hourSlot}`], result, { ttlSeconds: 2 * 60 * 60 });
+  // Get existing facts from KV
+  const existing = await kv.get<StoredFacts>(KV_KEY, 'json');
+  const facts = existing?.facts || [];
 
-  return result;
+  // Add new fact to the front, keep only MAX_FACTS
+  facts.unshift(newFact);
+  if (facts.length > MAX_FACTS) {
+    facts.pop();
+  }
+
+  // Store updated pool (no expiration - we manage rotation ourselves)
+  await kv.put(
+    KV_KEY,
+    JSON.stringify({
+      facts,
+      lastUpdated: new Date().toISOString(),
+    } as StoredFacts)
+  );
+
+  console.log(`[RandomFact] Generated and stored new fact. Pool size: ${facts.length}`);
+
+  return newFact;
+}
+
+/**
+ * Get a random fact from the cached pool
+ * Called on page load - always fast (just KV read)
+ */
+export async function getRandomCachedFact(
+  kv: KVNamespace
+): Promise<RandomFactResult | null> {
+  const stored = await kv.get<StoredFacts>(KV_KEY, 'json');
+
+  if (!stored || stored.facts.length === 0) {
+    console.log('[RandomFact] No cached facts available');
+    return null;
+  }
+
+  // Pick a random fact from the pool
+  const randomFact = randomChoice(stored.facts);
+  console.log(`[RandomFact] Serving cached fact from pool of ${stored.facts.length}`);
+
+  return randomFact;
+}
+
+/**
+ * Legacy function for backwards compatibility
+ * Now just returns a cached fact (fast) instead of generating on-demand
+ */
+export async function generateRandomFact(
+  client: OpenAIClient,
+  kv: KVNamespace
+): Promise<RandomFactResult> {
+  // Try to get a cached fact first (fast path)
+  const cached = await getRandomCachedFact(kv);
+  if (cached) {
+    return cached;
+  }
+
+  // Fallback: generate one if pool is empty (e.g., first deployment)
+  // This will be slow, but only happens once until CRON populates the pool
+  console.log('[RandomFact] Pool empty, generating initial fact...');
+  return generateAndStoreFact(client, kv);
 }
