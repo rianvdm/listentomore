@@ -136,8 +136,9 @@ export function ArtistDetailPage({
               var formatted = new Intl.NumberFormat().format(playcount);
               document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> ' + formatted + ' plays';
 
-              // Update popular albums (from Last.fm)
+              // Update popular albums (from Last.fm, enriched with Spotify IDs)
               if (lastfm.topAlbums && lastfm.topAlbums.length > 0) {
+                // Show with search links first (instant)
                 var html = '<p style="margin-bottom:0.2em"><strong>Popular Albums:</strong></p>';
                 html += '<ul>';
                 lastfm.topAlbums.forEach(function(albumName) {
@@ -145,6 +146,28 @@ export function ArtistDetailPage({
                 });
                 html += '</ul>';
                 document.getElementById('popular-albums').innerHTML = html;
+
+                // Enrich with Spotify IDs for direct links
+                Promise.all(lastfm.topAlbums.map(function(albumName) {
+                  return fetch('/api/internal/search?q=' + encodeURIComponent(artistName + ' ' + albumName) + '&type=album')
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                      if (data.data && data.data[0]) {
+                        return { name: albumName, id: data.data[0].id };
+                      }
+                      return { name: albumName, id: null };
+                    })
+                    .catch(function() { return { name: albumName, id: null }; });
+                })).then(function(enrichedAlbums) {
+                  var html = '<p style="margin-bottom:0.2em"><strong>Popular Albums:</strong></p>';
+                  html += '<ul>';
+                  enrichedAlbums.forEach(function(album) {
+                    var href = album.id ? '/album/' + album.id : '/album?q=' + encodeURIComponent(artistName + ' ' + album.name);
+                    html += '<li><a href="' + href + '">' + album.name + '</a></li>';
+                  });
+                  html += '</ul>';
+                  document.getElementById('popular-albums').innerHTML = html;
+                });
               } else {
                 document.getElementById('popular-albums').innerHTML = '<p style="margin-bottom:0.2em"><strong>Popular Albums:</strong></p><ul><li>No albums found</li></ul>';
               }
