@@ -715,6 +715,74 @@ blockquote {
   margin: 1rem auto;
 }
 
+/* AI Summary and Citations */
+.ai-summary {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.ai-summary p {
+  margin: 0.8em 0;
+  max-width: none;
+}
+
+.ai-summary > p:first-child {
+  margin-top: 1.5em;
+}
+
+.ai-summary div {
+  margin: 0;
+}
+
+.ai-summary ul,
+.citations ul {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+  list-style-type: disc;
+}
+
+.citations {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(var(--c-base-rgb), 0.1);
+}
+
+.citations h4 {
+  margin: 0 0 0.5em;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.citations li {
+  font-size: 14px;
+  margin-bottom: 0.3em;
+}
+
+.citation-number {
+  opacity: 0.6;
+}
+
+/* Similar Artists (outside image-text-wrapper) */
+#similar-artists {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+#similar-artists p {
+  margin: 1em 0 0.2em;
+  max-width: none;
+}
+
+#similar-artists ul {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+#similar-artists li {
+  margin-bottom: 0.3em;
+}
+
 /* Utility Classes */
 .text-center { text-align: center; }
 .text-left { text-align: left; }

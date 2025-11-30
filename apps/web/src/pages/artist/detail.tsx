@@ -160,8 +160,19 @@ export function ArtistDetailPage({
 
           function formatMarkdown(text) {
             return text
-              // Markdown links [text](url)
-              .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+              // Markdown links [text](url) - convert listentomore.com URLs to internal search
+              .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, linkText, url) {
+                // Convert listentomore.com/artist/* URLs to internal search
+                if (url.includes('listentomore.com/artist/')) {
+                  return '<a href="/artist?q=' + encodeURIComponent(linkText) + '">' + linkText + '</a>';
+                }
+                // Convert listentomore.com/album/* URLs to internal search
+                if (url.includes('listentomore.com/album/')) {
+                  return '<a href="/album?q=' + encodeURIComponent(linkText) + '">' + linkText + '</a>';
+                }
+                // External links open in new tab
+                return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + linkText + '</a>';
+              })
               // Bold
               .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
               // Italic
