@@ -7,6 +7,12 @@ import { Database } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { SonglinkService } from '@listentomore/songlink';
+import {
+  corsMiddleware,
+  rateLimitMiddleware,
+  originValidationMiddleware,
+  securityHeadersMiddleware,
+} from './middleware/security';
 
 // Define environment bindings
 type Bindings = {
@@ -22,6 +28,7 @@ type Bindings = {
   LASTFM_USERNAME: string;
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
+  ENVIRONMENT?: string;
 };
 
 // Context with services attached
@@ -33,6 +40,24 @@ type Variables = {
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// Apply security headers to all responses
+app.use('*', securityHeadersMiddleware());
+
+// Apply CORS middleware (needs to run before other middleware)
+app.use('*', async (c, next) => {
+  const middleware = corsMiddleware({ ENVIRONMENT: c.env.ENVIRONMENT });
+  return middleware(c, next);
+});
+
+// Apply rate limiting to API routes
+app.use('/api/*', rateLimitMiddleware({ windowMs: 60_000, maxRequests: 60 }));
+
+// Apply origin validation to API routes (in production)
+app.use('/api/*', async (c, next) => {
+  const middleware = originValidationMiddleware({ ENVIRONMENT: c.env.ENVIRONMENT });
+  return middleware(c, next);
+});
 
 // Middleware to initialize services
 app.use('*', async (c, next) => {
