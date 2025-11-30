@@ -74,4 +74,8 @@ export class SpotifyService {
   async getArtistAlbums(artistId: string, limit?: number) {
     return this.artists.getArtistAlbums(artistId, limit);
   }
+
+  async getRelatedArtists(artistId: string, limit?: number) {
+    return this.artists.getRelatedArtists(artistId, limit);
+  }
 }

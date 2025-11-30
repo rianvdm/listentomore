@@ -151,4 +151,51 @@ export class SpotifyArtists {
 
     return albums;
   }
+
+  async getRelatedArtists(
+    artistId: string,
+    limit: number = 5
+  ): Promise<Array<{ id: string; name: string; image: string | null }>> {
+    const cacheKey = `spotify:artist:${artistId}:related`;
+
+    // Check cache
+    const cached = await this.cache.get(cacheKey, 'json');
+    if (cached) {
+      return (cached as Array<{ id: string; name: string; image: string | null }>).slice(0, limit);
+    }
+
+    const accessToken = await this.auth.getAccessToken();
+
+    const response = await fetch(
+      `${SPOTIFY_API_BASE}/artists/${artistId}/related-artists`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch related artists: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as {
+      artists: Array<{
+        id: string;
+        name: string;
+        images: Array<{ url: string }>;
+      }>;
+    };
+
+    const relatedArtists = data.artists.map((artist) => ({
+      id: artist.id,
+      name: artist.name,
+      image: artist.images[0]?.url || null,
+    }));
+
+    // Cache the full result (up to 20 artists)
+    await this.cache.put(cacheKey, JSON.stringify(relatedArtists), {
+      expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
+    });
+
+    return relatedArtists.slice(0, limit);
+  }
 }
