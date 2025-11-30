@@ -3,6 +3,7 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
+import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database } from '@listentomore/db';
 import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
 
@@ -118,9 +119,14 @@ export function UserRecommendationsPage({
 
       {/* Progressive loading scripts */}
       <script dangerouslySetInnerHTML={{ __html: `
+        ${enrichLinksScript}
+
         (function() {
           var username = ${JSON.stringify(username)};
           var lovedTracks = ${JSON.stringify(lovedTracks)};
+
+          // Enrich artist links with Spotify IDs
+          enrichLinks('loved-tracks');
 
           // Fetch artist sentences and streaming links for loved tracks
           lovedTracks.forEach(function(track, index) {

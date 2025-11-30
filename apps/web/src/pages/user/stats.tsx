@@ -66,7 +66,7 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
             <strong>Top artists in the past 7 days.</strong>
           </p>
           {topArtists.length > 0 ? (
-            <div class="track-grid">
+            <div id="top-artists" class="track-grid">
               {topArtists.map((artist) => (
                 <TrackCard
                   key={artist.name}
@@ -87,7 +87,7 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
             <strong>Top albums in the past 30 days.</strong>
           </p>
           {topAlbums.length > 0 ? (
-            <div class="track-grid">
+            <div id="top-albums" class="track-grid">
               {topAlbums.map((album) => (
                 <TrackCard
                   key={`${album.artist}-${album.name}`}
@@ -105,32 +105,33 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
         </section>
       </main>
 
-      {/* Progressive loading for artist sentence and link enrichment */}
-      {recentTrack && (
-        <script dangerouslySetInnerHTML={{ __html: `
-          ${enrichLinksScript}
+      {/* Progressive loading for link enrichment and artist sentence */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        ${enrichLinksScript}
 
-          (function() {
-            // Enrich album and artist links with Spotify IDs
-            enrichLinks('recent-listening');
-
-            // Load artist sentence
-            var artistName = ${JSON.stringify(recentTrack.artist)};
-            fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
-              .then(function(r) { return r.json(); })
-              .then(function(data) {
-                if (data.error) throw new Error(data.error);
-                var el = document.getElementById('artist-sentence');
-                if (el && data.data && data.data.sentence) {
-                  el.textContent = ' ' + data.data.sentence;
-                }
-              })
-              .catch(function(e) {
-                console.error('Artist sentence error:', e);
-              });
-          })();
-        ` }} />
-      )}
+        (function() {
+          // Enrich album and artist links with Spotify IDs
+          enrichLinks('recent-listening');
+          enrichLinks('top-artists');
+          enrichLinks('top-albums');
+          ${recentTrack ? `
+          // Load artist sentence
+          var artistName = ${JSON.stringify(recentTrack.artist)};
+          fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              var el = document.getElementById('artist-sentence');
+              if (el && data.data && data.data.sentence) {
+                el.textContent = ' ' + data.data.sentence;
+              }
+            })
+            .catch(function(e) {
+              console.error('Artist sentence error:', e);
+            });
+          ` : ''}
+        })();
+      ` }} />
     </Layout>
   );
 }
