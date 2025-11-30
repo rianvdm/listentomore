@@ -21,6 +21,40 @@ importers:
         specifier: '4'
         version: 4.51.0(@cloudflare/workers-types@4.20251128.0)
 
+  apps/discord-bot:
+    dependencies:
+      '@listentomore/ai':
+        specifier: workspace:*
+        version: link:../../packages/services/ai
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@listentomore/lastfm':
+        specifier: workspace:*
+        version: link:../../packages/services/lastfm
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@listentomore/songlink':
+        specifier: workspace:*
+        version: link:../../packages/services/songlink
+      '@listentomore/spotify':
+        specifier: workspace:*
+        version: link:../../packages/services/spotify
+      tweetnacl:
+        specifier: ^1.0.3
+        version: 1.0.3
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20241127.0
+        version: 4.20251128.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      wrangler:
+        specifier: ^4.51.0
+        version: 4.51.0(@cloudflare/workers-types@4.20251128.0)
+
   apps/web:
     dependencies:
       '@listentomore/ai':
@@ -997,6 +1031,9 @@ packages:
     resolution: {integrity: sha512-qBwXXuDT3rA53kbNafGbT5r++BrhRgx3sAo0cHoDAeG9g1ItTmUMgltz3Hy7Hazy1ODqNpR+C7QwqL6DYB52yA==}
     hasBin: true
 
+  tweetnacl@1.0.3:
+    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -1781,6 +1818,8 @@ snapshots:
       turbo-linux-arm64: 2.6.1
       turbo-windows-64: 2.6.1
       turbo-windows-arm64: 2.6.1
+
+  tweetnacl@1.0.3: {}
 
   typescript@5.9.3: {}
 

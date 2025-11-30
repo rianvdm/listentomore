@@ -1,6 +1,6 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "listentomore-web"
-main = "src/index.tsx"
+name = "listentomore-discord-bot"
+main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
@@ -12,17 +12,11 @@ mode = "smart"
 [observability]
 enabled = true
 
-# KV Namespace for caching
+# KV Namespace for caching (shared with web app)
 [[kv_namespaces]]
 binding = "CACHE"
 id = "a6011a8b5bac4be9a472ff86f8d5fd91"
 preview_id = "d6703c6a7283467eb7a452a6cb34fa87"
-
-# D1 Database
-[[d1_databases]]
-binding = "DB"
-database_name = "listentomore"
-database_id = "512d0c41-502c-41ba-82ff-635d0413b071"
 
 # Environment variables (non-sensitive defaults)
 [vars]
@@ -32,20 +26,15 @@ ENVIRONMENT = "development"
 [env.production]
 vars = { ENVIRONMENT = "production" }
 
-# Custom domain
-routes = [
-  { pattern = "listentomore.com", custom_domain = true }
-]
-
-# Scheduled triggers (CRON jobs)
-[triggers]
-crons = ["0 * * * *"]  # Run every hour at minute 0
-
 # Note: Secrets should be set with `wrangler secret put`:
+# Discord:
+# - DISCORD_TOKEN
+# - DISCORD_APPLICATION_ID
+# - DISCORD_PUBLIC_KEY
+# Services:
 # - SPOTIFY_CLIENT_ID
 # - SPOTIFY_CLIENT_SECRET
 # - SPOTIFY_REFRESH_TOKEN
 # - LASTFM_API_KEY
 # - OPENAI_API_KEY
 # - PERPLEXITY_API_KEY
-# - DISCOGS_API_TOKEN

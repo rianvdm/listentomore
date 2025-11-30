@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { TrackCard } from '../../components/ui';
+import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database } from '@listentomore/db';
 import type { TopArtist, TopAlbum, RecentTrack } from '@listentomore/lastfm';
 
@@ -34,21 +35,23 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
         <section id="lastfm-stats">
           {/* Recent Listening */}
           <h2>🎧 Recent Listening</h2>
-          {recentTrack ? (
-            <p>
-              Most recently listened to{' '}
-              <a href={`/album?q=${encodeURIComponent(`${recentTrack.artist} ${recentTrack.album}`)}`}>
-                <strong>{recentTrack.album}</strong>
-              </a>
-              {' '}by{' '}
-              <a href={`/artist?q=${encodeURIComponent(recentTrack.artist)}`}>
-                <strong>{recentTrack.artist}</strong>
-              </a>
-              .<span id="artist-sentence"></span>
-            </p>
-          ) : (
-            <p class="text-muted">No recent tracks found.</p>
-          )}
+          <div id="recent-listening">
+            {recentTrack ? (
+              <p>
+                Most recently listened to{' '}
+                <a href={`/album?q=${encodeURIComponent(`${recentTrack.artist} ${recentTrack.album}`)}`}>
+                  <strong>{recentTrack.album}</strong>
+                </a>
+                {' '}by{' '}
+                <a href={`/artist?q=${encodeURIComponent(recentTrack.artist)}`}>
+                  <strong>{recentTrack.artist}</strong>
+                </a>
+                .<span id="artist-sentence"></span>
+              </p>
+            ) : (
+              <p class="text-muted">No recent tracks found.</p>
+            )}
+          </div>
 
           {/* Recommendations Link */}
           <p class="text-center" style={{ marginTop: '2em' }}>
@@ -102,10 +105,16 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
         </section>
       </main>
 
-      {/* Progressive loading for artist sentence */}
+      {/* Progressive loading for artist sentence and link enrichment */}
       {recentTrack && (
         <script dangerouslySetInnerHTML={{ __html: `
+          ${enrichLinksScript}
+
           (function() {
+            // Enrich album and artist links with Spotify IDs
+            enrichLinks('recent-listening');
+
+            // Load artist sentence
             var artistName = ${JSON.stringify(recentTrack.artist)};
             fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
               .then(function(r) { return r.json(); })

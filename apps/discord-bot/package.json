@@ -1,0 +1,26 @@
+{
+  "name": "@listentomore/discord-bot",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@listentomore/ai": "workspace:*",
+    "@listentomore/config": "workspace:*",
+    "@listentomore/lastfm": "workspace:*",
+    "@listentomore/shared": "workspace:*",
+    "@listentomore/songlink": "workspace:*",
+    "@listentomore/spotify": "workspace:*",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.51.0"
+  }
+}
