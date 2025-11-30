@@ -140,6 +140,7 @@ app.get('/health', (c) => {
 
 // Home page - matches original my-music-next structure
 app.get('/', async (c) => {
+  const ai = c.get('ai');
   const db = c.get('db');
 
   // Get day greeting (e.g., "Happy Friday, friend!")
@@ -150,19 +151,18 @@ app.get('/', async (c) => {
   const randomGenre = genres[Math.floor(Math.random() * genres.length)];
   const displayGenre = randomGenre.charAt(0).toUpperCase() + randomGenre.slice(1);
 
-  // Get recent community searches from D1 (if available)
-  let recentSearches: Array<{ id: string; name: string; artist: string; image?: string }> = [];
-  try {
-    const result = await db.getRecentSearches(6);
-    recentSearches = result.map(s => ({
-      id: s.spotify_id,
-      name: s.album_name,
-      artist: s.artist_name,
-      image: s.image_url || undefined,
-    }));
-  } catch {
-    // Table might not exist yet or be empty
-  }
+  // Fetch random fact (cached hourly) and recent searches in parallel
+  const [randomFact, recentSearchesResult] = await Promise.all([
+    ai.getRandomFact().catch(() => null),
+    db.getRecentSearches(6).catch(() => []),
+  ]);
+
+  const recentSearches = recentSearchesResult.map(s => ({
+    id: s.spotify_id,
+    name: s.album_name,
+    artist: s.artist_name,
+    image: s.image_url || undefined,
+  }));
 
   return c.html(
     <Layout title="Home" description="Discover music, explore albums, and track your listening habits">
@@ -180,6 +180,7 @@ app.get('/', async (c) => {
             Or maybe explore the history and seminal albums of a random genre like{' '}
             <strong><a href={`/genre/${randomGenre}`}>{displayGenre}</a></strong>.
           </p>
+          {randomFact?.fact && <p>🧠 {randomFact.fact}</p>}
         </section>
 
         {/* Album Search */}

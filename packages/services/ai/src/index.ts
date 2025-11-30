@@ -98,11 +98,11 @@ export class AIService {
   }
 
   /**
-   * Generate a random music fact (uses OpenAI, not cached)
+   * Generate a random music fact (uses OpenAI, cached hourly in KV)
    */
   async getRandomFact() {
     const { generateRandomFact } = await import('./prompts/random-fact');
-    return generateRandomFact(this.openai);
+    return generateRandomFact(this.openai, this.cache);
   }
 
   /**
