@@ -109,10 +109,12 @@ If you cannot find verifiable information about this specific music genre, respo
         citations: response.citations,
       };
 
-      // Cache the result (fire-and-forget, don't block on cache write)
-      cache.set('genreSummary', [normalizedGenre], result).catch(err => {
+      // Cache the result - await to ensure write completes before worker terminates
+      try {
+        await cache.set('genreSummary', [normalizedGenre], result);
+      } catch (err) {
         console.error(`[Genre Summary] Cache write failed for "${genreName}":`, err);
-      });
+      }
 
       return result;
     } catch (error) {
