@@ -594,6 +594,49 @@ app.get('/api/internal/user-listens', async (c) => {
   }
 });
 
+app.get('/api/internal/user-stats', async (c) => {
+  const username = c.req.query('username');
+
+  if (!username) {
+    return c.json({ error: 'Missing username parameter' }, 400);
+  }
+
+  try {
+    // Look up user by username
+    const db = c.get('db');
+    const user = await db.getUserByUsername(username);
+
+    if (!user || !user.lastfm_username) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Create a LastfmService for this user's Last.fm account (with caching)
+    const userLastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username: user.lastfm_username,
+      cache: c.env.CACHE,
+    });
+
+    // Fetch all data in parallel
+    const [recentTracks, topArtists, topAlbums] = await Promise.all([
+      userLastfm.recentTracks.getRecentTracks(1).catch(() => []),
+      userLastfm.getTopArtists('7day', 6).catch(() => []),
+      userLastfm.getTopAlbums('1month', 6).catch(() => []),
+    ]);
+
+    return c.json({
+      data: {
+        recentTrack: recentTracks[0] || null,
+        topArtists,
+        topAlbums,
+      },
+    });
+  } catch (error) {
+    console.error('Internal user-stats error:', error);
+    return c.json({ error: 'Failed to fetch user stats' }, 500);
+  }
+});
+
 // API routes overview
 app.get('/api', (c) => {
   const apiKey = c.get('apiKey');

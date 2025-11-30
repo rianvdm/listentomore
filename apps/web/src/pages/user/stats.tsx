@@ -3,28 +3,19 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
-import { TrackCard } from '../../components/ui';
 import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database } from '@listentomore/db';
-import type { TopArtist, TopAlbum, RecentTrack } from '@listentomore/lastfm';
 
 interface UserStatsPageProps {
   username: string;
   lastfmUsername: string;
-  recentTrack: RecentTrack | null;
-  topArtists: TopArtist[];
-  topAlbums: TopAlbum[];
 }
 
-export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtists, topAlbums }: UserStatsPageProps) {
-  // Use recent track image, or first top artist image for social sharing
-  const ogImage = recentTrack?.image || topArtists[0]?.image || undefined;
-
+export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
       description={`Real-time listening statistics for ${username}`}
-      image={ogImage}
       url={`https://listentomore.com/u/${username}`}
     >
       <header>
@@ -41,21 +32,9 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
           {/* Recent Listening */}
           <h2>🎧 Recent Listening</h2>
           <div id="recent-listening">
-            {recentTrack ? (
-              <p>
-                Most recently listened to{' '}
-                <a href={`/album?q=${encodeURIComponent(`${recentTrack.artist} ${recentTrack.album}`)}`}>
-                  <strong>{recentTrack.album}</strong>
-                </a>
-                {' '}by{' '}
-                <a href={`/artist?q=${encodeURIComponent(recentTrack.artist)}`}>
-                  <strong>{recentTrack.artist}</strong>
-                </a>
-                .<span id="artist-sentence"></span>
-              </p>
-            ) : (
-              <p class="text-muted">No recent tracks found.</p>
-            )}
+            <p class="text-muted">
+              <span class="loading-inline">Loading recent tracks...</span>
+            </p>
           </div>
 
           {/* Recommendations Link */}
@@ -70,71 +49,159 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
           <p class="text-center">
             <strong>Top artists in the past 7 days.</strong>
           </p>
-          {topArtists.length > 0 ? (
-            <div id="top-artists" class="track-grid">
-              {topArtists.map((artist) => (
-                <TrackCard
-                  key={artist.name}
-                  artist={artist.name}
-                  name={`${artist.playcount} plays`}
-                  imageUrl={artist.image}
-                  href={`/artist?q=${encodeURIComponent(artist.name)}`}
-                />
-              ))}
+          <div id="top-artists">
+            <div class="loading-container">
+              <span class="spinner">↻</span>
+              <span class="loading-text">Loading top artists...</span>
             </div>
-          ) : (
-            <p class="text-center text-muted">No listening data for this period.</p>
-          )}
+          </div>
 
           {/* Top Albums */}
           <h2 style={{ marginTop: '4em' }}>🏆 Top Albums</h2>
           <p class="text-center">
             <strong>Top albums in the past 30 days.</strong>
           </p>
-          {topAlbums.length > 0 ? (
-            <div id="top-albums" class="track-grid">
-              {topAlbums.map((album) => (
-                <TrackCard
-                  key={`${album.artist}-${album.name}`}
-                  artist={album.name}
-                  name={album.artist}
-                  album={`${album.playcount} plays`}
-                  imageUrl={album.image}
-                  href={`/album?q=${encodeURIComponent(`${album.artist} ${album.name}`)}`}
-                />
-              ))}
+          <div id="top-albums">
+            <div class="loading-container">
+              <span class="spinner">↻</span>
+              <span class="loading-text">Loading top albums...</span>
             </div>
-          ) : (
-            <p class="text-center text-muted">No listening data for this period.</p>
-          )}
+          </div>
         </section>
       </main>
 
-      {/* Progressive loading for link enrichment and artist sentence */}
+      {/* Progressive loading for stats data */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
 
         (function() {
-          // Enrich album and artist links with Spotify IDs
-          enrichLinks('recent-listening');
-          enrichLinks('top-artists');
-          enrichLinks('top-albums');
-          ${recentTrack ? `
-          // Load artist sentence
-          var artistName = ${JSON.stringify(recentTrack.artist)};
-          fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
+          var username = ${JSON.stringify(username)};
+
+          // Fetch user stats from internal API
+          fetch('/api/internal/user-stats?username=' + encodeURIComponent(username))
             .then(function(r) { return r.json(); })
-            .then(function(data) {
-              if (data.error) throw new Error(data.error);
-              var el = document.getElementById('artist-sentence');
-              if (el && data.data && data.data.sentence) {
-                el.textContent = ' ' + data.data.sentence;
+            .then(function(result) {
+              if (result.error) {
+                throw new Error(result.error);
+              }
+
+              var data = result.data;
+
+              // Render recent listening
+              var recentEl = document.getElementById('recent-listening');
+              if (recentEl) {
+                if (data.recentTrack) {
+                  var track = data.recentTrack;
+                  recentEl.innerHTML = '<p>Most recently listened to ' +
+                    '<a href="/album?q=' + encodeURIComponent(track.artist + ' ' + track.album) + '">' +
+                    '<strong>' + escapeHtml(track.album) + '</strong></a> by ' +
+                    '<a href="/artist?q=' + encodeURIComponent(track.artist) + '">' +
+                    '<strong>' + escapeHtml(track.artist) + '</strong></a>.' +
+                    '<span id="artist-sentence"></span></p>';
+
+                  // Enrich links and fetch artist sentence
+                  enrichLinks('recent-listening');
+                  fetchArtistSentence(track.artist);
+                } else {
+                  recentEl.innerHTML = '<p class="text-muted">No recent tracks found.</p>';
+                }
+              }
+
+              // Render top artists
+              var artistsEl = document.getElementById('top-artists');
+              if (artistsEl) {
+                if (data.topArtists && data.topArtists.length > 0) {
+                  artistsEl.innerHTML = renderTrackGrid(data.topArtists.map(function(artist) {
+                    return {
+                      title: artist.name,
+                      subtitle: artist.playcount + ' plays',
+                      image: artist.image,
+                      href: '/artist?q=' + encodeURIComponent(artist.name)
+                    };
+                  }));
+                  enrichLinks('top-artists');
+                } else {
+                  artistsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
+                }
+              }
+
+              // Render top albums
+              var albumsEl = document.getElementById('top-albums');
+              if (albumsEl) {
+                if (data.topAlbums && data.topAlbums.length > 0) {
+                  albumsEl.innerHTML = renderTrackGrid(data.topAlbums.map(function(album) {
+                    return {
+                      title: album.name,
+                      subtitle: album.artist,
+                      extra: album.playcount + ' plays',
+                      image: album.image,
+                      href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name)
+                    };
+                  }));
+                  enrichLinks('top-albums');
+                } else {
+                  albumsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
+                }
               }
             })
-            .catch(function(e) {
-              console.error('Artist sentence error:', e);
+            .catch(function(err) {
+              console.error('Failed to load user stats:', err);
+              var recentEl = document.getElementById('recent-listening');
+              if (recentEl) {
+                recentEl.innerHTML = '<p class="text-muted">Failed to load stats. Please try refreshing.</p>';
+              }
+              var artistsEl = document.getElementById('top-artists');
+              if (artistsEl) {
+                artistsEl.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
+              }
+              var albumsEl = document.getElementById('top-albums');
+              if (albumsEl) {
+                albumsEl.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
+              }
             });
-          ` : ''}
+
+          function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+          }
+
+          function renderTrackGrid(items) {
+            var html = '<div class="track-grid">';
+            items.forEach(function(item) {
+              html += '<a href="' + item.href + '">';
+              html += '<div class="track">';
+              if (item.image) {
+                html += '<img src="' + item.image + '" alt="' + escapeHtml(item.title) + '" class="track-image" loading="lazy"/>';
+              } else {
+                html += '<div class="track-image placeholder-image"></div>';
+              }
+              html += '<div class="track-content">';
+              html += '<p class="track-artist">' + escapeHtml(item.title) + '</p>';
+              html += '<p class="track-name">' + escapeHtml(item.subtitle) + '</p>';
+              if (item.extra) {
+                html += '<p class="track-album">' + escapeHtml(item.extra) + '</p>';
+              }
+              html += '</div></div></a>';
+            });
+            html += '</div>';
+            return html;
+          }
+
+          function fetchArtistSentence(artistName) {
+            fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.error) throw new Error(data.error);
+                var el = document.getElementById('artist-sentence');
+                if (el && data.data && data.data.sentence) {
+                  el.textContent = ' ' + data.data.sentence;
+                }
+              })
+              .catch(function(e) {
+                console.error('Artist sentence error:', e);
+              });
+          }
         })();
       ` }} />
     </Layout>
@@ -165,7 +232,7 @@ function UserNotFound({ username }: { username: string }) {
   );
 }
 
-// Route handler
+// Route handler - returns shell immediately, data loaded progressively via JS
 export async function handleUserStats(c: Context) {
   const username = c.req.param('username');
   const db = c.get('db') as Database;
@@ -177,30 +244,11 @@ export async function handleUserStats(c: Context) {
     return c.html(<UserNotFound username={username} />, 404);
   }
 
-  // Create a LastfmService for this user's Last.fm account (with caching)
-  const { LastfmService } = await import('@listentomore/lastfm');
-  const lastfm = new LastfmService({
-    apiKey: c.env.LASTFM_API_KEY,
-    username: user.lastfm_username,
-    cache: c.env.CACHE,
-  });
-
-  // Fetch all data in parallel
-  const [recentTracks, topArtists, topAlbums] = await Promise.all([
-    lastfm.recentTracks.getRecentTracks(1).catch(() => []),
-    lastfm.getTopArtists('7day', 6).catch(() => []),
-    lastfm.getTopAlbums('1month', 6).catch(() => []),
-  ]);
-
-  const recentTrack = recentTracks[0] || null;
-
+  // Return shell immediately - data loaded via /api/internal/user-stats
   return c.html(
     <UserStatsPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
-      recentTrack={recentTrack}
-      topArtists={topArtists}
-      topAlbums={topAlbums}
     />
   );
 }
