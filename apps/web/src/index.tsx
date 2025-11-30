@@ -96,6 +96,9 @@ app.use('*', async (c, next) => {
 // Apply auth middleware to API routes (validates API key if present)
 app.use('/api/*', authMiddleware());
 
+// Require authentication for all API routes (no public access)
+app.use('/api/*', requireAuth());
+
 // Apply user-based rate limiting to API routes (after auth, so we know the tier)
 app.use('/api/*', userRateLimitMiddleware());
 
