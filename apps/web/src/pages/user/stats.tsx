@@ -4,29 +4,30 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { TrackCard } from '../../components/ui';
-import type { Database, User } from '@listentomore/db';
+import type { Database } from '@listentomore/db';
 import type { TopArtist, TopAlbum, RecentTrack } from '@listentomore/lastfm';
 
 interface UserStatsPageProps {
-  user: User;
+  username: string;
+  lastfmUsername: string;
   recentTrack: RecentTrack | null;
   topArtists: TopArtist[];
   topAlbums: TopAlbum[];
 }
 
-export function UserStatsPage({ user, recentTrack, topArtists, topAlbums }: UserStatsPageProps) {
-  const displayName = user.username || 'User';
-
+export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtists, topAlbums }: UserStatsPageProps) {
   return (
     <Layout
-      title={`${displayName}'s Stats`}
-      description={`Real-time listening statistics for ${displayName}`}
+      title={`${username}'s Stats`}
+      description={`Real-time listening statistics for ${username}`}
     >
       <header>
-        <h1>Real-time listening stats</h1>
-        <p class="text-center text-muted">
-          Listening data for <strong>{displayName}</strong> via Last.fm
-        </p>
+        <h1>
+          Real-time listening stats for{' '}
+          <a href={`https://www.last.fm/user/${lastfmUsername}`} target="_blank" rel="noopener noreferrer">
+            {username}
+          </a>
+        </h1>
       </header>
 
       <main>
@@ -36,7 +37,10 @@ export function UserStatsPage({ user, recentTrack, topArtists, topAlbums }: User
           {recentTrack ? (
             <p>
               Most recently listened to{' '}
-              <strong>{recentTrack.name}</strong> by{' '}
+              <a href={`/album?q=${encodeURIComponent(`${recentTrack.artist} ${recentTrack.album}`)}`}>
+                <strong>{recentTrack.album}</strong>
+              </a>
+              {' '}by{' '}
               <a href={`/artist?q=${encodeURIComponent(recentTrack.artist)}`}>
                 <strong>{recentTrack.artist}</strong>
               </a>
@@ -163,7 +167,8 @@ export async function handleUserStats(c: Context) {
 
   return c.html(
     <UserStatsPage
-      user={user}
+      username={user.username || user.lastfm_username}
+      lastfmUsername={user.lastfm_username}
       recentTrack={recentTrack}
       topArtists={topArtists}
       topAlbums={topAlbums}
