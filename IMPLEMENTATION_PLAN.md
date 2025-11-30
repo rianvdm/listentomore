@@ -218,7 +218,7 @@ app.get('/my-page', async (c) => {
 
 **Key points:**
 - All `/u/:username` pages are **public** (no auth required to view)
-- **Auto-create users:** When visiting `/u/:username`, if user doesn't exist in DB, verify username with Last.fm API. If valid, auto-create user record. If invalid, show error.
+- When visiting `/u/:username`, if user doesn't exist in DB, don't create it. Just show error and inform user to contact me if they want to test this feature - https://elezea.com/contact/.
 - Future auth is for convenience only (auto-redirect to your page)
 - Discogs, Library, Playlist Cover deferred to Phase 7+
 
