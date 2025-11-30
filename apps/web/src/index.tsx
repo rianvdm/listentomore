@@ -3,16 +3,21 @@
 
 import { Hono } from 'hono';
 import { SITE_CONFIG } from '@listentomore/config';
-import { Database } from '@listentomore/db';
+import { Database, ParsedApiKey } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { SonglinkService } from '@listentomore/songlink';
 import {
   corsMiddleware,
-  rateLimitMiddleware,
   originValidationMiddleware,
   securityHeadersMiddleware,
 } from './middleware/security';
+import {
+  authMiddleware,
+  requireAuth,
+  userRateLimitMiddleware,
+  apiLoggingMiddleware,
+} from './middleware/auth';
 
 // Define environment bindings
 type Bindings = {
@@ -37,6 +42,9 @@ type Variables = {
   spotify: SpotifyService;
   lastfm: LastfmService;
   songlink: SonglinkService;
+  // Auth context
+  apiKey: ParsedApiKey | null;
+  authTier: 'public' | 'standard' | 'premium';
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -50,18 +58,15 @@ app.use('*', async (c, next) => {
   return middleware(c, next);
 });
 
-// Apply rate limiting to API routes
-app.use('/api/*', rateLimitMiddleware({ windowMs: 60_000, maxRequests: 60 }));
-
 // Apply origin validation to API routes (in production)
 app.use('/api/*', async (c, next) => {
   const middleware = originValidationMiddleware({ ENVIRONMENT: c.env.ENVIRONMENT });
   return middleware(c, next);
 });
 
-// Middleware to initialize services
+// Middleware to initialize services (must run before auth middleware)
 app.use('*', async (c, next) => {
-  // Initialize services and attach to context
+  // Initialize database first (needed by auth middleware)
   c.set('db', new Database(c.env.DB));
 
   c.set(
@@ -86,6 +91,15 @@ app.use('*', async (c, next) => {
 
   await next();
 });
+
+// Apply auth middleware to API routes (validates API key if present)
+app.use('/api/*', authMiddleware());
+
+// Apply user-based rate limiting to API routes (after auth, so we know the tier)
+app.use('/api/*', userRateLimitMiddleware());
+
+// Apply API usage logging (after all other middleware)
+app.use('/api/*', apiLoggingMiddleware());
 
 // Health check endpoint
 app.get('/health', (c) => {
@@ -161,13 +175,27 @@ app.get('/', (c) => {
   );
 });
 
-// API routes placeholder
+// API routes overview
 app.get('/api', (c) => {
+  const apiKey = c.get('apiKey');
   return c.json({
     message: 'Listen To More API',
     version: '0.0.1',
+    auth: {
+      authenticated: !!apiKey,
+      tier: apiKey?.tier ?? 'public',
+      hint: 'Include X-API-Key header for authenticated access with higher rate limits',
+    },
+    rateLimits: {
+      public: '10 req/min',
+      standard: '60 req/min',
+      premium: '300 req/min',
+    },
     endpoints: {
       health: '/health',
+      auth: {
+        createKey: 'POST /api/auth/keys (requires admin)',
+      },
       spotify: {
         search: '/api/spotify/search?q=:query&type=:type',
         album: '/api/spotify/album/:id',
@@ -182,6 +210,45 @@ app.get('/api', (c) => {
       songlink: '/api/songlink?url=:streamingUrl',
     },
   });
+});
+
+// Admin endpoint to create API keys
+// In production, this should be protected by admin authentication
+app.post('/api/auth/keys', async (c) => {
+  // For now, only allow in development or with a special admin secret
+  const adminSecret = c.req.header('X-Admin-Secret');
+  const isDevEnv = c.env.ENVIRONMENT !== 'production';
+
+  if (!isDevEnv && adminSecret !== 'your-admin-secret-here') {
+    return c.json({ error: 'Unauthorized', message: 'Admin access required' }, 401);
+  }
+
+  try {
+    const body = await c.req.json<{
+      name?: string;
+      tier?: 'standard' | 'premium';
+      scopes?: ('read' | 'write' | 'ai')[];
+    }>();
+
+    const db = c.get('db');
+    const result = await db.createApiKey({
+      name: body.name,
+      tier: body.tier || 'standard',
+      scopes: body.scopes || ['read'],
+    });
+
+    return c.json({
+      message: 'API key created successfully',
+      key: result.key, // Only returned once!
+      keyPrefix: result.record.key_prefix,
+      tier: result.record.tier,
+      scopes: result.record.scopes,
+      warning: 'Save this key - it will not be shown again!',
+    });
+  } catch (error) {
+    console.error('Failed to create API key:', error);
+    return c.json({ error: 'Failed to create API key' }, 500);
+  }
 });
 
 // Spotify API routes

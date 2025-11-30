@@ -76,6 +76,58 @@ export interface RateLimit {
   updated_at: string;
 }
 
+// API Key types
+export type ApiKeyTier = 'public' | 'standard' | 'premium';
+export type ApiKeyScope = 'read' | 'write' | 'ai';
+
+export interface ApiKey {
+  id: string;
+  user_id: string | null;
+  key_hash: string;
+  key_prefix: string;
+  name: string;
+  tier: ApiKeyTier;
+  scopes: string; // JSON array of ApiKeyScope
+  rate_limit_rpm: number | null;
+  request_count: number;
+  last_used_at: string | null;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiUsageLog {
+  id: number;
+  api_key_id: string | null;
+  endpoint: string;
+  method: string;
+  status_code: number | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  response_time_ms: number | null;
+  created_at: string;
+}
+
+// Parsed API key with scopes as array
+export interface ParsedApiKey extends Omit<ApiKey, 'scopes'> {
+  scopes: ApiKeyScope[];
+}
+
+// Parse scopes from ApiKey
+export function parseApiKey(key: ApiKey): ParsedApiKey {
+  return {
+    ...key,
+    scopes: key.scopes ? JSON.parse(key.scopes) : ['read'],
+  };
+}
+
+// Default rate limits per tier (requests per minute)
+export const TIER_RATE_LIMITS: Record<ApiKeyTier, number> = {
+  public: 10,    // Very limited for anonymous access
+  standard: 60,  // Normal authenticated access
+  premium: 300,  // High-volume access
+};
+
 // Helper types for parsed JSON fields
 export interface ParsedDiscogsRelease extends Omit<DiscogsRelease, 'genres' | 'styles' | 'master_genres' | 'master_styles'> {
   genres: string[];

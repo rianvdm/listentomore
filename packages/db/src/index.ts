@@ -9,7 +9,12 @@ import type {
   DiscogsSyncState,
   DiscogsRelease,
   RateLimit,
+  ApiKey,
+  ApiKeyTier,
+  ApiKeyScope,
+  ParsedApiKey,
 } from './schema';
+import { parseApiKey, TIER_RATE_LIMITS } from './schema';
 
 // Database client wrapper
 export class Database {
@@ -320,5 +325,189 @@ export class Database {
       )
       .bind(data.requestsRemaining, data.windowResetAt || null, service)
       .run();
+  }
+
+  // API Key management
+
+  /**
+   * Create a new API key
+   * Returns the raw key (only returned once!) and the stored record
+   */
+  async createApiKey(data: {
+    userId?: string;
+    name?: string;
+    tier?: ApiKeyTier;
+    scopes?: ApiKeyScope[];
+    rateLimitRpm?: number;
+    expiresAt?: string;
+  }): Promise<{ key: string; record: ParsedApiKey }> {
+    // Generate a random key: ltm_<32 random hex chars>
+    const randomBytes = new Uint8Array(16);
+    crypto.getRandomValues(randomBytes);
+    const randomHex = Array.from(randomBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const rawKey = `ltm_${randomHex}`;
+    const keyPrefix = rawKey.substring(0, 8);
+
+    // Hash the key for storage
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(rawKey);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', keyData);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const keyHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+    const tier = data.tier || 'standard';
+    const scopes = JSON.stringify(data.scopes || ['read']);
+
+    const result = await this.db
+      .prepare(
+        `INSERT INTO api_keys (user_id, key_hash, key_prefix, name, tier, scopes, rate_limit_rpm, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING *`
+      )
+      .bind(
+        data.userId || null,
+        keyHash,
+        keyPrefix,
+        data.name || 'Default',
+        tier,
+        scopes,
+        data.rateLimitRpm || null,
+        data.expiresAt || null
+      )
+      .first<ApiKey>();
+
+    if (!result) {
+      throw new Error('Failed to create API key');
+    }
+
+    return {
+      key: rawKey,
+      record: parseApiKey(result),
+    };
+  }
+
+  /**
+   * Validate an API key and return the parsed record if valid
+   * Also updates last_used_at timestamp
+   */
+  async validateApiKey(rawKey: string): Promise<ParsedApiKey | null> {
+    // Hash the provided key
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(rawKey);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', keyData);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const keyHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+    // Look up by hash
+    const apiKey = await this.db
+      .prepare(
+        `SELECT * FROM api_keys
+         WHERE key_hash = ?
+         AND revoked_at IS NULL
+         AND (expires_at IS NULL OR expires_at > datetime('now'))`
+      )
+      .bind(keyHash)
+      .first<ApiKey>();
+
+    if (!apiKey) {
+      return null;
+    }
+
+    // Update last_used_at (fire and forget)
+    this.db
+      .prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?")
+      .bind(apiKey.id)
+      .run();
+
+    return parseApiKey(apiKey);
+  }
+
+  /**
+   * Get API key by ID (for management purposes)
+   */
+  async getApiKey(id: string): Promise<ParsedApiKey | null> {
+    const apiKey = await this.db
+      .prepare('SELECT * FROM api_keys WHERE id = ?')
+      .bind(id)
+      .first<ApiKey>();
+
+    return apiKey ? parseApiKey(apiKey) : null;
+  }
+
+  /**
+   * List API keys for a user
+   */
+  async listApiKeys(userId: string): Promise<ParsedApiKey[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM api_keys
+         WHERE user_id = ? AND revoked_at IS NULL
+         ORDER BY created_at DESC`
+      )
+      .bind(userId)
+      .all<ApiKey>();
+
+    return result.results.map(parseApiKey);
+  }
+
+  /**
+   * Revoke an API key
+   */
+  async revokeApiKey(id: string): Promise<void> {
+    await this.db
+      .prepare("UPDATE api_keys SET revoked_at = datetime('now') WHERE id = ?")
+      .bind(id)
+      .run();
+  }
+
+  /**
+   * Increment request count for an API key
+   */
+  async incrementApiKeyUsage(id: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE api_keys SET request_count = request_count + 1 WHERE id = ?')
+      .bind(id)
+      .run();
+  }
+
+  /**
+   * Log API usage for analytics
+   */
+  async logApiUsage(data: {
+    apiKeyId?: string;
+    endpoint: string;
+    method?: string;
+    statusCode?: number;
+    ipAddress?: string;
+    userAgent?: string;
+    responseTimeMs?: number;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO api_usage_log (api_key_id, endpoint, method, status_code, ip_address, user_agent, response_time_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        data.apiKeyId || null,
+        data.endpoint,
+        data.method || 'GET',
+        data.statusCode || null,
+        data.ipAddress || null,
+        data.userAgent || null,
+        data.responseTimeMs || null
+      )
+      .run();
+  }
+
+  /**
+   * Get the effective rate limit for an API key (or default tier limit)
+   */
+  getEffectiveRateLimit(apiKey: ParsedApiKey | null): number {
+    if (!apiKey) {
+      return TIER_RATE_LIMITS.public;
+    }
+    return apiKey.rate_limit_rpm ?? TIER_RATE_LIMITS[apiKey.tier];
   }
 }
