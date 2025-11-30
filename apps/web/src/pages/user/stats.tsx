@@ -91,8 +91,8 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
               {topAlbums.map((album) => (
                 <TrackCard
                   key={`${album.artist}-${album.name}`}
-                  artist={album.artist}
-                  name={album.name}
+                  artist={album.name}
+                  name={album.artist}
                   album={`${album.playcount} plays`}
                   imageUrl={album.image}
                   href={`/album?q=${encodeURIComponent(`${album.artist} ${album.name}`)}`}
