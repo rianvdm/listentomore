@@ -212,12 +212,13 @@ app.get('/my-page', async (c) => {
 - `/album`, `/album/:id` - Album search and detail
 - `/genre/:slug` - Genre pages
 - `/stats` - Entry page: "Enter your Last.fm username" → redirects to `/u/:username`
-- `/u/:username` - Public user stats (recent track, top artists/albums)
+- `/u/:username` - Public user stats (auto-creates user if valid Last.fm username)
 - `/u/:username/recommendations` - Personalized recommendations (future)
 - `/about`, `/privacy`, `/terms` - Static pages
 
 **Key points:**
 - All `/u/:username` pages are **public** (no auth required to view)
+- **Auto-create users:** When visiting `/u/:username`, if user doesn't exist in DB, verify username with Last.fm API. If valid, auto-create user record. If invalid, show error.
 - Future auth is for convenience only (auto-redirect to your page)
 - Discogs, Library, Playlist Cover deferred to Phase 7+
 
