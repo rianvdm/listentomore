@@ -25,6 +25,7 @@ import { handleAlbumDetail } from './pages/album/detail';
 import { handleArtistSearch } from './pages/artist/search';
 import { handleArtistDetail } from './pages/artist/detail';
 import { handleGenreDetail } from './pages/genre/detail';
+import { handleGenreSearch } from './pages/genre/search';
 import { handleUserStats } from './pages/user/stats';
 import { handleUserRecommendations } from './pages/user/recommendations';
 import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
@@ -252,6 +253,7 @@ app.get('/artist', handleArtistSearch);
 app.get('/artist/:id', handleArtistDetail);
 
 // Genre routes
+app.get('/genre', handleGenreSearch);
 app.get('/genre/:slug', handleGenreDetail);
 
 // Stats routes
@@ -318,6 +320,23 @@ app.get('/api/internal/artist-summary', async (c) => {
   } catch (error) {
     console.error('Internal artist summary error:', error);
     return c.json({ error: 'Failed to generate artist summary' }, 500);
+  }
+});
+
+app.get('/api/internal/genre-summary', async (c) => {
+  const name = c.req.query('name');
+
+  if (!name) {
+    return c.json({ error: 'Missing name parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getGenreSummary(name);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal genre summary error:', error);
+    return c.json({ error: 'Failed to generate genre summary' }, 500);
   }
 });
 
@@ -919,9 +938,9 @@ app.notFound((c) => {
 
 // Scheduled handler for CRON jobs
 async function scheduled(
-  event: ScheduledEvent,
+  _event: ScheduledEvent,
   env: Bindings,
-  ctx: ExecutionContext
+  _ctx: ExecutionContext
 ): Promise<void> {
   console.log(`[CRON] Running scheduled task at ${new Date().toISOString()}`);
 

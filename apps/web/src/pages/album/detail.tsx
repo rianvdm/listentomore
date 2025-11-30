@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import type { SpotifyService } from '@listentomore/spotify';
+import { formatMarkdownScript, renderCitationsScript } from '../../utils/client-scripts';
 
 interface AlbumData {
   id: string;
@@ -110,6 +111,9 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
+        ${formatMarkdownScript}
+        ${renderCitationsScript}
+
         (function() {
           var albumId = '${album.id}';
           var spotifyUrl = '${album.spotifyUrl}';
@@ -143,32 +147,12 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
               if (data.error) throw new Error(data.error);
               var summary = data.data;
               var html = '<div>' + formatMarkdown(summary.content) + '</div>';
-              if (summary.citations && summary.citations.length > 0) {
-                html += '<div class="citations" style="margin-top:1rem"><h4>Sources</h4><ul>';
-                summary.citations.forEach(function(url, i) {
-                  var hostname = url;
-                  try { hostname = new URL(url).hostname.replace('www.', ''); } catch(e) {}
-                  html += '<li><span class="citation-number">[' + (i+1) + ']</span> <a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
-                });
-                html += '</ul></div>';
-              }
+              html += renderCitations(summary.citations);
               document.getElementById('ai-summary').innerHTML = html;
             })
             .catch(function(e) {
               document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
             });
-
-          function formatMarkdown(text) {
-            return text
-              .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-              .replace(/^## (.+)$/gm, '<h4>$1</h4>')
-              .replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>')
-              .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-              .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
-              .replace(/\\n\\n/g, '</p><p>')
-              .replace(/\\n/g, '<br/>')
-              .replace(/^(.+)$/, '<p>$1</p>');
-          }
         })();
       ` }} />
     </Layout>

@@ -1,29 +1,16 @@
 // Authentication middleware for API key validation
 // Provides tiered access control with different rate limits per tier
 
-import { Context, Next, MiddlewareHandler } from 'hono';
-import { Database, ParsedApiKey, ApiKeyScope, TIER_RATE_LIMITS } from '@listentomore/db';
-
-// Environment bindings type
-type AuthEnv = {
-  Bindings: {
-    DB: D1Database;
-    CACHE: KVNamespace;
-  };
-  Variables: {
-    db: Database;
-    apiKey: ParsedApiKey | null;
-    authTier: 'public' | 'standard' | 'premium';
-  };
-};
+import { Context, MiddlewareHandler } from 'hono';
+import { ParsedApiKey, ApiKeyScope } from '@listentomore/db';
 
 /**
  * Authentication middleware
  * Extracts and validates API key from X-API-Key header
  * Attaches parsed key to context for downstream use
  */
-export function authMiddleware(): MiddlewareHandler<AuthEnv> {
-  return async (c: Context<AuthEnv>, next: Next) => {
+export function authMiddleware(): MiddlewareHandler {
+  return async (c, next) => {
     const apiKeyHeader = c.req.header('X-API-Key');
     const db = c.get('db');
 
@@ -53,9 +40,9 @@ export function authMiddleware(): MiddlewareHandler<AuthEnv> {
 export function requireAuth(options?: {
   minTier?: 'standard' | 'premium';
   requiredScopes?: ApiKeyScope[];
-}): MiddlewareHandler<AuthEnv> {
-  return async (c: Context<AuthEnv>, next: Next) => {
-    const apiKey = c.get('apiKey');
+}): MiddlewareHandler {
+  return async (c, next) => {
+    const apiKey = c.get('apiKey') as ParsedApiKey | null;
 
     if (!apiKey) {
       return c.json(
@@ -69,7 +56,7 @@ export function requireAuth(options?: {
 
     // Check tier requirement
     if (options?.minTier) {
-      const tierOrder = { public: 0, standard: 1, premium: 2 };
+      const tierOrder: Record<string, number> = { public: 0, standard: 1, premium: 2 };
       if (tierOrder[apiKey.tier] < tierOrder[options.minTier]) {
         return c.json(
           {
@@ -106,8 +93,8 @@ export function requireAuth(options?: {
  * Uses the authenticated user's tier to determine rate limits
  * Falls back to public tier limits for unauthenticated requests
  */
-export function userRateLimitMiddleware(): MiddlewareHandler<AuthEnv> {
-  return async (c: Context<AuthEnv>, next: Next) => {
+export function userRateLimitMiddleware(): MiddlewareHandler {
+  return async (c, next) => {
     const cache = c.env.CACHE;
     if (!cache) {
       console.warn('User rate limiting skipped: CACHE KV not available');
@@ -155,7 +142,7 @@ export function userRateLimitMiddleware(): MiddlewareHandler<AuthEnv> {
 
       // Track usage in database (fire and forget)
       if (apiKey) {
-        db.incrementApiKeyUsage(apiKey.id).catch((err) =>
+        db.incrementApiKeyUsage(apiKey.id).catch((err: unknown) =>
           console.error('Failed to increment API key usage:', err)
         );
       }
@@ -184,8 +171,8 @@ function getClientIP(c: Context): string {
  * API usage logging middleware
  * Logs all API requests for analytics
  */
-export function apiLoggingMiddleware(): MiddlewareHandler<AuthEnv> {
-  return async (c: Context<AuthEnv>, next: Next) => {
+export function apiLoggingMiddleware(): MiddlewareHandler {
+  return async (c, next) => {
     const startTime = Date.now();
 
     await next();
@@ -203,6 +190,6 @@ export function apiLoggingMiddleware(): MiddlewareHandler<AuthEnv> {
       ipAddress: getClientIP(c),
       userAgent: c.req.header('User-Agent'),
       responseTimeMs: responseTime,
-    }).catch((err) => console.error('Failed to log API usage:', err));
+    }).catch((err: unknown) => console.error('Failed to log API usage:', err));
   };
 }

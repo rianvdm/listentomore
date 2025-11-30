@@ -749,6 +749,12 @@ blockquote {
   list-style-type: disc;
 }
 
+.ai-summary li {
+  font-size: 18px;
+  margin-bottom: 0.5em;
+  line-height: 1.4em;
+}
+
 .citations {
   margin-top: 1.5rem;
   padding-top: 1rem;
@@ -792,6 +798,34 @@ blockquote {
 
 #similar-artists li {
   margin: 0;
+}
+
+/* Genre Grid (for genre search page) */
+.genre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.genre-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(var(--c-accent-rgb), 0.1);
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 500;
+  transition: background-color 0.2s, transform 0.2s;
+}
+
+.genre-card:hover {
+  background-color: rgba(var(--c-accent-rgb), 0.2);
+  transform: translateY(-2px);
+  opacity: 1;
 }
 
 /* Track List (for recommendations page) */

@@ -1,114 +1,87 @@
 // Genre detail page component
-// Shows genre info with AI-generated summary
+// Shows genre info with AI-generated summary, progressively loaded
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
-import type { AIService } from '@listentomore/ai';
+import { slugToDisplayName } from '../../data/genres';
+import { formatMarkdownScript, enrichLinksScript, renderCitationsScript, enrichAlbumMentionsScript } from '../../utils/client-scripts';
 
 interface GenreDetailProps {
-  genre: string;
   displayName: string;
-  summary?: {
-    text: string;
-    citations?: string[];
-  };
-  error?: string;
 }
 
-// Convert slug to display name
-function slugToDisplayName(slug: string): string {
-  return slug
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-export function GenreDetailPage({ genre, displayName, summary, error }: GenreDetailProps) {
-  if (error) {
-    return (
-      <Layout title="Genre Not Found">
-        <div class="text-center" style={{ paddingTop: '4rem' }}>
-          <h1>Genre Not Found</h1>
-          <p class="text-muted">{error}</p>
-          <p class="mt-2">
-            <a href="/" class="button">Go Home</a>
-          </p>
-        </div>
-      </Layout>
-    );
-  }
-
+export function GenreDetailPage({ displayName }: GenreDetailProps) {
   return (
-    <Layout title={displayName} description={`Learn about ${displayName} music`}>
-      <div class="text-center mb-4">
+    <Layout
+      title={displayName}
+      description={`Learn about the history, musical elements, and seminal albums of ${displayName} music`}
+    >
+      <header>
         <h1>{displayName}</h1>
-      </div>
+      </header>
 
-      {/* AI Summary */}
-      {summary?.text && (
-        <div class="section">
-          <div class="card">
-            <p>{summary.text}</p>
-            {summary.citations && summary.citations.length > 0 && (
-              <div class="mt-2">
-                <p class="text-muted footnote">Sources:</p>
-                <ul style={{ fontSize: '12px', opacity: 0.7, margin: 0, paddingLeft: '1.5rem' }}>
-                  {summary.citations.map((citation, i) => (
-                    <li key={i}>
-                      <a href={citation} target="_blank" rel="noopener noreferrer">
-                        {new URL(citation).hostname}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+      <main>
+        {/* AI Summary - loaded via JS */}
+        <section class="ai-summary" id="genre-summary">
+          <div class="loading-container">
+            <span class="spinner">↻</span>
+            <span class="loading-text">Generating summary...</span>
           </div>
-        </div>
-      )}
+        </section>
 
-      {/* Search for artists in this genre */}
-      <div class="section text-center">
-        <p>
-          <a href={`/artist?q=${encodeURIComponent(displayName)}`} class="button">
-            Find {displayName} Artists
-          </a>
-        </p>
-        <p class="mt-2">
-          <a href={`/album?q=${encodeURIComponent(displayName)}`} class="button button--secondary">
-            Find {displayName} Albums
-          </a>
-        </p>
-      </div>
+        {/* Back Link */}
+        <section class="text-center" style={{ marginTop: '2em' }}>
+          <p>
+            <a href="/genre" class="text-muted">← Browse all genres</a>
+          </p>
+        </section>
+      </main>
+
+      {/* Progressive loading script */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        ${formatMarkdownScript}
+        ${enrichLinksScript}
+        ${renderCitationsScript}
+        ${enrichAlbumMentionsScript}
+
+        (function() {
+          var genreName = ${JSON.stringify(displayName)};
+
+          // Fetch genre summary
+          fetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              var summary = data.data;
+              var content = summary.content || summary.text || '';
+
+              // Format markdown and add citations
+              var html = formatMarkdown(content);
+              html += renderCitations(summary.citations);
+
+              document.getElementById('genre-summary').innerHTML = html;
+
+              // Enrich links: artist/album search links -> direct Spotify links
+              enrichLinks('genre-summary');
+              // Enrich "Album by Artist" bold text -> album links
+              enrichAlbumMentions('genre-summary');
+            })
+            .catch(function(e) {
+              console.error('Genre summary error:', e);
+              document.getElementById('genre-summary').innerHTML = '<p class="text-muted">Unable to load genre information. Please try again later.</p>';
+            });
+        })();
+      ` }} />
     </Layout>
   );
 }
 
-// Route handler
+// Route handler - fast initial render, AI summary loaded via JS
 export async function handleGenreDetail(c: Context) {
   const slug = c.req.param('slug');
   const displayName = slugToDisplayName(slug);
 
-  const ai = c.get('ai') as AIService;
-
-  try {
-    const summary = await ai.getGenreSummary(displayName);
-
-    return c.html(
-      <GenreDetailPage
-        genre={slug}
-        displayName={displayName}
-        summary={summary ? { text: summary.text, citations: summary.citations } : undefined}
-      />
-    );
-  } catch (error) {
-    console.error('Genre detail error:', error);
-    return c.html(
-      <GenreDetailPage
-        genre={slug}
-        displayName={displayName}
-        error="Failed to load genre information"
-      />
-    );
-  }
+  return c.html(
+    <GenreDetailPage displayName={displayName} />
+  );
 }

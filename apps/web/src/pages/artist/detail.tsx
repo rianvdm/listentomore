@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import type { SpotifyService } from '@listentomore/spotify';
+import { formatMarkdownScript, enrichLinksScript, renderCitationsScript } from '../../utils/client-scripts';
 
 interface ArtistData {
   id: string;
@@ -93,6 +94,10 @@ export function ArtistDetailPage({
 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
+        ${formatMarkdownScript}
+        ${enrichLinksScript}
+        ${renderCitationsScript}
+
         (function() {
           var artistName = ${JSON.stringify(artist.name)};
           var artistId = '${artist.id}';
@@ -221,98 +226,17 @@ export function ArtistDetailPage({
               var text = summary.text || summary.summary || '';
               var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
               html += '<div>' + formatMarkdown(text) + '</div>';
-
-              // Add citations/sources if available
-              if (summary.citations && summary.citations.length > 0) {
-                html += '<div class="citations" style="margin-top:1rem"><h4>Sources</h4><ul>';
-                summary.citations.forEach(function(url, i) {
-                  var hostname = url;
-                  try { hostname = new URL(url).hostname.replace('www.', ''); } catch(e) {}
-                  html += '<li><span class="citation-number">[' + (i+1) + ']</span> <a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
-                });
-                html += '</ul></div>';
-              }
+              html += renderCitations(summary.citations);
 
               document.getElementById('ai-summary').innerHTML = html;
 
-              // Enrich artist links in the summary with Spotify IDs
-              enrichArtistLinks();
+              // Enrich artist/album links in the summary with Spotify IDs
+              enrichLinks('ai-summary');
             })
             .catch(function(e) {
               console.error('AI summary error:', e);
               document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
             });
-
-          // Find artist/album search links and replace with direct Spotify links
-          function enrichArtistLinks() {
-            var container = document.getElementById('ai-summary');
-            if (!container) return;
-
-            // Enrich artist links
-            var artistLinks = container.querySelectorAll('a[href^="/artist?q="]');
-            artistLinks.forEach(function(link) {
-              var href = link.getAttribute('href');
-              var match = href.match(/\\/artist\\?q=([^&]+)/);
-              if (!match) return;
-
-              var query = match[1];
-              fetch('/api/internal/search?q=' + query + '&type=artist')
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                  if (data.data && data.data[0] && data.data[0].id) {
-                    link.setAttribute('href', '/artist/' + data.data[0].id);
-                  }
-                })
-                .catch(function() { /* keep original search link */ });
-            });
-
-            // Enrich album links
-            var albumLinks = container.querySelectorAll('a[href^="/album?q="]');
-            albumLinks.forEach(function(link) {
-              var href = link.getAttribute('href');
-              var match = href.match(/\\/album\\?q=([^&]+)/);
-              if (!match) return;
-
-              var query = match[1];
-              fetch('/api/internal/search?q=' + query + '&type=album')
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                  if (data.data && data.data[0] && data.data[0].id) {
-                    link.setAttribute('href', '/album/' + data.data[0].id);
-                  }
-                })
-                .catch(function() { /* keep original search link */ });
-            });
-          }
-
-          function formatMarkdown(text) {
-            var result = text
-              // Markdown links [text](url)
-              .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, linkText, url) {
-                // Internal relative URLs (start with /)
-                if (url.startsWith('/')) {
-                  return '<a href="' + url + '">' + linkText + '</a>';
-                }
-                // Legacy listentomore.com URLs - convert to internal search
-                if (url.includes('listentomore.com/artist/')) {
-                  return '<a href="/artist?q=' + encodeURIComponent(linkText) + '">' + linkText + '</a>';
-                }
-                if (url.includes('listentomore.com/album/')) {
-                  return '<a href="/album?q=' + encodeURIComponent(linkText) + '">' + linkText + '</a>';
-                }
-                // External links open in new tab
-                return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + linkText + '</a>';
-              })
-              // Bold
-              .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-              // Italic
-              .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
-              // Paragraphs - split on double newlines
-              .replace(/\\n\\n/g, '</p><p>')
-              .replace(/\\n/g, '<br/>');
-            // Wrap in paragraph tags
-            return '<p>' + result + '</p>';
-          }
         })();
       ` }} />
     </Layout>

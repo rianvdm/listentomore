@@ -107,7 +107,7 @@ export class SpotifySearch {
     // Check cache
     const cached = await this.cache.get(cacheKey, 'json');
     if (cached) {
-      return cached as ReturnType<typeof this.search<T>>;
+      return cached as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
     }
 
     const accessToken = await this.auth.getAccessToken();
@@ -167,7 +167,7 @@ export class SpotifySearch {
       expirationTtl: CACHE_CONFIG.spotify.search.ttlDays * 24 * 60 * 60,
     });
 
-    return results as ReturnType<typeof this.search<T>>;
+    return results as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
   }
 
   async searchTrack(query: string): Promise<TrackSearchResult | null> {

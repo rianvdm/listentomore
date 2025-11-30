@@ -3,7 +3,6 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
-import { TrackCard } from '../../components/ui';
 import type { Database } from '@listentomore/db';
 import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
 

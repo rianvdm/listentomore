@@ -8,6 +8,7 @@ interface InputProps {
   required?: boolean;
   autofocus?: boolean;
   class?: string;
+  style?: Record<string, string>;
 }
 
 export function Input({
@@ -18,6 +19,7 @@ export function Input({
   required = false,
   autofocus = false,
   class: className,
+  style,
 }: InputProps) {
   const classes = ['input', className].filter(Boolean).join(' ');
 
@@ -30,6 +32,7 @@ export function Input({
       required={required}
       autofocus={autofocus}
       class={classes}
+      style={style}
     />
   );
 }

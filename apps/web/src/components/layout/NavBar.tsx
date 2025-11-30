@@ -19,6 +19,9 @@ export function NavBar() {
           <a href="/album" class="nav-link">
             Albums
           </a>
+          <a href="/genre" class="nav-link">
+            Genres
+          </a>
           <a href="/about" class="nav-link">
             About
           </a>

@@ -1,5 +1,7 @@
-// Centralized AI configuration for all AI-powered features
-// All prompts, models, and settings in one place
+// AI configuration for model settings and cache TTLs
+//
+// NOTE: Actual prompts are defined in packages/services/ai/src/prompts/
+// This file only contains model configuration (provider, model, tokens, temperature, cache TTL)
 
 export const AI_PROVIDERS = {
   openai: {
@@ -20,8 +22,6 @@ export interface AITaskConfig {
   maxTokens: number;
   temperature: number;
   cacheTtlDays: number;
-  systemPrompt: string;
-  userPromptTemplate: (...args: string[]) => string;
 }
 
 export const AI_TASKS = {
@@ -31,14 +31,6 @@ export const AI_TASKS = {
     maxTokens: 1000,
     temperature: 0.5,
     cacheTtlDays: 180,
-    systemPrompt: `You are a music expert who writes concise, engaging artist summaries.
-Use plain language without hyperbole. Focus on the artist's musical style,
-key albums, and cultural impact. Keep responses under 200 words.
-
-When mentioning other artists, wrap their names in [[double brackets]] like [[Artist Name]].
-When mentioning albums, wrap them in {{double braces}} like {{Album Title}}.`,
-    userPromptTemplate: (artistName: string) =>
-      `Write a summary of the music artist/band "${artistName}".`,
   },
 
   albumDetail: {
@@ -47,12 +39,6 @@ When mentioning albums, wrap them in {{double braces}} like {{Album Title}}.`,
     maxTokens: 1000,
     temperature: 0.5,
     cacheTtlDays: 120,
-    systemPrompt: `You are a music critic who writes informative album reviews.
-Include context about when the album was released, its reception, and its place
-in the artist's discography. Be factual and cite sources when possible.
-Keep responses under 300 words.`,
-    userPromptTemplate: (artist: string, album: string) =>
-      `Write about the album "${album}" by ${artist}. Include its reception and significance.`,
   },
 
   genreSummary: {
@@ -61,11 +47,6 @@ Keep responses under 300 words.`,
     maxTokens: 1000,
     temperature: 0.5,
     cacheTtlDays: 180,
-    systemPrompt: `You are a music historian. Write brief, informative genre descriptions.
-Focus on the genre's origins, key characteristics, and notable artists.
-Keep responses to 2-3 sentences.`,
-    userPromptTemplate: (genre: string) =>
-      `Describe the music genre "${genre}" in 2-3 sentences.`,
   },
 
   artistSentence: {
@@ -74,10 +55,6 @@ Keep responses to 2-3 sentences.`,
     maxTokens: 100,
     temperature: 0.5,
     cacheTtlDays: 180,
-    systemPrompt: `You write single-sentence artist descriptions. Be concise and factual.
-Maximum 38 words. No fluff or superlatives.`,
-    userPromptTemplate: (artistName: string) =>
-      `Describe ${artistName} in one sentence (max 38 words).`,
   },
 
   randomFact: {
@@ -86,11 +63,6 @@ Maximum 38 words. No fluff or superlatives.`,
     maxTokens: 10000,
     temperature: 1, // gpt-5-mini only supports temperature=1
     cacheTtlDays: 0, // No caching - always fresh
-    systemPrompt: `You share interesting, lesser-known music facts. Be specific with dates,
-names, and details. Facts should be surprising or counterintuitive.
-Keep responses to 2-3 sentences.`,
-    userPromptTemplate: () =>
-      `Share an interesting, lesser-known fact about music history.`,
   },
 
   playlistCoverPrompt: {
@@ -99,11 +71,6 @@ Keep responses to 2-3 sentences.`,
     maxTokens: 10000,
     temperature: 1, // gpt-5-nano only supports temperature=1
     cacheTtlDays: 0,
-    systemPrompt: `You create DALL-E prompts for playlist cover art.
-The prompts should be visual and artistic, avoiding text or words in the image.
-Focus on mood, color, and abstract representation of the music.`,
-    userPromptTemplate: (playlistName: string, description: string) =>
-      `Create a DALL-E prompt for a playlist called "${playlistName}". Description: ${description}`,
   },
 
   listenAi: {
@@ -112,11 +79,6 @@ Focus on mood, color, and abstract representation of the music.`,
     maxTokens: 10000,
     temperature: 1, // gpt-5-mini only supports temperature=1
     cacheTtlDays: 0,
-    systemPrompt: `You are Rick Rubin, the legendary music producer. You speak thoughtfully
-and philosophically about music. You reference your experiences producing artists
-across genres - from Beastie Boys to Johnny Cash to Slayer.
-Keep responses to 4 sentences maximum. Be warm but wise.`,
-    userPromptTemplate: (question: string) => question,
   },
 } as const satisfies Record<string, AITaskConfig>;
 
