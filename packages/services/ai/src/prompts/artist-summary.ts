@@ -9,48 +9,21 @@ export interface ArtistSummaryResult {
 }
 
 /**
- * Format artist name for URL slug
- */
-function formatArtistSlug(name: string): string {
-  return encodeURIComponent(
-    name
-      .split(',')[0] // Remove text after first comma
-      .replace(/'/g, '') // Remove single quotes
-      .replace(/\//g, '-') // Replace / with hyphens
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .toLowerCase()
-  );
-}
-
-/**
- * Format album name for URL slug
- */
-function formatAlbumSlug(name: string): string {
-  return encodeURIComponent(
-    name
-      .replace(/\s*\(.*?\)\s*/g, '') // Remove text in parentheses
-      .replace(/'/g, '') // Remove single quotes
-      .replace(/\//g, '-') // Replace / with hyphens
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .toLowerCase()
-  );
-}
-
-/**
- * Replace [[Artist Name]] and {{Album Name}} placeholders with links
+ * Replace [[Artist Name]] and {{Album Name}} placeholders with search links.
+ * Since we don't have Spotify IDs for referenced artists/albums, we link to
+ * search pages where users can find them.
  */
 function replacePlaceholders(summary: string, artistName: string): string {
-  // Replace artist names: [[Artist Name]] -> markdown link
+  // Replace artist names: [[Artist Name]] -> search link
   let result = summary.replace(/\[\[([^\]]+)\]\]/g, (_match, artist) => {
-    const slug = formatArtistSlug(artist);
-    return `[${artist}](https://listentomore.com/artist/${slug})`;
+    const query = encodeURIComponent(artist);
+    return `[${artist}](/artist?q=${query})`;
   });
 
-  // Replace album names: {{Album Name}} -> markdown link
+  // Replace album names: {{Album Name}} -> search link (include artist for better results)
   result = result.replace(/\{\{([^}]+)\}\}/g, (_match, album) => {
-    const artistSlug = formatArtistSlug(artistName);
-    const albumSlug = formatAlbumSlug(album);
-    return `[${album}](https://listentomore.com/album/${artistSlug}_${albumSlug})`;
+    const query = encodeURIComponent(`${album} ${artistName}`);
+    return `[${album}](/album?q=${query})`;
   });
 
   return result;
