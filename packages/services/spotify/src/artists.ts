@@ -86,4 +86,69 @@ export class SpotifyArtists {
     const results = await Promise.all(artistIds.map((id) => this.getArtist(id)));
     return results;
   }
+
+  async getArtistAlbums(
+    artistId: string,
+    limit: number = 10
+  ): Promise<
+    Array<{
+      id: string;
+      name: string;
+      release_date: string;
+      images: Array<{ url: string }>;
+      album_type: string;
+    }>
+  > {
+    const cacheKey = `spotify:artist:${artistId}:albums:${limit}`;
+
+    // Check cache
+    const cached = await this.cache.get(cacheKey, 'json');
+    if (cached) {
+      return cached as Array<{
+        id: string;
+        name: string;
+        release_date: string;
+        images: Array<{ url: string }>;
+        album_type: string;
+      }>;
+    }
+
+    const accessToken = await this.auth.getAccessToken();
+
+    const params = new URLSearchParams({
+      include_groups: 'album',
+      limit: limit.toString(),
+      market: 'US',
+    });
+
+    const response = await fetch(
+      `${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}/albums?${params}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch artist albums: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as {
+      items: Array<{
+        id: string;
+        name: string;
+        release_date: string;
+        images: Array<{ url: string }>;
+        album_type: string;
+      }>;
+    };
+
+    const albums = data.items;
+
+    // Cache the result
+    await this.cache.put(cacheKey, JSON.stringify(albums), {
+      expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
+    });
+
+    return albums;
+  }
 }

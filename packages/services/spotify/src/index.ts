@@ -70,4 +70,8 @@ export class SpotifyService {
   async getArtist(id: string) {
     return this.artists.getArtist(id);
   }
+
+  async getArtistAlbums(artistId: string, limit?: number) {
+    return this.artists.getArtistAlbums(artistId, limit);
+  }
 }

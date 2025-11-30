@@ -19,6 +19,13 @@ import {
   userRateLimitMiddleware,
   apiLoggingMiddleware,
 } from './middleware/auth';
+import { Layout } from './components/layout';
+import { TrackCard } from './components/ui';
+import { handleAlbumSearch } from './pages/album/search';
+import { handleAlbumDetail } from './pages/album/detail';
+import { handleArtistSearch } from './pages/artist/search';
+import { handleArtistDetail } from './pages/artist/detail';
+import { handleGenreDetail } from './pages/genre/detail';
 
 // Define environment bindings
 type Bindings = {
@@ -131,71 +138,108 @@ app.get('/health', (c) => {
   });
 });
 
-// Home page
-app.get('/', (c) => {
+// Home page - shows recent tracks and top albums
+app.get('/', async (c) => {
+  const lastfm = c.get('lastfm');
+  const ai = c.get('ai');
+
+  // Fetch data in parallel
+  const [recentTracks, topAlbums, randomFact] = await Promise.all([
+    lastfm.recentTracks.getRecentTracks(6).catch(() => []),
+    lastfm.getTopAlbums('1month', 6).catch(() => []),
+    ai.getRandomFact().catch(() => ({ text: '' })),
+  ]);
+
+  // Get time-based greeting
+  const hour = new Date().getUTCHours();
+  const greeting =
+    hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+
   return c.html(
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{SITE_CONFIG.name}</title>
-        <meta name="description" content={SITE_CONFIG.description} />
-        <style>{`
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #fafafa;
-            color: #1a1a1a;
-            line-height: 1.6;
-            padding: 2rem;
-            max-width: 800px;
-            margin: 0 auto;
-          }
-          h1 { color: #ff6c00; margin-bottom: 1rem; }
-          p { margin-bottom: 1rem; }
-          .status {
-            background: #e8f5e9;
-            padding: 1rem;
-            border-radius: 8px;
-            border-left: 4px solid #4caf50;
-          }
-          code {
-            background: #f5f5f5;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.9em;
-          }
-        `}</style>
-      </head>
-      <body>
-        <h1>{SITE_CONFIG.name}</h1>
+    <Layout title="Home" description="Discover music, explore albums, and track your listening habits">
+      {/* Hero Section */}
+      <div class="text-center mb-4">
+        <h1>{greeting}</h1>
         <p>{SITE_CONFIG.description}</p>
+      </div>
 
-        <div class="status">
-          <p><strong>Status:</strong> Phase 3 Complete</p>
-          <p>AI service implemented. Core services and API endpoints ready for testing.</p>
+      {/* Random Fact Card */}
+      {randomFact.text && (
+        <div class="card mb-4">
+          <p class="text-muted mb-1">Did you know?</p>
+          <p>{randomFact.text}</p>
         </div>
+      )}
 
-        <h2 style="margin-top: 2rem; margin-bottom: 1rem;">Services</h2>
-        <ul style="margin-left: 1.5rem;">
-          <li><code>@listentomore/db</code> - D1 database with migrations</li>
-          <li><code>@listentomore/spotify</code> - Spotify API integration</li>
-          <li><code>@listentomore/lastfm</code> - Last.fm API integration</li>
-          <li><code>@listentomore/songlink</code> - Streaming link aggregation</li>
-          <li><code>@listentomore/ai</code> - AI-powered content generation</li>
-        </ul>
+      {/* Search Section */}
+      <div class="section">
+        <h2 class="section-title">Search</h2>
+        <div class="search-form">
+          <form action="/album" method="get" class="search-form">
+            <input
+              type="search"
+              name="q"
+              placeholder="Search for albums..."
+              class="input"
+              autofocus
+            />
+            <button type="submit" class="button">
+              Search Albums
+            </button>
+          </form>
+        </div>
+      </div>
 
-        <h2 style="margin-top: 2rem; margin-bottom: 1rem;">API Endpoints</h2>
-        <ul style="margin-left: 1.5rem;">
-          <li><a href="/api">/api</a> - API overview</li>
-          <li><a href="/api/lastfm/recent">/api/lastfm/recent</a> - Recent tracks</li>
-          <li><a href="/api/lastfm/top-albums">/api/lastfm/top-albums</a> - Top albums</li>
-          <li><a href="/api/lastfm/top-artists">/api/lastfm/top-artists</a> - Top artists</li>
-        </ul>
-      </body>
-    </html>
+      {/* Recently Played */}
+      {recentTracks.length > 0 && (
+        <div class="section">
+          <h2 class="section-title">Recently Played</h2>
+          <div class="track-grid">
+            {recentTracks.map((track: { artist: string; name: string; album: string; image?: string }) => (
+              <TrackCard
+                artist={track.artist}
+                name={track.name}
+                album={track.album}
+                imageUrl={track.image}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Top Albums This Month */}
+      {topAlbums.length > 0 && (
+        <div class="section">
+          <h2 class="section-title">Top Albums This Month</h2>
+          <div class="track-grid">
+            {topAlbums.map((album: { artist: string; name: string; playcount: number; image?: string }) => (
+              <TrackCard
+                artist={album.artist}
+                name={album.name}
+                playcount={album.playcount}
+                imageUrl={album.image}
+              />
+            ))}
+          </div>
+          <p class="text-center mt-2">
+            <a href="/stats">View all stats</a>
+          </p>
+        </div>
+      )}
+    </Layout>
   );
 });
+
+// Album routes
+app.get('/album', handleAlbumSearch);
+app.get('/album/:id', handleAlbumDetail);
+
+// Artist routes
+app.get('/artist', handleArtistSearch);
+app.get('/artist/:id', handleArtistDetail);
+
+// Genre routes
+app.get('/genre/:slug', handleGenreDetail);
 
 // API routes overview
 app.get('/api', (c) => {
@@ -541,32 +585,17 @@ app.post('/api/ai/playlist-cover/image', async (c) => {
 // 404 handler
 app.notFound((c) => {
   return c.html(
-    <html lang="en">
-      <head>
-        <title>404 - {SITE_CONFIG.name}</title>
-        <style>{`
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            background: #fafafa;
-          }
-          .container { text-align: center; }
-          h1 { color: #ff6c00; font-size: 4rem; margin-bottom: 0.5rem; }
-          a { color: #ff6c00; }
-        `}</style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>404</h1>
-          <p>Page not found</p>
-          <p><a href="/">Go home</a></p>
-        </div>
-      </body>
-    </html>,
+    <Layout title="Page Not Found">
+      <div class="text-center" style={{ paddingTop: '4rem' }}>
+        <h1 style={{ fontSize: '4rem', marginBottom: '0.5rem' }}>404</h1>
+        <p>The page you're looking for doesn't exist.</p>
+        <p class="mt-2">
+          <a href="/" class="button">
+            Go Home
+          </a>
+        </p>
+      </div>
+    </Layout>,
     404
   );
 });
