@@ -149,8 +149,9 @@ export function ArtistDetailPage({
                 document.getElementById('popular-albums').innerHTML = '<p style="margin-bottom:0.2em"><strong>Popular Albums:</strong></p><ul><li>No albums found</li></ul>';
               }
 
-              // Update similar artists (from Last.fm)
+              // Update similar artists (from Last.fm, enriched with Spotify IDs)
               if (lastfm.similar && lastfm.similar.length > 0) {
+                // Show loading state first
                 var html = '<p><strong>Similar Artists:</strong></p>';
                 html += '<ul>';
                 lastfm.similar.forEach(function(name) {
@@ -158,6 +159,28 @@ export function ArtistDetailPage({
                 });
                 html += '</ul>';
                 document.getElementById('similar-artists').innerHTML = html;
+
+                // Enrich with Spotify IDs for direct links
+                Promise.all(lastfm.similar.map(function(name) {
+                  return fetch('/api/internal/search?q=' + encodeURIComponent(name) + '&type=artist')
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                      if (data.data && data.data[0]) {
+                        return { name: name, id: data.data[0].id };
+                      }
+                      return { name: name, id: null };
+                    })
+                    .catch(function() { return { name: name, id: null }; });
+                })).then(function(enrichedArtists) {
+                  var html = '<p><strong>Similar Artists:</strong></p>';
+                  html += '<ul>';
+                  enrichedArtists.forEach(function(artist) {
+                    var href = artist.id ? '/artist/' + artist.id : '/artist?q=' + encodeURIComponent(artist.name);
+                    html += '<li><a href="' + href + '">' + artist.name + '</a></li>';
+                  });
+                  html += '</ul>';
+                  document.getElementById('similar-artists').innerHTML = html;
+                });
               }
             })
             .catch(function(e) {
@@ -175,12 +198,69 @@ export function ArtistDetailPage({
               var text = summary.text || summary.summary || '';
               var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
               html += '<div>' + formatMarkdown(text) + '</div>';
+
+              // Add citations/sources if available
+              if (summary.citations && summary.citations.length > 0) {
+                html += '<div class="citations" style="margin-top:1rem"><h4>Sources</h4><ul>';
+                summary.citations.forEach(function(url, i) {
+                  var hostname = url;
+                  try { hostname = new URL(url).hostname.replace('www.', ''); } catch(e) {}
+                  html += '<li><span class="citation-number">[' + (i+1) + ']</span> <a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
+                });
+                html += '</ul></div>';
+              }
+
               document.getElementById('ai-summary').innerHTML = html;
+
+              // Enrich artist links in the summary with Spotify IDs
+              enrichArtistLinks();
             })
             .catch(function(e) {
               console.error('AI summary error:', e);
               document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
             });
+
+          // Find artist/album search links and replace with direct Spotify links
+          function enrichArtistLinks() {
+            var container = document.getElementById('ai-summary');
+            if (!container) return;
+
+            // Enrich artist links
+            var artistLinks = container.querySelectorAll('a[href^="/artist?q="]');
+            artistLinks.forEach(function(link) {
+              var href = link.getAttribute('href');
+              var match = href.match(/\\/artist\\?q=([^&]+)/);
+              if (!match) return;
+
+              var query = match[1];
+              fetch('/api/internal/search?q=' + query + '&type=artist')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                  if (data.data && data.data[0] && data.data[0].id) {
+                    link.setAttribute('href', '/artist/' + data.data[0].id);
+                  }
+                })
+                .catch(function() { /* keep original search link */ });
+            });
+
+            // Enrich album links
+            var albumLinks = container.querySelectorAll('a[href^="/album?q="]');
+            albumLinks.forEach(function(link) {
+              var href = link.getAttribute('href');
+              var match = href.match(/\\/album\\?q=([^&]+)/);
+              if (!match) return;
+
+              var query = match[1];
+              fetch('/api/internal/search?q=' + query + '&type=album')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                  if (data.data && data.data[0] && data.data[0].id) {
+                    link.setAttribute('href', '/album/' + data.data[0].id);
+                  }
+                })
+                .catch(function() { /* keep original search link */ });
+            });
+          }
 
           function formatMarkdown(text) {
             var result = text
