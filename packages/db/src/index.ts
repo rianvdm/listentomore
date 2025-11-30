@@ -28,6 +28,13 @@ export class Database {
       .first<User>();
   }
 
+  async getUserByUsername(username: string): Promise<User | null> {
+    return this.db
+      .prepare('SELECT * FROM users WHERE username = ?')
+      .bind(username)
+      .first<User>();
+  }
+
   async updateUser(
     id: string,
     data: Partial<Pick<User, 'email' | 'lastfm_username' | 'discogs_username' | 'spotify_connected'>>

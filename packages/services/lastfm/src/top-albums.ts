@@ -1,5 +1,7 @@
 // Last.fm top albums functionality
 
+import { CACHE_CONFIG } from '@listentomore/config';
+
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 const BACKUP_IMAGE_URL = 'https://file.elezea.com/noun-no-image.png';
 
@@ -32,9 +34,21 @@ export interface LastfmConfig {
 }
 
 export class TopAlbums {
-  constructor(private config: LastfmConfig) {}
+  constructor(
+    private config: LastfmConfig,
+    private cache?: KVNamespace
+  ) {}
 
   async getTopAlbums(period: TimePeriod = '1month', limit: number = 6): Promise<TopAlbum[]> {
+    // Check cache first
+    const cacheKey = `lastfm:topalbums:${this.config.username}:${period}:${limit}`;
+    if (this.cache) {
+      const cached = await this.cache.get(cacheKey, 'json');
+      if (cached) {
+        return cached as TopAlbum[];
+      }
+    }
+
     const url = `${LASTFM_API_BASE}/?method=user.gettopalbums&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&period=${period}&limit=${limit}&format=json`;
 
     const response = await fetch(url);
@@ -46,7 +60,7 @@ export class TopAlbums {
     const data = (await response.json()) as LastfmTopAlbumsResponse;
     const albums = data.topalbums?.album || [];
 
-    return albums.map((album) => ({
+    const results = albums.map((album) => ({
       artist: album.artist.name,
       artistUrl: album.artist.url,
       name: album.name,
@@ -54,5 +68,14 @@ export class TopAlbums {
       albumUrl: album.url,
       image: album.image?.find((img) => img.size === 'extralarge')?.['#text'] || BACKUP_IMAGE_URL,
     }));
+
+    // Cache results
+    if (this.cache) {
+      await this.cache.put(cacheKey, JSON.stringify(results), {
+        expirationTtl: CACHE_CONFIG.lastfm.topAlbums.ttlHours * 60 * 60,
+      });
+    }
+
+    return results;
   }
 }

@@ -2,6 +2,7 @@
 
 export interface User {
   id: string;
+  username: string | null;
   email: string | null;
   lastfm_username: string | null;
   discogs_username: string | null;

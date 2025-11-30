@@ -24,6 +24,7 @@ export type { LovedTrack } from './loved-tracks';
 export interface LastfmConfig {
   apiKey: string;
   username: string;
+  cache?: KVNamespace;
 }
 
 // Convenience class that combines all Last.fm functionality
@@ -36,8 +37,8 @@ export class LastfmService {
 
   constructor(config: LastfmConfig) {
     this.recentTracks = new RecentTracks(config);
-    this.topAlbums = new TopAlbums(config);
-    this.topArtists = new TopArtists(config);
+    this.topAlbums = new TopAlbums(config, config.cache);
+    this.topArtists = new TopArtists(config, config.cache);
     this.artistDetails = new ArtistDetails(config);
     this.lovedTracks = new LovedTracks(config);
   }

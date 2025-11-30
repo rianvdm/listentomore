@@ -1,7 +1,7 @@
 # ListenToMore v2 - Implementation Plan
 
 > **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
-> - **Current phase:** Phase 5 in progress (Web App - Core Pages). Skipped Phase 4 (Discogs) for now.
+> - **Current phase:** Phase 6 in progress (Stats & Collection). Phases 1-5 complete. Skipped Phase 4 (Discogs) for now.
 > - **Architecture:** Server-side rendering with progressive loading. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
 > - **Progressive loading:** Album and artist detail pages load instantly with basic Spotify data (~0.3s), then stream in AI summary and additional data via client-side JS calling `/api/internal/*` endpoints.
 > - **Don't:** Create new workers, use client-side data fetching for pages (except progressive loading), or expose API keys to browser.
@@ -102,6 +102,7 @@ URLs use Spotify IDs directly:
 - Album: `/album/4LH4d3cOWNNsVw41Gqt2kv`
 - Artist: `/artist/0k17h0D3J5VfsdmQ1iZtE9`
 - Genre: `/genre/indie-rock` (slug-based)
+- User stats: `/u/bordesak` (Last.fm username)
 
 ```typescript
 // packages/shared/src/utils/slug.ts
@@ -109,6 +110,8 @@ export function albumUrl(spotifyId: string): string { return `/album/${spotifyId
 export function artistUrl(spotifyId: string): string { return `/artist/${spotifyId}`; }
 export function genreUrl(slug: string): string { return `/genre/${slug}`; }
 ```
+
+**Multi-user support:** D1 schema supports multiple users via `user_id` foreign keys. Users table has `username` (URL slug, matches Last.fm username) and `lastfm_username` fields. Stats page at `/u/:username` looks up user and creates LastfmService dynamically with their username.
 
 ---
 
@@ -124,17 +127,17 @@ export function genreUrl(slug: string): string { return `/genre/${slug}`; }
 - [ ] Master data enrichment
 - [ ] CRON triggers
 
-### Phase 5: Web App - Core Pages (IN PROGRESS)
+### Phase 5: Web App - Core Pages (COMPLETED)
 - [x] Hono JSX rendering, layout, CSS
 - [x] Home page (recent searches, random fact CRON)
 - [x] Album search + detail (progressive loading)
 - [x] Artist search + detail (basic)
 - [x] Genre page
 - [x] Internal API endpoints for progressive loading
-- [ ] LoadingSpinner, FilterDropdown components
+- [x] LoadingSpinner, FilterDropdown components
 
-### Phase 6: Stats & Collection
-- [ ] My Stats page (recent tracks, top artists/albums)
+### Phase 6: Stats & Collection (IN PROGRESS)
+- [x] My Stats page at `/u/:username` (recent tracks, top artists/albums)
 - [ ] Collection pages (stats, filters)
 - [ ] Library page (Airtable integration)
 - [ ] Recommendations page

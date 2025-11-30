@@ -26,6 +26,7 @@ import { handleAlbumDetail } from './pages/album/detail';
 import { handleArtistSearch } from './pages/artist/search';
 import { handleArtistDetail } from './pages/artist/detail';
 import { handleGenreDetail } from './pages/genre/detail';
+import { handleUserStats } from './pages/user/stats';
 
 // Define environment bindings
 type Bindings = {
@@ -239,6 +240,9 @@ app.get('/artist/:id', handleArtistDetail);
 // Genre routes
 app.get('/genre/:slug', handleGenreDetail);
 
+// User routes
+app.get('/u/:username', handleUserStats);
+
 // Internal API routes for progressive loading (no auth required)
 // These are called by client-side JS on page load
 
@@ -317,6 +321,23 @@ app.get('/api/internal/artist-lastfm', async (c) => {
   } catch (error) {
     console.error('Internal lastfm artist error:', error);
     return c.json({ error: 'Failed to fetch Last.fm data' }, 500);
+  }
+});
+
+app.get('/api/internal/artist-sentence', async (c) => {
+  const name = c.req.query('name');
+
+  if (!name) {
+    return c.json({ error: 'Missing name parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getArtistSentence(name);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal artist sentence error:', error);
+    return c.json({ error: 'Failed to generate artist sentence' }, 500);
   }
 });
 
