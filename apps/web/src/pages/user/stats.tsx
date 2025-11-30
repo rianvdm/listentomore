@@ -70,94 +70,110 @@ export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) 
         </section>
       </main>
 
-      {/* Progressive loading for stats data */}
+      {/* Progressive loading for stats data - 3 parallel fetches */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
 
         (function() {
           var username = ${JSON.stringify(username)};
 
-          // Fetch user stats from internal API
-          fetch('/api/internal/user-stats?username=' + encodeURIComponent(username))
+          // Fetch recent track (fastest - renders first)
+          fetch('/api/internal/user-recent-track?username=' + encodeURIComponent(username))
             .then(function(r) { return r.json(); })
             .then(function(result) {
-              if (result.error) {
-                throw new Error(result.error);
-              }
-
-              var data = result.data;
-
-              // Render recent listening
               var recentEl = document.getElementById('recent-listening');
-              if (recentEl) {
-                if (data.recentTrack) {
-                  var track = data.recentTrack;
-                  recentEl.innerHTML = '<p>Most recently listened to ' +
-                    '<a href="/album?q=' + encodeURIComponent(track.artist + ' ' + track.album) + '">' +
-                    '<strong>' + escapeHtml(track.album) + '</strong></a> by ' +
-                    '<a href="/artist?q=' + encodeURIComponent(track.artist) + '">' +
-                    '<strong>' + escapeHtml(track.artist) + '</strong></a>.' +
-                    '<span id="artist-sentence"></span></p>';
+              if (!recentEl) return;
 
-                  // Enrich links and fetch artist sentence
-                  enrichLinks('recent-listening');
-                  fetchArtistSentence(track.artist);
-                } else {
-                  recentEl.innerHTML = '<p class="text-muted">No recent tracks found.</p>';
-                }
+              if (result.error) {
+                recentEl.innerHTML = '<p class="text-muted">Failed to load recent track.</p>';
+                return;
               }
 
-              // Render top artists
-              var artistsEl = document.getElementById('top-artists');
-              if (artistsEl) {
-                if (data.topArtists && data.topArtists.length > 0) {
-                  artistsEl.innerHTML = renderTrackGrid(data.topArtists.map(function(artist) {
-                    return {
-                      title: artist.name,
-                      subtitle: artist.playcount + ' plays',
-                      image: artist.image,
-                      href: '/artist?q=' + encodeURIComponent(artist.name)
-                    };
-                  }));
-                  enrichLinks('top-artists');
-                } else {
-                  artistsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
-                }
-              }
-
-              // Render top albums
-              var albumsEl = document.getElementById('top-albums');
-              if (albumsEl) {
-                if (data.topAlbums && data.topAlbums.length > 0) {
-                  albumsEl.innerHTML = renderTrackGrid(data.topAlbums.map(function(album) {
-                    return {
-                      title: album.name,
-                      subtitle: album.artist,
-                      extra: album.playcount + ' plays',
-                      image: album.image,
-                      href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name)
-                    };
-                  }));
-                  enrichLinks('top-albums');
-                } else {
-                  albumsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
-                }
+              var track = result.data;
+              if (track) {
+                recentEl.innerHTML = '<p>Most recently listened to ' +
+                  '<a href="/album?q=' + encodeURIComponent(track.artist + ' ' + track.album) + '">' +
+                  '<strong>' + escapeHtml(track.album) + '</strong></a> by ' +
+                  '<a href="/artist?q=' + encodeURIComponent(track.artist) + '">' +
+                  '<strong>' + escapeHtml(track.artist) + '</strong></a>.' +
+                  '<span id="artist-sentence"></span></p>';
+                enrichLinks('recent-listening');
+                fetchArtistSentence(track.artist);
+              } else {
+                recentEl.innerHTML = '<p class="text-muted">No recent tracks found.</p>';
               }
             })
             .catch(function(err) {
-              console.error('Failed to load user stats:', err);
-              var recentEl = document.getElementById('recent-listening');
-              if (recentEl) {
-                recentEl.innerHTML = '<p class="text-muted">Failed to load stats. Please try refreshing.</p>';
-              }
+              console.error('Failed to load recent track:', err);
+              var el = document.getElementById('recent-listening');
+              if (el) el.innerHTML = '<p class="text-muted">Failed to load recent track.</p>';
+            });
+
+          // Fetch top artists (parallel)
+          fetch('/api/internal/user-top-artists?username=' + encodeURIComponent(username))
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
               var artistsEl = document.getElementById('top-artists');
-              if (artistsEl) {
+              if (!artistsEl) return;
+
+              if (result.error) {
                 artistsEl.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
+                return;
               }
+
+              var topArtists = result.data;
+              if (topArtists && topArtists.length > 0) {
+                artistsEl.innerHTML = renderTrackGrid(topArtists.map(function(artist) {
+                  return {
+                    title: artist.name,
+                    subtitle: artist.playcount + ' plays',
+                    image: artist.image,
+                    href: '/artist?q=' + encodeURIComponent(artist.name)
+                  };
+                }));
+                enrichLinks('top-artists');
+              } else {
+                artistsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
+              }
+            })
+            .catch(function(err) {
+              console.error('Failed to load top artists:', err);
+              var el = document.getElementById('top-artists');
+              if (el) el.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
+            });
+
+          // Fetch top albums (parallel)
+          fetch('/api/internal/user-top-albums?username=' + encodeURIComponent(username))
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
               var albumsEl = document.getElementById('top-albums');
-              if (albumsEl) {
+              if (!albumsEl) return;
+
+              if (result.error) {
                 albumsEl.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
+                return;
               }
+
+              var topAlbums = result.data;
+              if (topAlbums && topAlbums.length > 0) {
+                albumsEl.innerHTML = renderTrackGrid(topAlbums.map(function(album) {
+                  return {
+                    title: album.name,
+                    subtitle: album.artist,
+                    extra: album.playcount + ' plays',
+                    image: album.image,
+                    href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name)
+                  };
+                }));
+                enrichLinks('top-albums');
+              } else {
+                albumsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
+              }
+            })
+            .catch(function(err) {
+              console.error('Failed to load top albums:', err);
+              var el = document.getElementById('top-albums');
+              if (el) el.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
             });
 
           function escapeHtml(str) {

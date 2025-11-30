@@ -594,46 +594,79 @@ app.get('/api/internal/user-listens', async (c) => {
   }
 });
 
-app.get('/api/internal/user-stats', async (c) => {
-  const username = c.req.query('username');
+// Helper to get LastfmService for a user
+async function getUserLastfm(c: Context, username: string) {
+  const db = c.get('db');
+  const user = await db.getUserByUsername(username);
 
+  if (!user || !user.lastfm_username) {
+    return null;
+  }
+
+  return new LastfmService({
+    apiKey: c.env.LASTFM_API_KEY,
+    username: user.lastfm_username,
+    cache: c.env.CACHE,
+  });
+}
+
+app.get('/api/internal/user-recent-track', async (c) => {
+  const username = c.req.query('username');
   if (!username) {
     return c.json({ error: 'Missing username parameter' }, 400);
   }
 
   try {
-    // Look up user by username
-    const db = c.get('db');
-    const user = await db.getUserByUsername(username);
-
-    if (!user || !user.lastfm_username) {
+    const userLastfm = await getUserLastfm(c, username);
+    if (!userLastfm) {
       return c.json({ error: 'User not found' }, 404);
     }
 
-    // Create a LastfmService for this user's Last.fm account (with caching)
-    const userLastfm = new LastfmService({
-      apiKey: c.env.LASTFM_API_KEY,
-      username: user.lastfm_username,
-      cache: c.env.CACHE,
-    });
-
-    // Fetch all data in parallel
-    const [recentTracks, topArtists, topAlbums] = await Promise.all([
-      userLastfm.recentTracks.getRecentTracks(1).catch(() => []),
-      userLastfm.getTopArtists('7day', 6).catch(() => []),
-      userLastfm.getTopAlbums('1month', 6).catch(() => []),
-    ]);
-
-    return c.json({
-      data: {
-        recentTrack: recentTracks[0] || null,
-        topArtists,
-        topAlbums,
-      },
-    });
+    const recentTracks = await userLastfm.recentTracks.getRecentTracks(1).catch(() => []);
+    return c.json({ data: recentTracks[0] || null });
   } catch (error) {
-    console.error('Internal user-stats error:', error);
-    return c.json({ error: 'Failed to fetch user stats' }, 500);
+    console.error('Internal user-recent-track error:', error);
+    return c.json({ error: 'Failed to fetch recent track' }, 500);
+  }
+});
+
+app.get('/api/internal/user-top-artists', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing username parameter' }, 400);
+  }
+
+  try {
+    const userLastfm = await getUserLastfm(c, username);
+    if (!userLastfm) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const topArtists = await userLastfm.getTopArtists('7day', 6).catch(() => []);
+    return c.json({ data: topArtists });
+  } catch (error) {
+    console.error('Internal user-top-artists error:', error);
+    return c.json({ error: 'Failed to fetch top artists' }, 500);
+  }
+});
+
+app.get('/api/internal/user-top-albums', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing username parameter' }, 400);
+  }
+
+  try {
+    const userLastfm = await getUserLastfm(c, username);
+    if (!userLastfm) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const topAlbums = await userLastfm.getTopAlbums('1month', 6).catch(() => []);
+    return c.json({ data: topAlbums });
+  } catch (error) {
+    console.error('Internal user-top-albums error:', error);
+    return c.json({ error: 'Failed to fetch top albums' }, 500);
   }
 });
 
