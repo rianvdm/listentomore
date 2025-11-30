@@ -1,6 +1,10 @@
 # ListenToMore v2 - Implementation Plan
 
-This document provides everything needed to start each coding session for the rewrite.
+> **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
+> - **Current phase:** Phase 2 complete (database + core services). Next: Phase 3 (AI service).
+> - **Architecture:** Server-side rendering. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
+> - **Don't:** Create new workers, use client-side data fetching for pages, or expose API keys to browser.
+> - **Do:** Add page routes to `apps/web/src/index.tsx`, use `c.get('serviceName')` for data, return HTML with `c.html()`.
 
 ---
 
