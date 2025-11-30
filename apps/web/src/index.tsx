@@ -303,8 +303,30 @@ app.get('/api/internal/artist-lastfm', async (c) => {
 
   try {
     const lastfm = c.get('lastfm');
+    const spotify = c.get('spotify');
     const result = await lastfm.getArtistDetail(name);
-    return c.json({ data: result });
+
+    // Resolve similar artist names to Spotify IDs in parallel
+    const similarWithIds = await Promise.all(
+      result.similar.map(async (artistName: string) => {
+        try {
+          const searchResults = await spotify.search.search(artistName, 'artist', 1);
+          if (searchResults.length > 0) {
+            return { name: artistName, spotifyId: searchResults[0].id };
+          }
+        } catch {
+          // Ignore search failures
+        }
+        return { name: artistName, spotifyId: null };
+      })
+    );
+
+    return c.json({
+      data: {
+        ...result,
+        similarWithIds,
+      },
+    });
   } catch (error) {
     console.error('Internal lastfm artist error:', error);
     return c.json({ error: 'Failed to fetch Last.fm data' }, 500);

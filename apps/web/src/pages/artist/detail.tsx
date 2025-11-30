@@ -126,12 +126,17 @@ export function ArtistDetailPage({
               var formatted = new Intl.NumberFormat().format(playcount);
               document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> ' + formatted + ' plays';
 
-              // Update similar artists
-              if (lastfm.similar && lastfm.similar.length > 0) {
+              // Update similar artists (use Spotify IDs if available)
+              var similarData = lastfm.similarWithIds || lastfm.similar;
+              if (similarData && similarData.length > 0) {
                 var html = '<p style="margin-bottom:0.2em"><strong>Similar Artists:</strong></p>';
                 html += '<ul style="list-style-type:none;padding-left:0;margin-top:0">';
-                lastfm.similar.forEach(function(name) {
-                  html += '<li><a href="/artist?q=' + encodeURIComponent(name) + '">' + name + '</a></li>';
+                similarData.forEach(function(item) {
+                  var artistName = item.name || item;
+                  var href = item.spotifyId
+                    ? '/artist/spotify:' + item.spotifyId
+                    : '/artist?q=' + encodeURIComponent(artistName);
+                  html += '<li><a href="' + href + '">' + artistName + '</a></li>';
                 });
                 html += '</ul>';
                 document.getElementById('similar-artists').innerHTML = html;
