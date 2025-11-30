@@ -23,6 +23,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@listentomore/ai':
+        specifier: workspace:*
+        version: link:../../packages/services/ai
       '@listentomore/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -69,6 +72,19 @@ importers:
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/services/ai:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
     devDependencies:
       typescript:
         specifier: ^5.7.2

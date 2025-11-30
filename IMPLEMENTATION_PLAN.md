@@ -1,7 +1,7 @@
 # ListenToMore v2 - Implementation Plan
 
 > **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
-> - **Current phase:** Phase 2 complete (database + core services). Next: Phase 3 (AI service).
+> - **Current phase:** Phase 3 complete (AI service). Next: Phase 4 (Discogs service).
 > - **Architecture:** Server-side rendering. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
 > - **Don't:** Create new workers, use client-side data fetching for pages, or expose API keys to browser.
 > - **Do:** Add page routes to `apps/web/src/index.tsx`, use `c.get('serviceName')` for data, return HTML with `c.html()`.
@@ -1009,28 +1009,70 @@ app.post('/api/ai/analyze', requireAuth({ requiredScopes: ['ai'] }), async (c) =
 
 ---
 
-### Phase 3: AI Service (Sessions 8-10)
+### Phase 3: AI Service (Sessions 8-10) ✅
 
 **Goal:** Centralized AI with all prompts
 
 **Tasks:**
 
-- [ ] Implement `packages/services/ai`:
-  - [ ] OpenAI client with rate limiting
-  - [ ] Perplexity client with rate limiting
-  - [ ] Cache layer (KV-backed)
-- [ ] Port all prompts to `packages/services/ai/src/prompts/`:
-  - [ ] `artist-summary.ts` (from `api-openai-artistdetail`)
-  - [ ] `album-detail.ts` (from `api-perplexity-albumdetail`)
-  - [ ] `genre-summary.ts` (from `api-perplexity-genresummary`)
-  - [ ] `artist-sentence.ts` (from `api-perplexity-artistsentence`)
-  - [ ] `random-fact.ts` (from `api-openai-randomfact`)
-  - [ ] `playlist-cover.ts` (from `api-openai-playlist-prompt`)
-  - [ ] `listen-ai.ts` (Rick Rubin personality from `listen-ai`)
-- [ ] Image generation support (DALL-E)
+- [x] Implement `packages/services/ai`:
+  - [x] OpenAI client with rate limiting
+  - [x] Perplexity client with rate limiting
+  - [x] Cache layer (KV-backed)
+- [x] Port all prompts to `packages/services/ai/src/prompts/`:
+  - [x] `artist-summary.ts` (from `api-openai-artistdetail`)
+  - [x] `album-detail.ts` (from `api-perplexity-albumdetail`)
+  - [x] `genre-summary.ts` (from `api-perplexity-genresummary`)
+  - [x] `artist-sentence.ts` (from `api-perplexity-artistsentence`)
+  - [x] `random-fact.ts` (from `api-openai-randomfact`)
+  - [x] `playlist-cover.ts` (from `api-openai-playlist-prompt`)
+  - [x] `listen-ai.ts` (Rick Rubin personality from `listen-ai`)
+- [x] Image generation support (DALL-E)
 - [ ] Write tests
 
-**Verification:** Can generate artist summary, album detail from `apps/web`
+**Verification:** Can generate artist summary, album detail from `apps/web` ✅
+
+**API Endpoints Added:**
+- `/api/ai/artist-summary?name=:artistName` - Full artist summary (OpenAI)
+- `/api/ai/album-detail?artist=:artistName&album=:albumName` - Album details with citations (Perplexity)
+- `/api/ai/genre-summary?genre=:genreName` - Genre summary with citations (Perplexity)
+- `/api/ai/artist-sentence?name=:artistName` - Short artist description (Perplexity)
+- `/api/ai/random-fact` - Random music fact (OpenAI)
+- `POST /api/ai/ask` - Rick Rubin AI chatbot (OpenAI)
+- `POST /api/ai/playlist-cover/prompt` - Generate DALL-E prompt (OpenAI)
+- `POST /api/ai/playlist-cover/image` - Generate cover image (DALL-E)
+
+**Secrets needed for production:**
+- `OPENAI_API_KEY` - OpenAI API key (configured via `wrangler secret put`)
+- `PERPLEXITY_API_KEY` - Perplexity API key (configured via `wrangler secret put`)
+
+**Package structure:**
+```
+packages/services/ai/
+├── package.json
+├── tsconfig.json
+└── src/
+    ├── index.ts          # AIService class + exports
+    ├── openai.ts         # OpenAI client with rate limiting
+    ├── perplexity.ts     # Perplexity client with rate limiting
+    ├── cache.ts          # KV-backed cache layer
+    └── prompts/
+        ├── index.ts
+        ├── artist-summary.ts    # [[artist]] and {{album}} link formatting
+        ├── album-detail.ts      # With Perplexity citations
+        ├── genre-summary.ts     # With Perplexity citations
+        ├── artist-sentence.ts   # Short descriptions
+        ├── random-fact.ts       # Random music facts
+        ├── playlist-cover.ts    # DALL-E prompt + image generation
+        └── listen-ai.ts         # Rick Rubin AI personality
+```
+
+**Important notes:**
+- `gpt-5-mini` and `gpt-5-nano` only support `temperature=1` - config updated accordingly
+- AI responses are cached in KV with configurable TTL per task type
+- Artist summaries auto-convert `[[Artist Name]]` → markdown links to `/artist/artist-name`
+- Artist summaries auto-convert `{{Album Name}}` → markdown links to `/album/artist-name_album-name`
+- Perplexity responses include `citations` array with source URLs
 
 ---
 

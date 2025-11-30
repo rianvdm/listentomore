@@ -17,7 +17,8 @@
     "@listentomore/db": "workspace:*",
     "@listentomore/spotify": "workspace:*",
     "@listentomore/lastfm": "workspace:*",
-    "@listentomore/songlink": "workspace:*"
+    "@listentomore/songlink": "workspace:*",
+    "@listentomore/ai": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",

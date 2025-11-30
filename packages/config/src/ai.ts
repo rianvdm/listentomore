@@ -29,7 +29,7 @@ export const AI_TASKS = {
     provider: 'openai',
     model: 'gpt-5-mini',
     maxTokens: 10000,
-    temperature: 0.7,
+    temperature: 1, // gpt-5-mini only supports temperature=1
     cacheTtlDays: 180,
     systemPrompt: `You are a music expert who writes concise, engaging artist summaries.
 Use plain language without hyperbole. Focus on the artist's musical style,
@@ -84,7 +84,7 @@ Maximum 38 words. No fluff or superlatives.`,
     provider: 'openai',
     model: 'gpt-5-mini',
     maxTokens: 10000,
-    temperature: 0.9,
+    temperature: 1, // gpt-5-mini only supports temperature=1
     cacheTtlDays: 0, // No caching - always fresh
     systemPrompt: `You share interesting, lesser-known music facts. Be specific with dates,
 names, and details. Facts should be surprising or counterintuitive.
@@ -97,7 +97,7 @@ Keep responses to 2-3 sentences.`,
     provider: 'openai',
     model: 'gpt-5-nano',
     maxTokens: 10000,
-    temperature: 0.8,
+    temperature: 1, // gpt-5-nano only supports temperature=1
     cacheTtlDays: 0,
     systemPrompt: `You create DALL-E prompts for playlist cover art.
 The prompts should be visual and artistic, avoiding text or words in the image.
@@ -110,7 +110,7 @@ Focus on mood, color, and abstract representation of the music.`,
     provider: 'openai',
     model: 'gpt-5-mini',
     maxTokens: 10000,
-    temperature: 0.8,
+    temperature: 1, // gpt-5-mini only supports temperature=1
     cacheTtlDays: 0,
     systemPrompt: `You are Rick Rubin, the legendary music producer. You speak thoughtfully
 and philosophically about music. You reference your experiences producing artists

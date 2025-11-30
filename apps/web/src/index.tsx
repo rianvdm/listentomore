@@ -7,6 +7,7 @@ import { Database, ParsedApiKey } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { SonglinkService } from '@listentomore/songlink';
+import { AIService } from '@listentomore/ai';
 import {
   corsMiddleware,
   originValidationMiddleware,
@@ -43,6 +44,7 @@ type Variables = {
   spotify: SpotifyService;
   lastfm: LastfmService;
   songlink: SonglinkService;
+  ai: AIService;
   // Auth context
   apiKey: ParsedApiKey | null;
   authTier: 'public' | 'standard' | 'premium';
@@ -89,6 +91,15 @@ app.use('*', async (c, next) => {
   );
 
   c.set('songlink', new SonglinkService(c.env.CACHE));
+
+  c.set(
+    'ai',
+    new AIService({
+      openaiApiKey: c.env.OPENAI_API_KEY,
+      perplexityApiKey: c.env.PERPLEXITY_API_KEY,
+      cache: c.env.CACHE,
+    })
+  );
 
   await next();
 });
@@ -161,8 +172,8 @@ app.get('/', (c) => {
         <p>{SITE_CONFIG.description}</p>
 
         <div class="status">
-          <p><strong>Status:</strong> Phase 2 Complete</p>
-          <p>Database and core services implemented. API endpoints ready for testing.</p>
+          <p><strong>Status:</strong> Phase 3 Complete</p>
+          <p>AI service implemented. Core services and API endpoints ready for testing.</p>
         </div>
 
         <h2 style="margin-top: 2rem; margin-bottom: 1rem;">Services</h2>
@@ -171,6 +182,7 @@ app.get('/', (c) => {
           <li><code>@listentomore/spotify</code> - Spotify API integration</li>
           <li><code>@listentomore/lastfm</code> - Last.fm API integration</li>
           <li><code>@listentomore/songlink</code> - Streaming link aggregation</li>
+          <li><code>@listentomore/ai</code> - AI-powered content generation</li>
         </ul>
 
         <h2 style="margin-top: 2rem; margin-bottom: 1rem;">API Endpoints</h2>
@@ -218,6 +230,18 @@ app.get('/api', (c) => {
         lovedTracks: '/api/lastfm/loved',
       },
       songlink: '/api/songlink?url=:streamingUrl',
+      ai: {
+        artistSummary: '/api/ai/artist-summary?name=:artistName',
+        albumDetail: '/api/ai/album-detail?artist=:artistName&album=:albumName',
+        genreSummary: '/api/ai/genre-summary?genre=:genreName',
+        artistSentence: '/api/ai/artist-sentence?name=:artistName',
+        randomFact: '/api/ai/random-fact',
+        listenAI: 'POST /api/ai/ask',
+        playlistCover: {
+          generatePrompt: 'POST /api/ai/playlist-cover/prompt',
+          generateImage: 'POST /api/ai/playlist-cover/image',
+        },
+      },
     },
   });
 });
@@ -367,6 +391,150 @@ app.get('/api/songlink', async (c) => {
   } catch (error) {
     console.error('Songlink error:', error);
     return c.json({ error: 'Failed to fetch streaming links' }, 500);
+  }
+});
+
+// AI API routes
+
+// Artist summary (uses OpenAI)
+app.get('/api/ai/artist-summary', async (c) => {
+  const name = c.req.query('name');
+
+  if (!name) {
+    return c.json({ error: 'Missing name parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getArtistSummary(name);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI artist summary error:', error);
+    return c.json({ error: 'Failed to generate artist summary' }, 500);
+  }
+});
+
+// Album detail (uses Perplexity with citations)
+app.get('/api/ai/album-detail', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getAlbumDetail(artist, album);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI album detail error:', error);
+    return c.json({ error: 'Failed to generate album detail' }, 500);
+  }
+});
+
+// Genre summary (uses Perplexity with citations)
+app.get('/api/ai/genre-summary', async (c) => {
+  const genre = c.req.query('genre');
+
+  if (!genre) {
+    return c.json({ error: 'Missing genre parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getGenreSummary(genre);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI genre summary error:', error);
+    return c.json({ error: 'Failed to generate genre summary' }, 500);
+  }
+});
+
+// Artist sentence (short description, uses Perplexity)
+app.get('/api/ai/artist-sentence', async (c) => {
+  const name = c.req.query('name');
+
+  if (!name) {
+    return c.json({ error: 'Missing name parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getArtistSentence(name);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI artist sentence error:', error);
+    return c.json({ error: 'Failed to generate artist sentence' }, 500);
+  }
+});
+
+// Random music fact (uses OpenAI)
+app.get('/api/ai/random-fact', async (c) => {
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getRandomFact();
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI random fact error:', error);
+    return c.json({ error: 'Failed to generate random fact' }, 500);
+  }
+});
+
+// Rick Rubin AI chatbot (uses OpenAI)
+app.post('/api/ai/ask', async (c) => {
+  try {
+    const body = await c.req.json<{ question: string }>();
+
+    if (!body.question) {
+      return c.json({ error: 'Missing question in request body' }, 400);
+    }
+
+    const ai = c.get('ai');
+    const result = await ai.askListenAI(body.question);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI ask error:', error);
+    return c.json({ error: 'Failed to get AI response' }, 500);
+  }
+});
+
+// Playlist cover prompt generator (uses OpenAI)
+app.post('/api/ai/playlist-cover/prompt', async (c) => {
+  try {
+    const body = await c.req.json<{ name: string; description: string }>();
+
+    if (!body.name || !body.description) {
+      return c.json(
+        { error: 'Missing name or description in request body' },
+        400
+      );
+    }
+
+    const ai = c.get('ai');
+    const result = await ai.getPlaylistCoverPrompt(body.name, body.description);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI playlist cover prompt error:', error);
+    return c.json({ error: 'Failed to generate playlist cover prompt' }, 500);
+  }
+});
+
+// Playlist cover image generator (uses DALL-E)
+app.post('/api/ai/playlist-cover/image', async (c) => {
+  try {
+    const body = await c.req.json<{ prompt: string }>();
+
+    if (!body.prompt) {
+      return c.json({ error: 'Missing prompt in request body' }, 400);
+    }
+
+    const ai = c.get('ai');
+    const result = await ai.getPlaylistCoverImage(body.prompt);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('AI playlist cover image error:', error);
+    return c.json({ error: 'Failed to generate playlist cover image' }, 500);
   }
 });
 

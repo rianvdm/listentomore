@@ -1,0 +1,68 @@
+// Album detail prompt - generates album summaries with citations using Perplexity
+
+import { AI_TASKS } from '@listentomore/config';
+import type { PerplexityClient } from '../perplexity';
+import type { AICache } from '../cache';
+
+export interface AlbumDetailResult {
+  content: string;
+  citations: string[];
+}
+
+/**
+ * Generate an album detail summary using Perplexity
+ */
+export async function generateAlbumDetail(
+  artistName: string,
+  albumName: string,
+  client: PerplexityClient,
+  cache: AICache
+): Promise<AlbumDetailResult> {
+  const normalizedArtist = artistName.toLowerCase().trim();
+  const normalizedAlbum = albumName.toLowerCase().trim();
+
+  // Check cache first
+  const cached = await cache.get<AlbumDetailResult>(
+    'albumDetail',
+    normalizedArtist,
+    normalizedAlbum
+  );
+  if (cached) {
+    return cached;
+  }
+
+  const config = AI_TASKS.albumDetail;
+
+  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary and of the album's critical reception (if available), with examples/quotes.
+
+Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.
+
+You MUST attempt to find at least 5 sources from web searches.
+
+Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").`;
+
+  const response = await client.chatCompletion({
+    model: config.model,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You use succinct, plain language focused on accuracy and professionalism.',
+      },
+      { role: 'user', content: prompt },
+    ],
+    maxTokens: config.maxTokens,
+    temperature: config.temperature,
+    returnCitations: true,
+  });
+
+  const result: AlbumDetailResult = {
+    content: response.content,
+    citations: response.citations,
+  };
+
+  // Cache the result
+  await cache.set('albumDetail', [normalizedArtist, normalizedAlbum], result);
+
+  return result;
+}
