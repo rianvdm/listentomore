@@ -103,7 +103,7 @@ export async function generateRandomFact(
   };
 
   // Cache with 2 hour TTL (overlapping ensures fresh facts each hour)
-  await cache.set('randomFact', [`slot`, `${hourSlot}`], result, 2 * 60 * 60);
+  await cache.set('randomFact', [`slot`, `${hourSlot}`], result, { ttlSeconds: 2 * 60 * 60 });
 
   return result;
 }
