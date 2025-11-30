@@ -852,8 +852,32 @@ export class DiscogsSyncService {
 
 **Verification:** Services can be imported and called from `apps/web` ✅
 
-**Database:** D1 database `listentomore` (512d0c41-502c-41ba-82ff-635d0413b071)
-**KV:** CACHE namespace (a6011a8b5bac4be9a472ff86f8d5fd91)
+**Infrastructure:**
+
+- **D1 Database:** `listentomore` (512d0c41-502c-41ba-82ff-635d0413b071)
+- **KV Namespace:** CACHE (a6011a8b5bac4be9a472ff86f8d5fd91)
+- **KV Preview:** CACHE_preview (d6703c6a7283467eb7a452a6cb34fa87)
+
+**Secrets configured via `wrangler secret put`:**
+
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_CLIENT_SECRET`
+- `SPOTIFY_REFRESH_TOKEN`
+- `LASTFM_API_KEY`
+- `LASTFM_USERNAME`
+
+**Local development:** Create `apps/web/.dev.vars` with the same keys for `wrangler dev`
+
+**API Endpoints:**
+
+- `/api/spotify/search?q=:query&type=:type` - Search tracks/albums/artists
+- `/api/spotify/album/:id` - Album details
+- `/api/spotify/artist/:id` - Artist details
+- `/api/lastfm/recent` - Recent tracks
+- `/api/lastfm/top-albums?period=:period` - Top albums
+- `/api/lastfm/top-artists?period=:period` - Top artists
+- `/api/lastfm/loved` - Loved tracks
+- `/api/songlink?url=:streamingUrl` - Cross-platform streaming links
 
 ---
 
