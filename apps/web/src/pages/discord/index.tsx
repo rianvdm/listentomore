@@ -12,7 +12,7 @@ export function DiscordPage() {
         More Discord Bot lets you easily generate streaming links and album information.
       </p>
 
-      <p style={{ textAlign: 'center', margin: '2em 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '2em 0' }}>
         <a
           href="https://discord.com/oauth2/authorize?client_id=1284593290947068024"
           class="button button--large"
@@ -21,7 +21,7 @@ export function DiscordPage() {
         >
           Add to Your Server
         </a>
-      </p>
+      </div>
 
       <h2>Commands</h2>
 
