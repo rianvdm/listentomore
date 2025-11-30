@@ -27,6 +27,8 @@ import { handleArtistSearch } from './pages/artist/search';
 import { handleArtistDetail } from './pages/artist/detail';
 import { handleGenreDetail } from './pages/genre/detail';
 import { handleUserStats } from './pages/user/stats';
+import { PrivacyPage } from './pages/legal/privacy';
+import { TermsPage } from './pages/legal/terms';
 
 // Define environment bindings
 type Bindings = {
@@ -242,6 +244,10 @@ app.get('/genre/:slug', handleGenreDetail);
 
 // User routes
 app.get('/u/:username', handleUserStats);
+
+// Legal pages
+app.get('/privacy', (c) => c.html(<PrivacyPage />));
+app.get('/terms', (c) => c.html(<TermsPage />));
 
 // Internal API routes for progressive loading (no auth required)
 // These are called by client-side JS on page load

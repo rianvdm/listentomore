@@ -64,13 +64,15 @@ export function Layout({ children, title, description }: LayoutProps) {
 
         <footer class="footer">
           <p>
-            Built with music by{' '}
-            <a href="https://twitter.com/rian" target="_blank" rel="noopener noreferrer">
-              @rian
+            Built with 🎧 by <a href="https://elezea.com" target="_blank" rel="noopener noreferrer">Rian van der Merwe</a>
+            <br />
+            <a href="https://github.com/rianvdm/listentomore/issues" target="_blank" rel="noopener noreferrer">
+              Submit a bug
             </a>
-          </p>
-          <p>
-            <a href="/about">About</a> · <a href="/privacy">Privacy</a>
+            {' | '}
+            <a href="/privacy">Privacy</a>
+            {' | '}
+            <a href="/terms">Terms</a>
           </p>
         </footer>
 
