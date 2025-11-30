@@ -34,6 +34,7 @@ type Bindings = {
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
   ENVIRONMENT?: string;
+  ADMIN_SECRET?: string;
 };
 
 // Context with services attached
@@ -213,13 +214,12 @@ app.get('/api', (c) => {
 });
 
 // Admin endpoint to create API keys
-// In production, this should be protected by admin authentication
+// Always requires X-Admin-Secret header matching the ADMIN_SECRET env var
 app.post('/api/auth/keys', async (c) => {
-  // For now, only allow in development or with a special admin secret
   const adminSecret = c.req.header('X-Admin-Secret');
-  const isDevEnv = c.env.ENVIRONMENT !== 'production';
 
-  if (!isDevEnv && adminSecret !== 'your-admin-secret-here') {
+  // Always require admin secret - no exceptions
+  if (!c.env.ADMIN_SECRET || adminSecret !== c.env.ADMIN_SECRET) {
     return c.json({ error: 'Unauthorized', message: 'Admin access required' }, 401);
   }
 
