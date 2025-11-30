@@ -50,6 +50,13 @@ export function UserStatsPage({ username, lastfmUsername, recentTrack, topArtist
             <p class="text-muted">No recent tracks found.</p>
           )}
 
+          {/* Recommendations Link */}
+          <p class="text-center" style={{ marginTop: '2em' }}>
+            <a href={`/u/${username}/recommendations`} class="button">
+              View Recommendations →
+            </a>
+          </p>
+
           {/* Top Artists */}
           <h2>👩‍🎤 Top Artists</h2>
           <p class="text-center">

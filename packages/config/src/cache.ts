@@ -24,6 +24,7 @@ export const CACHE_CONFIG = {
     recentTracks: { ttlMinutes: 0 }, // No caching - always live
     lovedTracks: { ttlHours: 1 },
     userListens: { ttlMinutes: 2 }, // Aggregated recent listens for home page
+    userRecommendations: { ttlHours: 6 }, // Personalized artist recommendations
   },
 
   discogs: {
