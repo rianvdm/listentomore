@@ -114,10 +114,14 @@ app.use('*', async (c, next) => {
 // Apply auth middleware to API routes (validates API key if present)
 app.use('/api/*', authMiddleware());
 
-// Require authentication for all API routes except auth endpoints (no public access)
+// Require authentication for all API routes except auth and internal endpoints
 app.use('/api/*', async (c, next) => {
   // Skip auth requirement for key creation endpoint (uses admin secret instead)
   if (c.req.path === '/api/auth/keys') {
+    return next();
+  }
+  // Skip auth for internal endpoints (used by page progressive loading)
+  if (c.req.path.startsWith('/api/internal/')) {
     return next();
   }
   return requireAuth()(c, next);
@@ -234,6 +238,60 @@ app.get('/artist/:id', handleArtistDetail);
 
 // Genre routes
 app.get('/genre/:slug', handleGenreDetail);
+
+// Internal API routes for progressive loading (no auth required)
+// These are called by client-side JS on page load
+
+app.get('/api/internal/songlink', async (c) => {
+  const url = c.req.query('url');
+  if (!url) {
+    return c.json({ error: 'Missing url parameter' }, 400);
+  }
+
+  try {
+    const songlink = c.get('songlink');
+    const links = await songlink.getLinks(url);
+    return c.json({ data: links });
+  } catch (error) {
+    console.error('Internal songlink error:', error);
+    return c.json({ error: 'Failed to fetch streaming links' }, 500);
+  }
+});
+
+app.get('/api/internal/album-summary', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getAlbumDetail(artist, album);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal album summary error:', error);
+    return c.json({ error: 'Failed to generate album summary' }, 500);
+  }
+});
+
+app.get('/api/internal/artist-summary', async (c) => {
+  const name = c.req.query('name');
+
+  if (!name) {
+    return c.json({ error: 'Missing name parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getArtistSummary(name);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal artist summary error:', error);
+    return c.json({ error: 'Failed to generate artist summary' }, 500);
+  }
+});
 
 // API routes overview
 app.get('/api', (c) => {

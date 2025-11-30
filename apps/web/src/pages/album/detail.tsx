@@ -1,11 +1,9 @@
 // Album detail page component
-// Shows album info, streaming links, and AI summary using image-text-wrapper layout
+// Loads basic data immediately, then progressively loads AI summary and streaming links
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import type { SpotifyService } from '@listentomore/spotify';
-import type { AIService } from '@listentomore/ai';
-import type { SonglinkService } from '@listentomore/songlink';
 
 interface AlbumData {
   id: string;
@@ -18,22 +16,12 @@ interface AlbumData {
   spotifyUrl: string;
 }
 
-interface StreamingLink {
-  platform: string;
-  url: string;
-}
-
 interface AlbumDetailProps {
   album: AlbumData | null;
-  aiSummary?: {
-    text: string;
-    citations?: string[];
-  };
-  streamingLinks: StreamingLink[];
   error?: string;
 }
 
-export function AlbumDetailPage({ album, aiSummary, streamingLinks, error }: AlbumDetailProps) {
+export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
   if (error || !album) {
     return (
       <Layout title="Album Not Found">
@@ -98,81 +86,94 @@ export function AlbumDetailPage({ album, aiSummary, streamingLinks, error }: Alb
                 </p>
               )}
 
+              {/* Streaming links - loaded via JS */}
               <p>
                 <strong>Streaming:</strong>
                 <br />
-                {streamingLinks.length > 0 ? (
-                  streamingLinks.map((link) => (
-                    <>
-                      <a href={link.url} target="_blank" rel="noopener noreferrer">
-                        {link.platform} ↗
-                      </a>
-                      <br />
-                    </>
-                  ))
-                ) : (
+                <span id="streaming-links">
                   <a href={album.spotifyUrl} target="_blank" rel="noopener noreferrer">
                     Spotify ↗
                   </a>
-                )}
+                  <br />
+                  <span class="text-muted">Loading more links...</span>
+                </span>
               </p>
             </div>
           </div>
 
-          {/* AI Summary - renders markdown as HTML */}
-          {aiSummary?.text && (
-            <div class="ai-summary">
-              <div dangerouslySetInnerHTML={{ __html: formatMarkdown(aiSummary.text) }} />
-              {aiSummary.citations && aiSummary.citations.length > 0 && (
-                <div class="citations" style={{ marginTop: '1rem' }}>
-                  <h4>Sources</h4>
-                  <ul>
-                    {aiSummary.citations.map((citation, i) => {
-                      let hostname = '';
-                      try {
-                        hostname = new URL(citation).hostname.replace('www.', '');
-                      } catch {
-                        hostname = citation;
-                      }
-                      return (
-                        <li key={i}>
-                          <span class="citation-number">[{i + 1}]</span>{' '}
-                          <a href={citation} target="_blank" rel="noopener noreferrer">
-                            {hostname}
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+          {/* AI Summary - loaded via JS */}
+          <div id="ai-summary" class="ai-summary">
+            <p class="text-muted">Loading AI summary...</p>
+          </div>
         </section>
       </main>
+
+      {/* Progressive loading script */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        (function() {
+          var albumId = '${album.id}';
+          var spotifyUrl = '${album.spotifyUrl}';
+          var artistName = ${JSON.stringify(album.artist)};
+          var albumName = ${JSON.stringify(album.name)};
+
+          // Fetch streaming links
+          fetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              var links = data.data;
+              var html = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a><br/>';
+              if (links.appleUrl) html += '<a href="' + links.appleUrl + '" target="_blank" rel="noopener noreferrer">Apple Music ↗</a><br/>';
+              if (links.youtubeUrl) html += '<a href="' + links.youtubeUrl + '" target="_blank" rel="noopener noreferrer">YouTube ↗</a><br/>';
+              if (links.deezerUrl) html += '<a href="' + links.deezerUrl + '" target="_blank" rel="noopener noreferrer">Deezer ↗</a><br/>';
+              if (links.pageUrl) html += '<a href="' + links.pageUrl + '" target="_blank" rel="noopener noreferrer">Songlink ↗</a><br/>';
+              document.getElementById('streaming-links').innerHTML = html;
+            })
+            .catch(function() {
+              // Keep just Spotify link on error
+              document.getElementById('streaming-links').innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
+            });
+
+          // Fetch AI summary
+          fetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              var summary = data.data;
+              var html = '<div>' + formatMarkdown(summary.content) + '</div>';
+              if (summary.citations && summary.citations.length > 0) {
+                html += '<div class="citations" style="margin-top:1rem"><h4>Sources</h4><ul>';
+                summary.citations.forEach(function(url, i) {
+                  var hostname = url;
+                  try { hostname = new URL(url).hostname.replace('www.', ''); } catch(e) {}
+                  html += '<li><span class="citation-number">[' + (i+1) + ']</span> <a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
+                });
+                html += '</ul></div>';
+              }
+              document.getElementById('ai-summary').innerHTML = html;
+            })
+            .catch(function(e) {
+              document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
+            });
+
+          function formatMarkdown(text) {
+            return text
+              .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+              .replace(/^## (.+)$/gm, '<h4>$1</h4>')
+              .replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>')
+              .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+              .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+              .replace(/\\n\\n/g, '</p><p>')
+              .replace(/\\n/g, '<br/>')
+              .replace(/^(.+)$/, '<p>$1</p>');
+          }
+        })();
+      ` }} />
     </Layout>
   );
 }
 
-// Simple markdown to HTML converter
-function formatMarkdown(text: string): string {
-  return text
-    // Headers
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h4>$1</h4>')
-    // Bold and italic
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Paragraphs (double newlines)
-    .replace(/\n\n/g, '</p><p>')
-    // Single newlines to <br>
-    .replace(/\n/g, '<br/>')
-    // Wrap in paragraph tags
-    .replace(/^(.+)$/, '<p>$1</p>');
-}
-
-// Route handler
+// Route handler - now only fetches Spotify data (fast)
 export async function handleAlbumDetail(c: Context) {
   const idParam = c.req.param('id');
 
@@ -183,15 +184,13 @@ export async function handleAlbumDetail(c: Context) {
   }
 
   const spotify = c.get('spotify') as SpotifyService;
-  const ai = c.get('ai') as AIService;
-  const songlink = c.get('songlink') as SonglinkService;
 
   try {
-    // Fetch album data
+    // Fetch album data from Spotify (fast)
     const albumData = await spotify.getAlbum(spotifyId);
 
     if (!albumData) {
-      return c.html(<AlbumDetailPage album={null} streamingLinks={[]} error="Album not found" />);
+      return c.html(<AlbumDetailPage album={null} error="Album not found" />);
     }
 
     const album: AlbumData = {
@@ -205,43 +204,9 @@ export async function handleAlbumDetail(c: Context) {
       spotifyUrl: albumData.url,
     };
 
-    // Fetch AI summary and streaming links in parallel
-    const [aiSummary, songlinkData] = await Promise.all([
-      ai.getAlbumDetail(album.artist, album.name).catch(() => null),
-      songlink.getLinks(album.spotifyUrl).catch(() => null),
-    ]);
-
-    // Format streaming links from Songlink service
-    // SonglinkService returns StreamingLinks with appleUrl, youtubeUrl, etc.
-    const streamingLinks: StreamingLink[] = [];
-
-    // Always add Spotify first
-    streamingLinks.push({ platform: 'Spotify', url: album.spotifyUrl });
-
-    if (songlinkData) {
-      if (songlinkData.appleUrl) {
-        streamingLinks.push({ platform: 'Apple Music', url: songlinkData.appleUrl });
-      }
-      if (songlinkData.youtubeUrl) {
-        streamingLinks.push({ platform: 'YouTube', url: songlinkData.youtubeUrl });
-      }
-      if (songlinkData.deezerUrl) {
-        streamingLinks.push({ platform: 'Deezer', url: songlinkData.deezerUrl });
-      }
-      if (songlinkData.pageUrl) {
-        streamingLinks.push({ platform: 'Songlink', url: songlinkData.pageUrl });
-      }
-    }
-
-    return c.html(
-      <AlbumDetailPage
-        album={album}
-        aiSummary={aiSummary ? { text: aiSummary.content, citations: aiSummary.citations } : undefined}
-        streamingLinks={streamingLinks}
-      />
-    );
+    return c.html(<AlbumDetailPage album={album} />);
   } catch (error) {
     console.error('Album detail error:', error);
-    return c.html(<AlbumDetailPage album={null} streamingLinks={[]} error="Failed to load album" />);
+    return c.html(<AlbumDetailPage album={null} error="Failed to load album" />);
   }
 }
