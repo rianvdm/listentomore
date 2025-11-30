@@ -253,8 +253,9 @@ app.get('/api/internal/songlink', async (c) => {
     const links = await songlink.getLinks(url);
     return c.json({ data: links });
   } catch (error) {
-    console.error('Internal songlink error:', error);
-    return c.json({ error: 'Failed to fetch streaming links' }, 500);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Internal songlink error:', errorMessage, error);
+    return c.json({ error: 'Failed to fetch streaming links', details: errorMessage }, 500);
   }
 });
 

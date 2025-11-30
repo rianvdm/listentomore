@@ -12,6 +12,7 @@ export interface StreamingLinks {
   youtubeUrl: string | null;
   deezerUrl: string | null;
   spotifyUrl: string | null;
+  tidalUrl: string | null;
   artistName: string;
   title: string;
   thumbnailUrl: string | null;
@@ -32,8 +33,10 @@ interface SonglinkResponse {
   linksByPlatform?: {
     appleMusic?: { url: string };
     youtube?: { url: string };
+    youtubeMusic?: { url: string };
     deezer?: { url: string };
     spotify?: { url: string };
+    tidal?: { url: string };
   };
 }
 
@@ -46,26 +49,43 @@ export class SonglinkService {
     // Check cache
     const cached = await this.cache.get<StreamingLinks>(cacheKey, 'json');
     if (cached) {
+      console.log(`[Songlink] Cache hit for ${streamingUrl}`);
       return cached;
     }
 
+    console.log(`[Songlink] Fetching ${streamingUrl}`);
     const encodedUrl = encodeURIComponent(streamingUrl);
-    const response = await fetch(`${SONGLINK_API_BASE}?url=${encodedUrl}`);
+
+    let response: Response;
+    try {
+      response = await fetch(`${SONGLINK_API_BASE}?url=${encodedUrl}`);
+    } catch (fetchError) {
+      console.error(`[Songlink] Fetch failed for ${streamingUrl}:`, fetchError);
+      throw fetchError;
+    }
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Songlink] API error ${response.status} for ${streamingUrl}: ${errorText}`);
       throw new Error(`Songlink API error: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as SonglinkResponse;
 
-    const entity = data.entitiesByUniqueId[data.entityUniqueId];
+    const entity = data.entitiesByUniqueId?.[data.entityUniqueId];
+
+    // Prefer youtubeMusic over youtube for music-specific links
+    const youtubeUrl = data.linksByPlatform?.youtubeMusic?.url
+      || data.linksByPlatform?.youtube?.url
+      || null;
 
     const links: StreamingLinks = {
       pageUrl: data.pageUrl,
       appleUrl: data.linksByPlatform?.appleMusic?.url || null,
-      youtubeUrl: data.linksByPlatform?.youtube?.url || null,
+      youtubeUrl,
       deezerUrl: data.linksByPlatform?.deezer?.url || null,
       spotifyUrl: data.linksByPlatform?.spotify?.url || null,
+      tidalUrl: data.linksByPlatform?.tidal?.url || null,
       artistName: entity?.artistName || 'Unknown Artist',
       title: entity?.title || 'Unknown Title',
       thumbnailUrl: entity?.thumbnailUrl || null,

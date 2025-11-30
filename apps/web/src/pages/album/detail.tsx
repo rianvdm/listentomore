@@ -124,12 +124,14 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
               var links = data.data;
               var html = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a><br/>';
               if (links.appleUrl) html += '<a href="' + links.appleUrl + '" target="_blank" rel="noopener noreferrer">Apple Music ↗</a><br/>';
-              if (links.youtubeUrl) html += '<a href="' + links.youtubeUrl + '" target="_blank" rel="noopener noreferrer">YouTube ↗</a><br/>';
+              if (links.youtubeUrl) html += '<a href="' + links.youtubeUrl + '" target="_blank" rel="noopener noreferrer">YouTube Music ↗</a><br/>';
+              if (links.tidalUrl) html += '<a href="' + links.tidalUrl + '" target="_blank" rel="noopener noreferrer">Tidal ↗</a><br/>';
               if (links.deezerUrl) html += '<a href="' + links.deezerUrl + '" target="_blank" rel="noopener noreferrer">Deezer ↗</a><br/>';
               if (links.pageUrl) html += '<a href="' + links.pageUrl + '" target="_blank" rel="noopener noreferrer">Songlink ↗</a><br/>';
               document.getElementById('streaming-links').innerHTML = html;
             })
-            .catch(function() {
+            .catch(function(e) {
+              console.error('Songlink error:', e);
               // Keep just Spotify link on error
               document.getElementById('streaming-links').innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
             });
