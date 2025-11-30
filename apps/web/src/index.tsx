@@ -188,17 +188,10 @@ app.get('/', async (c) => {
         <form id="search-form" action="/album" method="get">
           <input
             type="text"
-            name="album"
-            placeholder="Enter album name..."
+            name="q"
+            placeholder="Search for an album..."
             class="input"
-            style={{ maxWidth: '200px' }}
-          />
-          <input
-            type="text"
-            name="artist"
-            placeholder="Enter artist name..."
-            class="input"
-            style={{ maxWidth: '200px' }}
+            style={{ maxWidth: '300px' }}
           />
           <button type="submit" class="button">Search</button>
         </form>
