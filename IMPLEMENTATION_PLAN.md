@@ -1,9 +1,10 @@
 # ListenToMore v2 - Implementation Plan
 
 > **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
-> - **Current phase:** Phase 3 complete (AI service). Next: Phase 4 (Discogs service).
-> - **Architecture:** Server-side rendering. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
-> - **Don't:** Create new workers, use client-side data fetching for pages, or expose API keys to browser.
+> - **Current phase:** Phase 5 in progress (Web App - Core Pages). Skipped Phase 4 (Discogs) for now.
+> - **Architecture:** Server-side rendering with progressive loading. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
+> - **Progressive loading:** Album detail page loads instantly with basic Spotify data, then streams in AI summary and streaming links via client-side JS calling `/api/internal/*` endpoints. **TODO: Apply same pattern to artist detail page.**
+> - **Don't:** Create new workers, use client-side data fetching for pages (except progressive loading), or expose API keys to browser.
 > - **Do:** Add page routes to `apps/web/src/index.tsx`, use `c.get('serviceName')` for data, return HTML with `c.html()`.
 
 ---
@@ -1095,30 +1096,43 @@ packages/services/ai/
 
 ---
 
-### Phase 5: Web App - Core Pages (Sessions 15-20)
+### Phase 5: Web App - Core Pages (Sessions 15-20) 🚧 IN PROGRESS
 
 **Goal:** Main pages working with new URL system
 
 **Tasks:**
 
-- [ ] Set up Hono JSX rendering
-- [ ] Create layout component (nav, theme toggle)
-- [ ] Port CSS/styling (modernize as we go)
-- [ ] Implement pages:
-  - [ ] Home page (recent searches, random fact)
-  - [ ] Album search page
-  - [ ] Album detail page (new ID-based URL)
-  - [ ] Artist search page
-  - [ ] Artist detail page (new ID-based URL)
-  - [ ] Genre page
-- [ ] Implement UI components:
-  - [ ] Button
-  - [ ] Input
+- [x] Set up Hono JSX rendering
+- [x] Create layout component (nav, theme toggle)
+- [x] Port CSS/styling (modernize as we go)
+- [x] Implement pages:
+  - [x] Home page (recent searches, random fact with CRON-based rotation)
+  - [x] Album search page (single input)
+  - [x] Album detail page (new ID-based URL, progressive loading)
+  - [x] Artist search page
+  - [x] Artist detail page (basic - needs progressive loading)
+  - [x] Genre page
+- [x] Implement UI components:
+  - [x] Button
+  - [x] Input
+  - [x] TrackCard
   - [ ] LoadingSpinner
   - [ ] FilterDropdown
-- [ ] Wire up to services
+- [x] Wire up to services
+- [x] Internal API endpoints for progressive loading (`/api/internal/*`)
 
-**Verification:** Can search for album, view detail page with AI summary
+**Progressive Loading Pattern (implemented for album, TODO for artist):**
+- Page loads instantly with basic Spotify data (~0.3s)
+- Client-side JS fetches slow data (AI summary, streaming links) from `/api/internal/*` endpoints
+- Endpoints: `/api/internal/songlink`, `/api/internal/album-summary`, `/api/internal/artist-summary`
+- These endpoints skip auth (used by page JavaScript, not external clients)
+
+**Random Fact CRON System:**
+- CRON runs hourly (`0 * * * *`) generating new facts
+- Stores pool of 10 rotating facts in KV (`random-facts:pool`)
+- Page loads pick randomly from pool (instant KV read)
+
+**Verification:** Can search for album, view detail page with AI summary ✅
 
 ---
 
