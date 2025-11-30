@@ -14,16 +14,18 @@ export interface GenreSummaryResult {
  * Client-side enrichLinks() will then upgrade these to direct Spotify links.
  */
 function replacePlaceholders(content: string): string {
-  // Replace artist names: [[Artist Name]] -> search link
-  let result = content.replace(/\[\[([^\]]+)\]\]/g, (_match, artist) => {
-    const query = encodeURIComponent(artist);
-    return `[${artist}](/artist?q=${query})`;
+  // Replace album names FIRST (before artists, to avoid nested links)
+  // Strip any [[...]] brackets from inside album names
+  let result = content.replace(/\{\{([^}]+)\}\}/g, (_match, album) => {
+    const cleanAlbum = album.replace(/\[\[([^\]]+)\]\]/g, '$1');
+    const query = encodeURIComponent(cleanAlbum);
+    return `[${cleanAlbum}](/album?q=${query})`;
   });
 
-  // Replace album names: {{Album Name by Artist}} -> search link
-  result = result.replace(/\{\{([^}]+)\}\}/g, (_match, album) => {
-    const query = encodeURIComponent(album);
-    return `[${album}](/album?q=${query})`;
+  // Replace artist names: [[Artist Name]] -> search link
+  result = result.replace(/\[\[([^\]]+)\]\]/g, (_match, artist) => {
+    const query = encodeURIComponent(artist);
+    return `[${artist}](/artist?q=${query})`;
   });
 
   // Fix missing spaces after periods (Perplexity quirk)
@@ -53,7 +55,7 @@ export async function generateGenreSummary(
 
   const config = AI_TASKS.genreSummary;
 
-  const prompt = `Write a 2-3 paragraph summary of the music genre "${genreName}". Describe the history, musical elements that characterize the genre, the artists who pioneered it, and notable events. Follow this with a bullet list of 4-6 seminal albums that provide a good overview of the genre, with a one-sentence description of each album's significance. Format each album entry as: **{{Album Name by Artist Name}}**: Description.
+  const prompt = `Write a 2-3 paragraph summary of the music genre "${genreName}" (be sure to add line breaks between paragraphs). Describe the history, musical elements that characterize the genre, the artists who pioneered it, and notable events. Follow this with a bullet list of 4-6 seminal albums that provide a good overview of the genre, with a one-sentence description of each album's significance. Format each album entry as: **{{Album Name by Artist Name}}**: Description.
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
