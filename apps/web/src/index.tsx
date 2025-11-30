@@ -32,6 +32,7 @@ import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
+import { DiscordPage } from './pages/discord';
 
 // Define environment bindings
 type Bindings = {
@@ -265,8 +266,9 @@ app.get('/stats/lookup', handleStatsLookup);
 app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
 
-// About and legal pages
+// About, Discord, and legal pages
 app.get('/about', (c) => c.html(<AboutPage />));
+app.get('/discord', (c) => c.html(<DiscordPage />));
 app.get('/privacy', (c) => c.html(<PrivacyPage />));
 app.get('/terms', (c) => c.html(<TermsPage />));
 

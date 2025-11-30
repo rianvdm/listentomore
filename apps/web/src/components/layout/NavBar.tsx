@@ -22,6 +22,9 @@ export function NavBar() {
           <a href="/genre" class="nav-link">
             Genres
           </a>
+          <a href="/discord" class="nav-link">
+            Discord Bot
+          </a>
           <a href="/about" class="nav-link">
             About
           </a>

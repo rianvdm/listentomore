@@ -912,6 +912,36 @@ blockquote {
   }
 }
 
+/* Content Lists (for about, legal pages etc) */
+.main-content > ul,
+.main-content > ol,
+.main-content section ul,
+.main-content section ol {
+  max-width: 800px;
+  margin: 1em auto;
+  padding-left: 2em;
+}
+
+.main-content > ul,
+.main-content section ul {
+  list-style-type: disc;
+}
+
+.main-content > ol,
+.main-content section ol {
+  list-style-type: decimal;
+}
+
+.main-content li {
+  font-size: 18px;
+  line-height: 1.4em;
+  margin-bottom: 0.5em;
+}
+
+.main-content li strong {
+  color: var(--c-accent);
+}
+
 /* Utility Classes */
 .text-center { text-align: center; }
 .text-left { text-align: left; }

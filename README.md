@@ -2,7 +2,7 @@
 
 A music discovery platform that combines real-time listening data with AI-powered insights. Built with Hono on Cloudflare Workers.
 
-**Live site:** [listentomore-web.rian-db8.workers.dev](https://listentomore-web.rian-db8.workers.dev)
+**Live site:** [listentomore.com](https://listentomore.com)
 
 ## Features
 

@@ -37,6 +37,11 @@ export function AboutPage() {
           <strong>Stream anywhere</strong> - Every album page includes links to all major streaming
           platforms
         </li>
+        <li>
+          <strong>Share with friends</strong> - Use the{' '}
+          <a href="/discord">Discord Bot</a> to share album details and streaming links in your
+          server
+        </li>
       </ul>
 
       <h2>How It Works</h2>
