@@ -47,8 +47,11 @@ export function GenreDetailPage({ displayName }: GenreDetailProps) {
           var genreName = ${JSON.stringify(displayName)};
 
           // Fetch genre summary
-          fetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName))
-            .then(function(r) { return r.json(); })
+          fetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName), { cache: 'no-store' })
+            .then(function(r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var summary = data.data;

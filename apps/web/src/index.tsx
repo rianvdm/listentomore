@@ -135,7 +135,13 @@ app.use('/api/*', async (c, next) => {
 });
 
 // Apply user-based rate limiting to API routes (after auth, so we know the tier)
-app.use('/api/*', userRateLimitMiddleware());
+// Skip rate limiting for internal endpoints (used by page progressive loading)
+app.use('/api/*', async (c, next) => {
+  if (c.req.path.startsWith('/api/internal/')) {
+    return next();
+  }
+  return userRateLimitMiddleware()(c, next);
+});
 
 // Apply API usage logging (after all other middleware)
 app.use('/api/*', apiLoggingMiddleware());
@@ -274,6 +280,12 @@ app.get('/terms', (c) => c.html(<TermsPage />));
 
 // Internal API routes for progressive loading (no auth required)
 // These are called by client-side JS on page load
+
+// Prevent browser/edge caching of internal API responses
+app.use('/api/internal/*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+});
 
 app.get('/api/internal/songlink', async (c) => {
   const url = c.req.query('url');

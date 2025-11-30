@@ -113,8 +113,11 @@ export function ArtistDetailPage({
           }
 
           // Fetch Last.fm data (playcount, genres, and similar artists)
-          fetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName))
-            .then(function(r) { return r.json(); })
+          fetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+            .then(function(r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var lastfm = data.data;
@@ -218,8 +221,11 @@ export function ArtistDetailPage({
             });
 
           // Fetch AI summary
-          fetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName))
-            .then(function(r) { return r.json(); })
+          fetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+            .then(function(r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var summary = data.data;

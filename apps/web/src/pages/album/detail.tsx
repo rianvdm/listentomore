@@ -121,7 +121,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
           var albumName = ${JSON.stringify(album.name)};
 
           // Fetch streaming links
-          fetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl))
+          fetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl), { cache: 'no-store' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
@@ -141,8 +141,11 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
             });
 
           // Fetch AI summary
-          fetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName))
-            .then(function(r) { return r.json(); })
+          fetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
+            .then(function(r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var summary = data.data;
@@ -151,6 +154,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
               document.getElementById('ai-summary').innerHTML = html;
             })
             .catch(function(e) {
+              console.error('Album summary error:', e);
               document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
             });
         })();
