@@ -45,7 +45,7 @@ export function ArtistSearchPage({ query, results, randomFact }: ArtistSearchPro
               <h2 class="section-title">Results for "{query}"</h2>
               <div class="track-grid">
                 {results.map((artist) => (
-                  <a href={`/artist/spotify:${artist.id}`} key={artist.id} class="track">
+                  <a href={`/artist/${artist.id}`} key={artist.id} class="track">
                     {artist.image ? (
                       <img
                         src={artist.image}

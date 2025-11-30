@@ -193,14 +193,7 @@ export function ArtistDetailPage({
 
 // Route handler - fetches Spotify artist data, albums loaded via JS from Last.fm
 export async function handleArtistDetail(c: Context) {
-  const idParam = c.req.param('id');
-
-  // Parse spotify:ID format
-  let spotifyId = idParam;
-  if (idParam.startsWith('spotify:')) {
-    spotifyId = idParam.slice(8);
-  }
-
+  const spotifyId = c.req.param('id');
   const spotify = c.get('spotify') as SpotifyService;
 
   try {

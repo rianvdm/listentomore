@@ -51,7 +51,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
         <h1>
           {album.name} by{' '}
           {album.artistId ? (
-            <a href={`/artist/spotify:${album.artistId}`}>{album.artist}</a>
+            <a href={`/artist/${album.artistId}`}>{album.artist}</a>
           ) : (
             album.artist
           )}
@@ -177,14 +177,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
 
 // Route handler - now only fetches Spotify data (fast)
 export async function handleAlbumDetail(c: Context) {
-  const idParam = c.req.param('id');
-
-  // Parse spotify:ID format
-  let spotifyId = idParam;
-  if (idParam.startsWith('spotify:')) {
-    spotifyId = idParam.slice(8);
-  }
-
+  const spotifyId = c.req.param('id');
   const spotify = c.get('spotify') as SpotifyService;
 
   try {

@@ -54,7 +54,7 @@ export function AlbumSearchPage({ query, results, error }: AlbumSearchProps) {
                     name={album.name}
                     album={album.year}
                     imageUrl={album.image}
-                    href={`/album/spotify:${album.id}`}
+                    href={`/album/${album.id}`}
                   />
                 ))}
               </div>

@@ -1,10 +1,10 @@
 // URL slug utilities with stable ID-based URLs
 
 /**
- * Generate a display-friendly slug from a name
- * Used for SEO-friendly display, not for routing
+ * Generate a URL-safe slug from a name
+ * Used for genres and display purposes
  */
-export function generateDisplaySlug(name: string): string {
+export function generateSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
@@ -14,35 +14,24 @@ export function generateDisplaySlug(name: string): string {
 }
 
 /**
- * Generate album URL using Spotify ID (stable, never breaks)
+ * Generate album URL using Spotify ID
  */
 export function albumUrl(spotifyId: string): string {
-  return `/album/spotify:${spotifyId}`;
+  return `/album/${spotifyId}`;
 }
 
 /**
- * Generate artist URL using Spotify ID (stable, never breaks)
+ * Generate artist URL using Spotify ID
  */
 export function artistUrl(spotifyId: string): string {
-  return `/artist/spotify:${spotifyId}`;
+  return `/artist/${spotifyId}`;
 }
 
 /**
  * Generate genre URL (slugified name)
  */
 export function genreUrl(genre: string): string {
-  return `/genre/${generateDisplaySlug(genre)}`;
-}
-
-/**
- * Parse Spotify ID from URL parameter
- * Returns null if not a valid spotify: prefixed ID
- */
-export function parseSpotifyId(param: string): string | null {
-  if (param.startsWith('spotify:')) {
-    return param.slice(8);
-  }
-  return null;
+  return `/genre/${generateSlug(genre)}`;
 }
 
 /**

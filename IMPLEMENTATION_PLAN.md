@@ -612,43 +612,42 @@ CREATE INDEX idx_discogs_master ON discogs_releases(master_id) WHERE master_enri
 
 ## URL Strategy
 
-### New URL Format
+### URL Format
 
-| Page          | Old URL                         | New URL                                  |
-| ------------- | ------------------------------- | ---------------------------------------- |
-| Album detail  | `/album/artist-name_album-name` | `/album/spotify:4LH4d3cOWNNsVw41Gqt2kv`  |
-| Artist detail | `/artist/artist-name`           | `/artist/spotify:0k17h0D3J5VfsdmQ1iZtE9` |
-| Genre         | `/genre/indie-rock`             | `/genre/indie-rock` (unchanged)          |
+URLs use Spotify IDs directly for unambiguous lookups:
 
-### Slug Generation (for display/SEO)
+| Page          | Old URL                         | New URL                            |
+| ------------- | ------------------------------- | ---------------------------------- |
+| Album detail  | `/album/artist-name_album-name` | `/album/4LH4d3cOWNNsVw41Gqt2kv`    |
+| Artist detail | `/artist/artist-name`           | `/artist/0k17h0D3J5VfsdmQ1iZtE9`   |
+| Genre         | `/genre/indie-rock`             | `/genre/indie-rock` (unchanged)    |
+
+### URL Helper Functions
 
 ```typescript
 // packages/shared/src/utils/slug.ts
 
-export function generateDisplaySlug(name: string): string {
+// URLs use Spotify IDs directly
+export function albumUrl(spotifyId: string): string {
+  return `/album/${spotifyId}`;
+}
+
+export function artistUrl(spotifyId: string): string {
+  return `/artist/${spotifyId}`;
+}
+
+export function genreUrl(slug: string): string {
+  return `/genre/${slug}`;
+}
+
+// Generate URL-safe slug from name (for genres, display purposes)
+export function generateSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
     .replace(/\s+/g, '-') // Spaces to hyphens
     .replace(/-+/g, '-') // Collapse multiple hyphens
     .trim();
-}
-
-// URLs use Spotify IDs as the source of truth
-export function albumUrl(spotifyId: string): string {
-  return `/album/spotify:${spotifyId}`;
-}
-
-export function artistUrl(spotifyId: string): string {
-  return `/artist/spotify:${spotifyId}`;
-}
-
-// Parse ID from URL
-export function parseSpotifyId(param: string): string | null {
-  if (param.startsWith('spotify:')) {
-    return param.slice(8);
-  }
-  return null;
 }
 ```
 

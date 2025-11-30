@@ -216,7 +216,7 @@ app.get('/', async (c) => {
                 artist={album.artist}
                 name={album.name}
                 imageUrl={album.image}
-                href={`/album/spotify:${album.id}`}
+                href={`/album/${album.id}`}
               />
             ))}
           </div>
