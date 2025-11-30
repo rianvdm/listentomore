@@ -10,6 +10,29 @@ export interface GenreSummaryResult {
 }
 
 /**
+ * Replace [[Artist Name]] and {{Album Name}} placeholders with search links.
+ * Client-side enrichLinks() will then upgrade these to direct Spotify links.
+ */
+function replacePlaceholders(content: string): string {
+  // Replace artist names: [[Artist Name]] -> search link
+  let result = content.replace(/\[\[([^\]]+)\]\]/g, (_match, artist) => {
+    const query = encodeURIComponent(artist);
+    return `[${artist}](/artist?q=${query})`;
+  });
+
+  // Replace album names: {{Album Name by Artist}} -> search link
+  result = result.replace(/\{\{([^}]+)\}\}/g, (_match, album) => {
+    const query = encodeURIComponent(album);
+    return `[${album}](/album?q=${query})`;
+  });
+
+  // Fix missing spaces after periods (Perplexity quirk)
+  result = result.replace(/\.([A-Z])/g, '. $1');
+
+  return result;
+}
+
+/**
  * Generate a genre summary using Perplexity
  */
 export async function generateGenreSummary(
@@ -30,34 +53,15 @@ export async function generateGenreSummary(
 
   const config = AI_TASKS.genreSummary;
 
-  const prompt = `Give me a two-paragraph summary of the music genre ${genreName}. Describe the history, the musical elements that characterize the genre, the artists who pioneered it, and any other notable events.
+  const prompt = `Write a 2-3 paragraph summary of the music genre "${genreName}". Describe the history, musical elements that characterize the genre, the artists who pioneered it, and notable events. Follow this with a bullet list of 4-6 seminal albums that provide a good overview of the genre, with a one-sentence description of each album's significance. Format each album entry as: **{{Album Name by Artist Name}}**: Description.
 
-Follow this with one paragraph of seminal albums that provide a good overview of the genre. Format each bullet point as shown in the examples below.
+Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
-If you cannot find any verifiable information about the specific music genre being asked about, you must not make something up and you must not provide information about a different genre. Simply say: I don't have any information about this genre.
+Use Markdown formatting for the summary. Do NOT start with a preamble or end with follow-up suggestions.
 
-Use Markdown for formatting. Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").
+If you cannot find verifiable information about this specific music genre, respond only with: "I don't have any information about this genre."`;
 
-Link every artist name that is mentioned in the summary to the URL \`https://listentomore.com/artist/artist-name\`
 
-For artist links in the summary text:
-- Format: [Artist Name](https://listentomore.com/artist/artist-name)
-- Example: [Pink Floyd](https://listentomore.com/artist/pink-floyd)
-
-For album links in the bullet points:
-- Format: **[Album Name by Artist Name](https://listentomore.com/album/artist-name_album-name)**: Description of why the album is considered significant.
-- IMPORTANT: Always use exactly ONE underscore (_) to separate artist name from album name in the URL
-
-URL formatting rules:
-- Convert spaces to hyphens (-)
-- Remove any ', ", (), [], {} characters
-- Replace / with -
-- Remove any text inside parentheses
-
-Examples of correct album links:
-- **[The Dark Side of the Moon by Pink Floyd](https://listentomore.com/album/pink-floyd_the-dark-side-of-the-moon)**
-- **[OK Computer by Radiohead](https://listentomore.com/album/radiohead_ok-computer)**
-- **[Sgt. Pepper's Lonely Hearts Club Band by The Beatles](https://listentomore.com/album/the-beatles_sgt-peppers-lonely-hearts-club-band)**`;
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -74,8 +78,11 @@ Examples of correct album links:
     returnCitations: true,
   });
 
+  // Process the response to replace placeholders with links
+  const formattedContent = replacePlaceholders(response.content);
+
   const result: GenreSummaryResult = {
-    content: response.content,
+    content: formattedContent,
     citations: response.citations,
   };
 

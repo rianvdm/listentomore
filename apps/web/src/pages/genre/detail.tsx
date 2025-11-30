@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { slugToDisplayName } from '../../data/genres';
-import { formatMarkdownScript, enrichLinksScript, renderCitationsScript, enrichAlbumMentionsScript } from '../../utils/client-scripts';
+import { formatMarkdownScript, enrichLinksScript, renderCitationsScript } from '../../utils/client-scripts';
 
 interface GenreDetailProps {
   displayName: string;
@@ -42,7 +42,6 @@ export function GenreDetailPage({ displayName }: GenreDetailProps) {
         ${formatMarkdownScript}
         ${enrichLinksScript}
         ${renderCitationsScript}
-        ${enrichAlbumMentionsScript}
 
         (function() {
           var genreName = ${JSON.stringify(displayName)};
@@ -63,8 +62,6 @@ export function GenreDetailPage({ displayName }: GenreDetailProps) {
 
               // Enrich links: artist/album search links -> direct Spotify links
               enrichLinks('genre-summary');
-              // Enrich "Album by Artist" bold text -> album links
-              enrichAlbumMentions('genre-summary');
             })
             .catch(function(e) {
               console.error('Genre summary error:', e);
