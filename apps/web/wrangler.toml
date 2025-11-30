@@ -4,6 +4,10 @@ main = "src/index.tsx"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Static assets (favicons, etc.)
+[assets]
+directory = "./public"
+
 # Smart placement for optimal performance
 [placement]
 mode = "smart"
