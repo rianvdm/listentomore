@@ -129,8 +129,8 @@ export function ArtistDetailPage({
 
               // Update similar artists (from Last.fm)
               if (lastfm.similar && lastfm.similar.length > 0) {
-                var html = '<p style="margin-bottom:0.2em"><strong>Similar Artists:</strong></p>';
-                html += '<ul style="list-style-type:none;padding-left:0;margin-top:0">';
+                var html = '<p><strong>Similar Artists:</strong></p>';
+                html += '<ul>';
                 lastfm.similar.forEach(function(name) {
                   html += '<li><a href="/artist?q=' + encodeURIComponent(name) + '">' + name + '</a></li>';
                 });

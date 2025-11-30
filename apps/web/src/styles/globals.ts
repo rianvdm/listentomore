@@ -777,10 +777,13 @@ blockquote {
   list-style-type: none;
   padding-left: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
 }
 
 #similar-artists li {
-  margin-bottom: 0.3em;
+  margin: 0;
 }
 
 /* Utility Classes */
