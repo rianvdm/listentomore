@@ -865,6 +865,7 @@ export class DiscogsSyncService {
 - `SPOTIFY_REFRESH_TOKEN`
 - `LASTFM_API_KEY`
 - `LASTFM_USERNAME`
+- `ADMIN_SECRET` - For API key creation (see API Security section)
 
 **Local development:** Create `apps/web/.dev.vars` with the same keys for `wrangler dev`
 
@@ -878,6 +879,129 @@ export class DiscogsSyncService {
 - `/api/lastfm/top-artists?period=:period` - Top artists
 - `/api/lastfm/loved` - Loved tracks
 - `/api/songlink?url=:streamingUrl` - Cross-platform streaming links
+- `/api/auth/keys` - Create API keys (POST, requires admin secret)
+
+---
+
+## API Security
+
+All `/api/*` endpoints require authentication via API key. This protects against abuse and allows rate limiting per user.
+
+### How It Works
+
+1. **API Keys** are stored in D1 (hashed with SHA-256)
+2. **Tiers** determine rate limits:
+   | Tier | Rate Limit | Use Case |
+   |------|------------|----------|
+   | `standard` | 60 req/min | Normal users |
+   | `premium` | 300 req/min | High-volume users |
+3. **Scopes** control access: `read`, `write`, `ai`
+
+### Authentication Flow
+
+```
+Request with X-API-Key header
+        ↓
+authMiddleware() validates key against D1
+        ↓
+requireAuth() blocks if no valid key
+        ↓
+userRateLimitMiddleware() applies tier-based limits
+        ↓
+Route handler executes
+```
+
+### Frontend vs External API Access
+
+**For website pages (server-side rendering):**
+- Pages access services directly via `c.get('lastfm')`, `c.get('spotify')`, etc.
+- No API key needed - data is fetched server-side
+- User only receives rendered HTML
+- API keys never exposed to browser
+
+```typescript
+// Example: Page route with server-side data fetching
+app.get('/my-music', async (c) => {
+  const lastfm = c.get('lastfm');  // Direct service access
+  const tracks = await lastfm.recentTracks.getRecentTracks(10);
+  return c.html(<MyMusicPage tracks={tracks} />);
+});
+```
+
+**For external/programmatic access:**
+- Must include `X-API-Key` header
+- Subject to rate limits based on tier
+- Used by: mobile apps, CLI tools, third-party integrations
+
+```bash
+curl -H "X-API-Key: ltm_..." https://listentomore-web.rian-db8.workers.dev/api/lastfm/recent
+```
+
+### Creating API Keys (Admin Only)
+
+API keys can only be created by admins with the `ADMIN_SECRET`:
+
+```bash
+curl -X POST "https://listentomore-web.rian-db8.workers.dev/api/auth/keys" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Secret: <your-admin-secret>" \
+  -d '{"name": "My App", "tier": "standard", "scopes": ["read"]}'
+```
+
+Response includes the key (shown only once):
+```json
+{
+  "key": "ltm_abc123...",
+  "keyPrefix": "ltm_abc1",
+  "tier": "standard",
+  "warning": "Save this key - it will not be shown again!"
+}
+```
+
+### Adding New Endpoints
+
+**For new pages (recommended):**
+```typescript
+// Use services directly - secure, fast, simple
+app.get('/artist/:id', async (c) => {
+  const spotify = c.get('spotify');
+  const artist = await spotify.getArtist(c.req.param('id'));
+  return c.html(<ArtistPage artist={artist} />);
+});
+```
+
+**For new API endpoints:**
+```typescript
+// Automatically protected by requireAuth() middleware on /api/*
+app.get('/api/my-endpoint', async (c) => {
+  const apiKey = c.get('apiKey');  // Access authenticated user info
+  // ... handler logic
+  return c.json({ data });
+});
+
+// For endpoints requiring specific scopes (e.g., AI endpoints):
+app.post('/api/ai/analyze', requireAuth({ requiredScopes: ['ai'] }), async (c) => {
+  // Only users with 'ai' scope can access
+});
+```
+
+### Security Infrastructure
+
+**Additional secrets configured:**
+- `ADMIN_SECRET` - Required for API key creation
+
+**Database tables added (002_api_keys.sql):**
+- `api_keys` - Stores hashed keys, tiers, scopes, usage counts
+- `api_usage_log` - Tracks all API requests for analytics
+
+**Middleware stack for `/api/*`:**
+1. `securityHeadersMiddleware()` - XSS, frame, content-type protection
+2. `corsMiddleware()` - Restricts cross-origin requests
+3. `originValidationMiddleware()` - Additional origin checks (production)
+4. `authMiddleware()` - Validates API key
+5. `requireAuth()` - Blocks unauthenticated requests
+6. `userRateLimitMiddleware()` - Per-user rate limiting via KV
+7. `apiLoggingMiddleware()` - Usage logging to D1
 
 ---
 
