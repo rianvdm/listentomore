@@ -27,6 +27,7 @@ import { handleArtistSearch } from './pages/artist/search';
 import { handleArtistDetail } from './pages/artist/detail';
 import { handleGenreDetail } from './pages/genre/detail';
 import { handleUserStats } from './pages/user/stats';
+import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 
@@ -182,10 +183,9 @@ app.get('/', async (c) => {
         {/* Welcome Section */}
         <section id="lastfm-stats">
           <p>
-            ✨ Welcome, music traveler. If you're looking for something new to listen to, you should{' '}
-            <strong><a href="/recommendations">get rec'd</a></strong>.
-            Or maybe explore the history and seminal albums of a random genre like{' '}
-            <strong><a href={`/genre/${randomGenre}`}>{displayGenre}</a></strong>.
+            ✨ Welcome, music traveler. Want to explore the history and seminal albums of a genre like{' '}
+            <strong><a href={`/genre/${randomGenre}`}>{displayGenre}</a></strong>?
+            Or check out your <strong><a href="/stats">listening stats</a></strong>.
           </p>
           {randomFact?.fact && <p>🧠 {randomFact.fact}</p>}
         </section>
@@ -241,6 +241,10 @@ app.get('/artist/:id', handleArtistDetail);
 
 // Genre routes
 app.get('/genre/:slug', handleGenreDetail);
+
+// Stats routes
+app.get('/stats', handleStatsEntry);
+app.get('/stats/lookup', handleStatsLookup);
 
 // User routes
 app.get('/u/:username', handleUserStats);
@@ -344,6 +348,24 @@ app.get('/api/internal/artist-sentence', async (c) => {
   } catch (error) {
     console.error('Internal artist sentence error:', error);
     return c.json({ error: 'Failed to generate artist sentence' }, 500);
+  }
+});
+
+app.get('/api/internal/search', async (c) => {
+  const query = c.req.query('q');
+  const type = c.req.query('type') as 'album' | 'artist';
+
+  if (!query || !type) {
+    return c.json({ error: 'Missing q or type parameter' }, 400);
+  }
+
+  try {
+    const spotify = c.get('spotify');
+    const results = await spotify.search.search(query, type, 6);
+    return c.json({ data: results });
+  } catch (error) {
+    console.error('Internal search error:', error);
+    return c.json({ error: 'Search failed' }, 500);
   }
 });
 

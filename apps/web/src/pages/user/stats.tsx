@@ -126,10 +126,17 @@ function UserNotFound({ username }: { username: string }) {
       <div class="text-center" style={{ paddingTop: '4rem' }}>
         <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>User not found</h1>
         <p>
-          No user with username "<strong>{username}</strong>" exists.
+          No user with username "<strong>{username}</strong>" exists in our system.
+        </p>
+        <p style={{ marginTop: '1rem', maxWidth: '400px', marginLeft: 'auto', marginRight: 'auto' }}>
+          This feature is currently in testing. If you'd like to try it out,{' '}
+          <a href="https://elezea.com/contact/" target="_blank" rel="noopener noreferrer">
+            get in touch
+          </a>{' '}
+          and I'll set you up.
         </p>
         <p class="mt-2">
-          <a href="/" class="button">Go Home</a>
+          <a href="/stats" class="button">Try Another Username</a>
         </p>
       </div>
     </Layout>

@@ -10,40 +10,15 @@ export function NavBar() {
         </a>
 
         <div class="nav-links">
+          <a href="/stats" class="nav-link">
+            My Stats
+          </a>
           <a href="/artist" class="nav-link">
             Artists
           </a>
           <a href="/album" class="nav-link">
             Albums
           </a>
-          <a href="/recommendations" class="nav-link">
-            Get rec'd
-          </a>
-          <a href="/stats" class="nav-link">
-            Stats
-          </a>
-
-          {/* More dropdown */}
-          <div class="dropdown">
-            <button class="dropdown-toggle" type="button" aria-haspopup="true">
-              More ▾
-            </button>
-            <div class="dropdown-menu" role="menu">
-              <a href="/playlist-cover" class="dropdown-item">
-                Playlist Cover
-              </a>
-              <a href="/library" class="dropdown-item">
-                Digital Library
-              </a>
-              <a href="/collection" class="dropdown-item">
-                Discogs Collection
-              </a>
-              <a href="/collection/stats" class="dropdown-item">
-                Collection Stats
-              </a>
-            </div>
-          </div>
-
           <a href="/about" class="nav-link">
             About
           </a>
