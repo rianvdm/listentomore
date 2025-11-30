@@ -1336,6 +1336,68 @@ Nothing gets deleted. The old code remains available for reference.
 
 ---
 
+## Performance Architecture
+
+The new architecture is designed to be significantly faster than the old Next.js + 34 Workers setup.
+
+### Why It's Faster
+
+| Factor | Old (my-music-next) | New (listentomore) |
+|--------|---------------------|-------------------|
+| **Inter-service calls** | HTTP requests (50-100ms each) | Function calls (0ms) |
+| **Cold starts** | Multiple workers could cold start | Single worker |
+| **Server location** | Vercel (single region) | Cloudflare edge (300+ global locations) |
+| **Data fetching** | Client-side JS fetches after page load | Server-rendered, data included in HTML |
+| **Round trips** | Browser → Vercel → Workers → APIs | Browser → Edge → APIs |
+
+### Example: Page Loading Recent Tracks + Top Albums
+
+**Old architecture:**
+```
+Browser → Vercel (US) → api-lastfm-recenttracks.workers.dev → Last.fm API
+                      → api-lastfm-topalbums.workers.dev → Last.fm API
+       ← Render on client after both fetch
+
+~400-600ms total (network latency + multiple cold starts possible)
+```
+
+**New architecture:**
+```
+Browser → Cloudflare Edge (nearest location)
+       → lastfm.getRecentTracks() ← direct function call
+       → lastfm.getTopAlbums()    ← direct function call
+       ← Return complete HTML
+
+~100-200ms total (single hop to edge, then to Last.fm)
+```
+
+### Performance Features Enabled
+
+In `apps/web/wrangler.toml`:
+
+```toml
+[placement]
+mode = "smart"  # Worker placed close to backend APIs (Last.fm, Spotify servers)
+
+[observability]
+enabled = true  # Performance monitoring in Cloudflare dashboard
+```
+
+### Best Practices for New Code
+
+1. **Use server-side rendering** - Fetch data in route handlers, return complete HTML
+2. **Avoid client-side fetches** - Don't make the browser call `/api/*` endpoints for page data
+3. **Parallel fetches** - Use `Promise.all()` when fetching from multiple services:
+   ```typescript
+   const [tracks, albums] = await Promise.all([
+     lastfm.getRecentTracks(10),
+     lastfm.getTopAlbums('1month', 6)
+   ]);
+   ```
+4. **Cache appropriately** - Services use KV caching to avoid repeated external API calls
+
+---
+
 ## Questions to Resolve During Implementation
 
 1. **Hono static assets:** How to serve CSS/images? (Workers Assets or KV)
