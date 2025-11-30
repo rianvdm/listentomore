@@ -2,7 +2,7 @@
 
 ## Why This Exists
 
-Listen To More started as a personal project to scratch an itch: I wanted a better way to discover and learn about music. Streaming services are great for listening, but they're not great for *understanding* music - the context, the history, the connections between artists and albums.
+Listen To More started as a personal project to scratch an itch: I wanted a better way to learn more about the music I listen to. Streaming services are great for listening, but they're not great for *understanding* music—the context, the history, the connections between artists and albums.
 
 I also wanted to track my listening habits in a more meaningful way than what Last.fm or Spotify Wrapped offer. Not just "you listened to X hours of music" but actual insights into what I'm gravitating toward and why.
 
@@ -14,7 +14,7 @@ The AI features here aren't about generating music or replacing human curation. 
 
 ### Progressive Enhancement
 
-The site is designed to be fast first. Pages render in under 300ms with basic information, then progressively load richer content. This means you're never staring at a loading spinner - you get useful information immediately, and more detail as it becomes available.
+The site is designed to be fast first. Pages render in under 300ms with basic information, then progressively load richer content. This means you're never staring at a loading spinner—you get useful information immediately, and more detail as it becomes available.
 
 ### Server-Side by Default
 
@@ -36,7 +36,7 @@ Hono is a lightweight, fast web framework designed for edge computing. It's like
 
 ### Why Perplexity for AI Summaries?
 
-Perplexity's Sonar model is designed for grounded, factual responses with citations. For music information, this is exactly what we need - accurate facts about artists and albums, not hallucinated content. The citations let users verify information and explore further.
+Perplexity's Sonar model is designed for grounded, factual responses with citations. For music information, this is exactly what we need—accurate facts about artists and albums, not hallucinated content. The citations let users verify information and explore further.
 
 ### Why Last.fm?
 
