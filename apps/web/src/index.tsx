@@ -31,6 +31,7 @@ import { handleUserRecommendations } from './pages/user/recommendations';
 import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
+import { AboutPage } from './pages/about';
 
 // Define environment bindings
 type Bindings = {
@@ -264,7 +265,8 @@ app.get('/stats/lookup', handleStatsLookup);
 app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
 
-// Legal pages
+// About and legal pages
+app.get('/about', (c) => c.html(<AboutPage />));
 app.get('/privacy', (c) => c.html(<PrivacyPage />));
 app.get('/terms', (c) => c.html(<TermsPage />));
 
