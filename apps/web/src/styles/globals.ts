@@ -939,7 +939,7 @@ blockquote {
 }
 
 .main-content li strong {
-  color: var(--c-accent);
+  color: var(--c-base);
 }
 
 /* Utility Classes */
