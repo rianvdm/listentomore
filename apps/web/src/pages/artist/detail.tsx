@@ -159,7 +159,7 @@ export function ArtistDetailPage({
             });
 
           function formatMarkdown(text) {
-            return text
+            var result = text
               // Markdown links [text](url) - convert listentomore.com URLs to internal search
               .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, linkText, url) {
                 // Convert listentomore.com/artist/* URLs to internal search
@@ -177,9 +177,11 @@ export function ArtistDetailPage({
               .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
               // Italic
               .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
-              // Paragraphs
+              // Paragraphs - split on double newlines
               .replace(/\\n\\n/g, '</p><p>')
               .replace(/\\n/g, '<br/>');
+            // Wrap in paragraph tags
+            return '<p>' + result + '</p>';
           }
         })();
       ` }} />
