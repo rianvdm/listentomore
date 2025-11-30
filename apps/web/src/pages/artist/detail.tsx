@@ -162,13 +162,16 @@ export function ArtistDetailPage({
 
           function formatMarkdown(text) {
             var result = text
-              // Markdown links [text](url) - convert listentomore.com URLs to internal search
+              // Markdown links [text](url)
               .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, linkText, url) {
-                // Convert listentomore.com/artist/* URLs to internal search
+                // Internal relative URLs (start with /)
+                if (url.startsWith('/')) {
+                  return '<a href="' + url + '">' + linkText + '</a>';
+                }
+                // Legacy listentomore.com URLs - convert to internal search
                 if (url.includes('listentomore.com/artist/')) {
                   return '<a href="/artist?q=' + encodeURIComponent(linkText) + '">' + linkText + '</a>';
                 }
-                // Convert listentomore.com/album/* URLs to internal search
                 if (url.includes('listentomore.com/album/')) {
                   return '<a href="/album?q=' + encodeURIComponent(linkText) + '">' + linkText + '</a>';
                 }
