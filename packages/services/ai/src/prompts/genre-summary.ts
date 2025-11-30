@@ -18,7 +18,19 @@ function replacePlaceholders(content: string): string {
   // Strip any [[...]] brackets from inside album names
   let result = content.replace(/\{\{([^}]+)\}\}/g, (_match, album) => {
     const cleanAlbum = album.replace(/\[\[([^\]]+)\]\]/g, '$1');
-    const query = encodeURIComponent(cleanAlbum);
+    
+    // Parse "Album Name by Artist Name" for more precise Spotify search
+    const byMatch = cleanAlbum.match(/^(.+?)\s+by\s+(.+)$/i);
+    let query: string;
+    if (byMatch) {
+      const albumName = byMatch[1].trim();
+      const artistName = byMatch[2].trim();
+      // Use Spotify's field syntax: album:X artist:Y
+      query = encodeURIComponent(`album:${albumName} artist:${artistName}`);
+    } else {
+      query = encodeURIComponent(cleanAlbum);
+    }
+    
     return `[${cleanAlbum}](/album?q=${query})`;
   });
 
