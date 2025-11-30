@@ -12,6 +12,12 @@ export interface ArtistDetail {
   bio: string;
 }
 
+export interface ArtistTopAlbum {
+  name: string;
+  playcount: number;
+  url: string;
+}
+
 interface LastfmArtistInfoResponse {
   artist: {
     name: string;
@@ -29,6 +35,18 @@ interface LastfmArtistInfoResponse {
     bio?: {
       content: string;
     };
+  };
+  error?: number;
+  message?: string;
+}
+
+interface LastfmTopAlbumsResponse {
+  topalbums: {
+    album: Array<{
+      name: string;
+      playcount: string;
+      url: string;
+    }>;
   };
   error?: number;
   message?: string;
@@ -71,5 +89,24 @@ export class ArtistDetails {
       similar: artist.similar?.artist?.slice(0, 3).map((a) => a.name) || [],
       bio: artist.bio?.content || '',
     };
+  }
+
+  async getTopAlbums(artistName: string, limit: number = 5): Promise<ArtistTopAlbum[]> {
+    const url = `${LASTFM_API_BASE}/?method=artist.getTopAlbums&artist=${encodeURIComponent(artistName)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&autocorrect=1&limit=${limit}`;
+
+    const response = await fetch(url);
+    const data = (await response.json()) as LastfmTopAlbumsResponse;
+
+    if (data.error) {
+      throw new Error(data.message || `Failed to fetch top albums for: ${artistName}`);
+    }
+
+    const albums = data.topalbums?.album || [];
+
+    return albums.map((album) => ({
+      name: album.name,
+      playcount: parseInt(album.playcount || '0', 10),
+      url: album.url,
+    }));
   }
 }

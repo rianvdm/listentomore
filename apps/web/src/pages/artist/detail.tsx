@@ -13,20 +13,13 @@ interface ArtistData {
   spotifyUrl: string;
 }
 
-interface TopAlbum {
-  id: string;
-  name: string;
-}
-
 interface ArtistDetailProps {
   artist: ArtistData | null;
-  topAlbums: TopAlbum[];
   error?: string;
 }
 
 export function ArtistDetailPage({
   artist,
-  topAlbums,
   error,
 }: ArtistDetailProps) {
   if (error || !artist) {
@@ -82,20 +75,15 @@ export function ArtistDetailPage({
                 <span class="text-muted">Loading...</span>
               </p>
 
-              <p style={{ marginBottom: '0.2em' }}>
-                <strong>Popular Albums:</strong>
-              </p>
-              <ul>
-                {topAlbums.length > 0 ? (
-                  topAlbums.map((album) => (
-                    <li key={album.id}>
-                      <a href={`/album/spotify:${album.id}`}>{album.name}</a>
-                    </li>
-                  ))
-                ) : (
-                  <li>No albums found</li>
-                )}
-              </ul>
+              {/* Popular Albums - loaded via JS from Last.fm */}
+              <div id="popular-albums">
+                <p style={{ marginBottom: '0.2em' }}>
+                  <strong>Popular Albums:</strong>
+                </p>
+                <ul>
+                  <li class="text-muted">Loading...</li>
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -126,6 +114,19 @@ export function ArtistDetailPage({
               var playcount = lastfm.userPlaycount || 0;
               var formatted = new Intl.NumberFormat().format(playcount);
               document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> ' + formatted + ' plays';
+
+              // Update popular albums (from Last.fm)
+              if (lastfm.topAlbums && lastfm.topAlbums.length > 0) {
+                var html = '<p style="margin-bottom:0.2em"><strong>Popular Albums:</strong></p>';
+                html += '<ul>';
+                lastfm.topAlbums.forEach(function(albumName) {
+                  html += '<li><a href="/album?q=' + encodeURIComponent(artistName + ' ' + albumName) + '">' + albumName + '</a></li>';
+                });
+                html += '</ul>';
+                document.getElementById('popular-albums').innerHTML = html;
+              } else {
+                document.getElementById('popular-albums').innerHTML = '<p style="margin-bottom:0.2em"><strong>Popular Albums:</strong></p><ul><li>No albums found</li></ul>';
+              }
 
               // Update similar artists (from Last.fm)
               if (lastfm.similar && lastfm.similar.length > 0) {
@@ -190,7 +191,7 @@ export function ArtistDetailPage({
   );
 }
 
-// Route handler - now only fetches Spotify data (fast)
+// Route handler - fetches Spotify artist data, albums loaded via JS from Last.fm
 export async function handleArtistDetail(c: Context) {
   const idParam = c.req.param('id');
 
@@ -203,19 +204,11 @@ export async function handleArtistDetail(c: Context) {
   const spotify = c.get('spotify') as SpotifyService;
 
   try {
-    // Fetch artist data and top albums from Spotify (fast)
-    const [artistData, topAlbumsData] = await Promise.all([
-      spotify.getArtist(spotifyId),
-      spotify.getArtistAlbums(spotifyId, 3).catch(() => []),
-    ]);
+    const artistData = await spotify.getArtist(spotifyId);
 
     if (!artistData) {
       return c.html(
-        <ArtistDetailPage
-          artist={null}
-          topAlbums={[]}
-          error="Artist not found"
-        />
+        <ArtistDetailPage artist={null} error="Artist not found" />
       );
     }
 
@@ -227,21 +220,11 @@ export async function handleArtistDetail(c: Context) {
       spotifyUrl: artistData.url,
     };
 
-    // Format top albums
-    const topAlbums: TopAlbum[] = topAlbumsData.map((album) => ({
-      id: album.id,
-      name: album.name,
-    }));
-
-    return c.html(<ArtistDetailPage artist={artist} topAlbums={topAlbums} />);
+    return c.html(<ArtistDetailPage artist={artist} />);
   } catch (error) {
     console.error('Artist detail error:', error);
     return c.html(
-      <ArtistDetailPage
-        artist={null}
-        topAlbums={[]}
-        error="Failed to load artist"
-      />
+      <ArtistDetailPage artist={null} error="Failed to load artist" />
     );
   }
 }

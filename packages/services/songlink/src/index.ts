@@ -67,6 +67,24 @@ export class SonglinkService {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[Songlink] API error ${response.status} for ${streamingUrl}: ${errorText}`);
+
+      // On rate limit or other errors, return partial data with just the original URL
+      if (response.status === 429 || response.status >= 500) {
+        console.log(`[Songlink] Returning partial data due to ${response.status}`);
+        return {
+          pageUrl: '',
+          appleUrl: null,
+          youtubeUrl: null,
+          deezerUrl: null,
+          spotifyUrl: streamingUrl.includes('spotify') ? streamingUrl : null,
+          tidalUrl: null,
+          artistName: 'Unknown Artist',
+          title: 'Unknown Title',
+          thumbnailUrl: null,
+          type: 'unknown' as MediaType,
+        };
+      }
+
       throw new Error(`Songlink API error: ${response.status} ${response.statusText}`);
     }
 

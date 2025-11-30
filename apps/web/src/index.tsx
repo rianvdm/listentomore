@@ -303,9 +303,17 @@ app.get('/api/internal/artist-lastfm', async (c) => {
 
   try {
     const lastfm = c.get('lastfm');
-    const result = await lastfm.getArtistDetail(name);
-    // Just return Last.fm data (playcount, tags, bio) - similar artists come from Spotify
-    return c.json({ data: result });
+    // Fetch artist detail and top albums in parallel
+    const [artistDetail, topAlbums] = await Promise.all([
+      lastfm.getArtistDetail(name),
+      lastfm.getArtistTopAlbums(name, 3),
+    ]);
+    return c.json({
+      data: {
+        ...artistDetail,
+        topAlbums: topAlbums.map((a) => a.name),
+      },
+    });
   } catch (error) {
     console.error('Internal lastfm artist error:', error);
     return c.json({ error: 'Failed to fetch Last.fm data' }, 500);

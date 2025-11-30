@@ -16,7 +16,7 @@ export { TopArtists } from './top-artists';
 export type { TopArtist } from './top-artists';
 
 export { ArtistDetails } from './artist-detail';
-export type { ArtistDetail } from './artist-detail';
+export type { ArtistDetail, ArtistTopAlbum } from './artist-detail';
 
 export { LovedTracks } from './loved-tracks';
 export type { LovedTrack } from './loved-tracks';
@@ -61,6 +61,10 @@ export class LastfmService {
 
   async getArtistDetail(artistName: string) {
     return this.artistDetails.getArtistDetail(artistName);
+  }
+
+  async getArtistTopAlbums(artistName: string, limit: number = 5) {
+    return this.artistDetails.getTopAlbums(artistName, limit);
   }
 
   async getLovedTracks(limit: number = 10) {
