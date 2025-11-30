@@ -1,7 +1,7 @@
 # ListenToMore v2 - Implementation Plan
 
 > **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
-> - **Current phase:** Phase 6 in progress (Stats & Collection). Phases 1-5 complete. Skipped Phase 4 (Discogs) for now.
+> - **Current phase:** Phase 6 in progress. Next task: Restructure nav/IA (see below).
 > - **Architecture:** Server-side rendering with progressive loading. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
 > - **Progressive loading:** Album and artist detail pages load instantly with basic Spotify data (~0.3s), then stream in AI summary and additional data via client-side JS calling `/api/internal/*` endpoints.
 > - **Don't:** Create new workers, use client-side data fetching for pages (except progressive loading), or expose API keys to browser.
@@ -136,15 +136,18 @@ export function genreUrl(slug: string): string { return `/genre/${slug}`; }
 - [x] Internal API endpoints for progressive loading
 - [x] LoadingSpinner, FilterDropdown components
 
-### Phase 6: Stats & Collection (IN PROGRESS)
-- [x] My Stats page at `/u/:username` (recent tracks, top artists/albums)
-- [ ] Collection pages (stats, filters)
-- [ ] Library page (Airtable integration)
-- [ ] Recommendations page
+### Phase 6: User Pages & Nav Restructure (IN PROGRESS)
+- [x] User stats page at `/u/:username` (recent tracks, top artists/albums, KV caching)
+- [x] Privacy and Terms pages
+- [ ] **Next: Restructure navigation** (see Nav/IA Plan below)
+- [ ] Create `/stats` entry page (username input → redirects to `/u/:username`)
+- [ ] User recommendations at `/u/:username/recommendations`
+- [ ] User auth (future - pages remain public, auth just for convenience)
 
-### Phase 7: Additional Features
+### Phase 7: Additional Features (DEFERRED)
 - [ ] Playlist cover generator
-- [ ] About, Privacy, Terms, 404 pages
+- [ ] Library page (Airtable integration)
+- [ ] About page, 404 page
 - [ ] Error boundaries
 
 ### Phase 8: Discord Bot
@@ -197,6 +200,29 @@ app.get('/my-page', async (c) => {
 
 ---
 
+## Nav/IA Restructuring Plan
+
+**Current nav:** `Artists | Albums | Get rec'd | Stats | More ▾ | About`
+
+**New nav:** `Artists | Albums | My Stats | About`
+
+**URL structure:**
+- `/` - Home (album search + recent community searches)
+- `/artist`, `/artist/:id` - Artist search and detail
+- `/album`, `/album/:id` - Album search and detail
+- `/genre/:slug` - Genre pages
+- `/stats` - Entry page: "Enter your Last.fm username" → redirects to `/u/:username`
+- `/u/:username` - Public user stats (recent track, top artists/albums)
+- `/u/:username/recommendations` - Personalized recommendations (future)
+- `/about`, `/privacy`, `/terms` - Static pages
+
+**Key points:**
+- All `/u/:username` pages are **public** (no auth required to view)
+- Future auth is for convenience only (auto-redirect to your page)
+- Discogs, Library, Playlist Cover deferred to Phase 7+
+
+---
+
 ## Features NOT Being Ported
 
 - `guessme` - Music guessing game
@@ -205,7 +231,9 @@ app.get('/my-page', async (c) => {
 
 ---
 
-## Questions to Resolve
+## Features Deferred
 
-1. Charts: Port Recharts or find lighter alternative for server rendering?
-2. Theme toggle: Server-side cookie vs client-side localStorage?
+- Discogs collection sync and pages
+- Digital Library (Airtable integration)
+- Playlist cover generator
+- "Get rec'd" (moving to user-specific recommendations)
