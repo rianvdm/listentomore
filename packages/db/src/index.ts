@@ -30,7 +30,7 @@ export class Database {
 
   async getUserByUsername(username: string): Promise<User | null> {
     return this.db
-      .prepare('SELECT * FROM users WHERE username = ?')
+      .prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?)')
       .bind(username)
       .first<User>();
   }
