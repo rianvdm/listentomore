@@ -118,12 +118,11 @@ export const renderCitationsScript = `
 function renderCitations(citations) {
   if (!citations || citations.length === 0) return '';
 
-  var html = '<div class="citations" style="margin-top:1.5rem"><h4>Sources</h4><ul>';
-  citations.forEach(function(url, i) {
+  var html = '<div class="citations"><h4>Sources</h4><ul>';
+  citations.forEach(function(url) {
     var hostname = url;
     try { hostname = new URL(url).hostname.replace('www.', ''); } catch(e) {}
-    html += '<li><span class="citation-number">[' + (i+1) + ']</span> ';
-    html += '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
+    html += '<li><a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
   });
   html += '</ul></div>';
   return html;

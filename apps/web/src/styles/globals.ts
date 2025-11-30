@@ -389,14 +389,17 @@ h4 {
   font-size: 18px;
 }
 
-.no-wrap-text ul {
+.no-wrap-text ul,
+.main-content .no-wrap-text ul {
   list-style-type: none;
   padding-left: 0;
   margin: 0;
 }
 
-.no-wrap-text li {
-  margin-bottom: 0.3em;
+.no-wrap-text li,
+.main-content .no-wrap-text li {
+  font-size: 16px;
+  margin-bottom: 0.1em;
 }
 
 /* Track Grid */
@@ -762,14 +765,23 @@ blockquote {
 }
 
 .citations h4 {
-  margin: 0 0 0.5em;
-  font-size: 14px;
-  opacity: 0.8;
+  margin: 0 0 0.3em;
+  font-size: 13px;
+  opacity: 0.7;
 }
 
-.citations li {
-  font-size: 14px;
-  margin-bottom: 0.3em;
+.citations ul,
+.ai-summary .citations ul {
+  list-style-type: disc;
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.citations li,
+.ai-summary .citations li {
+  font-size: 12px;
+  margin-bottom: 0.15em;
+  line-height: 1.3em;
 }
 
 .citation-number {
@@ -793,10 +805,11 @@ blockquote {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
+  gap: 0.1em;
 }
 
 #similar-artists li {
+  font-size: 16px;
   margin: 0;
 }
 

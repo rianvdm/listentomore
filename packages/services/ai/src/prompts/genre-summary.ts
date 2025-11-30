@@ -44,13 +44,18 @@ export async function generateGenreSummary(
 ): Promise<GenreSummaryResult> {
   const normalizedGenre = genreName.toLowerCase().trim();
 
-  // Check cache first
-  const cached = await cache.get<GenreSummaryResult>(
-    'genreSummary',
-    normalizedGenre
-  );
-  if (cached) {
-    return cached;
+  // Check cache first (fail gracefully if KV has issues)
+  try {
+    const cached = await cache.get<GenreSummaryResult>(
+      'genreSummary',
+      normalizedGenre
+    );
+    if (cached) {
+      return cached;
+    }
+  } catch (cacheError) {
+    console.error(`[Genre Summary] Cache read failed for "${genreName}":`, cacheError);
+    // Continue to API call
   }
 
   const config = AI_TASKS.genreSummary;
@@ -65,31 +70,48 @@ If you cannot find verifiable information about this specific music genre, respo
 
 
 
-  const response = await client.chatCompletion({
-    model: config.model,
-    messages: [
-      {
-        role: 'system',
-        content:
-          'You use succinct, plain language focused on accuracy and professionalism.',
-      },
-      { role: 'user', content: prompt },
-    ],
-    maxTokens: config.maxTokens,
-    temperature: config.temperature,
-    returnCitations: true,
-  });
+  // Retry logic for intermittent API failures
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await client.chatCompletion({
+        model: config.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You use succinct, plain language focused on accuracy and professionalism.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        maxTokens: config.maxTokens,
+        temperature: config.temperature,
+        returnCitations: true,
+      });
 
-  // Process the response to replace placeholders with links
-  const formattedContent = replacePlaceholders(response.content);
+      // Process the response to replace placeholders with links
+      const formattedContent = replacePlaceholders(response.content);
 
-  const result: GenreSummaryResult = {
-    content: formattedContent,
-    citations: response.citations,
-  };
+      const result: GenreSummaryResult = {
+        content: formattedContent,
+        citations: response.citations,
+      };
 
-  // Cache the result
-  await cache.set('genreSummary', [normalizedGenre], result);
+      // Cache the result (fire-and-forget, don't block on cache write)
+      cache.set('genreSummary', [normalizedGenre], result).catch(err => {
+        console.error(`[Genre Summary] Cache write failed for "${genreName}":`, err);
+      });
 
-  return result;
+      return result;
+    } catch (error) {
+      lastError = error as Error;
+      console.log(`[Genre Summary] Attempt ${attempt + 1} failed for "${genreName}":`, error);
+      if (attempt < 2) {
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed to generate genre summary');
 }

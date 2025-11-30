@@ -64,8 +64,9 @@ export function GenreDetailPage({ displayName }: GenreDetailProps) {
               enrichLinks('genre-summary');
             })
             .catch(function(e) {
-              console.error('Genre summary error:', e);
-              document.getElementById('genre-summary').innerHTML = '<p class="text-muted">Unable to load genre information. Please try again later.</p>';
+              console.error('Genre summary error:', e, 'Genre:', genreName);
+              var msg = e.message || 'Please try again later.';
+              document.getElementById('genre-summary').innerHTML = '<p class="text-muted">Unable to load genre information for "' + genreName + '". ' + msg + '</p>';
             });
         })();
       ` }} />

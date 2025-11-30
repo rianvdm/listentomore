@@ -339,8 +339,9 @@ app.get('/api/internal/genre-summary', async (c) => {
     const result = await ai.getGenreSummary(name);
     return c.json({ data: result });
   } catch (error) {
-    console.error('Internal genre summary error:', error);
-    return c.json({ error: 'Failed to generate genre summary' }, 500);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Internal genre summary error for "${name}":`, errorMessage);
+    return c.json({ error: `Failed to generate genre summary: ${errorMessage}` }, 500);
   }
 });
 

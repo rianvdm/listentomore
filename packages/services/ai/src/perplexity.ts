@@ -95,7 +95,8 @@ export class PerplexityClient {
       console.error(
         `[Perplexity] API error: ${response.status} - ${errorBody}`
       );
-      throw new Error(`Perplexity API error: ${response.statusText}`);
+      // Include status code in error for better debugging
+      throw new Error(`Perplexity API error ${response.status}: ${response.statusText} - ${errorBody.slice(0, 200)}`);
     }
 
     const data = (await response.json()) as {

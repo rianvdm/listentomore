@@ -125,8 +125,8 @@ export function ArtistDetailPage({
                 if (realGenres.length > 0) {
                   var genreHtml = '<strong>Genre:</strong> ';
                   genreHtml += realGenres.map(function(genre) {
-                    var slug = genre.toLowerCase().replace(/\\s+/g, '-');
-                    return '<a href="/genre/' + encodeURIComponent(slug) + '">' + genre + '</a>';
+                    var slug = genre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                    return '<a href="/genre/' + slug + '">' + genre + '</a>';
                   }).join(' | ');
                   document.getElementById('genre-section').innerHTML = genreHtml;
                 } else {
