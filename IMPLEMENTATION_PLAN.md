@@ -1,7 +1,7 @@
 # ListenToMore v2 - Implementation Plan
 
 > **For LLMs:** This is a rewrite of a music discovery website. The old app (my-music-next) used Next.js + 34 separate Cloudflare Workers. The new app consolidates everything into a single Hono-based Cloudflare Worker with shared service packages. Key points:
-> - **Current phase:** Phase 6 in progress. Nav/IA restructured. Next: User recommendations or Phase 7 features.
+> - **Current phase:** Phase 6 in progress. Home page now shows what registered users are listening to. Next: User recommendations or Phase 7 features.
 > - **Architecture:** Server-side rendering with progressive loading. Pages call services directly (no API keys needed). External `/api/*` endpoints require API key auth.
 > - **Progressive loading:** Album and artist detail pages load instantly with basic Spotify data (~0.3s), then stream in AI summary and additional data via client-side JS calling `/api/internal/*` endpoints.
 > - **Don't:** Create new workers, use client-side data fetching for pages (except progressive loading), or expose API keys to browser.
@@ -141,6 +141,8 @@ export function genreUrl(slug: string): string { return `/genre/${slug}`; }
 - [x] Privacy and Terms pages
 - [x] Restructure navigation (Artists | Albums | My Stats | About)
 - [x] Create `/stats` entry page (username input → redirects to `/u/:username`)
+- [x] Home page: Show "What we're listening to" (recent listens from registered users)
+- [x] Home page: Removed genre randomization and community searches
 - [ ] User recommendations at `/u/:username/recommendations`
 - [ ] User auth (future - pages remain public, auth just for convenience)
 

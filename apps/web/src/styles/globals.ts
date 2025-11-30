@@ -471,6 +471,14 @@ h4 {
   margin-top: 4px;
 }
 
+.track-subtitle {
+  font-size: 13px;
+  color: var(--c-accent);
+  opacity: 0.85;
+  margin-top: 4px;
+  font-style: italic;
+}
+
 /* Loading Spinner */
 .spinner {
   display: inline-block;

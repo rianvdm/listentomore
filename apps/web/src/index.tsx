@@ -2,7 +2,7 @@
 // Built with Hono on Cloudflare Workers
 
 import { Hono } from 'hono';
-import { SITE_CONFIG } from '@listentomore/config';
+import { SITE_CONFIG, CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { Database, ParsedApiKey } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
@@ -20,7 +20,6 @@ import {
   apiLoggingMiddleware,
 } from './middleware/auth';
 import { Layout } from './components/layout';
-import { TrackCard } from './components/ui';
 import { handleAlbumSearch } from './pages/album/search';
 import { handleAlbumDetail } from './pages/album/detail';
 import { handleArtistSearch } from './pages/artist/search';
@@ -149,32 +148,15 @@ app.get('/health', (c) => {
 // Home page - matches original my-music-next structure
 app.get('/', async (c) => {
   const ai = c.get('ai');
-  const db = c.get('db');
 
   // Get day greeting (e.g., "Happy Friday, friend!")
   const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
 
-  // Random genre for exploration link
-  const genres = ['rock', 'jazz', 'hip-hop', 'electronic', 'classical', 'indie', 'metal', 'soul', 'punk', 'folk'];
-  const randomGenre = genres[Math.floor(Math.random() * genres.length)];
-  const displayGenre = randomGenre.charAt(0).toUpperCase() + randomGenre.slice(1);
-
-  // Fetch random fact (cached hourly) and recent searches in parallel
-  const [randomFact, recentSearchesResult] = await Promise.all([
-    ai.getRandomFact().catch(() => null),
-    db.getRecentSearches(6).catch(() => []),
-  ]);
-
-  const recentSearches = recentSearchesResult.map(s => ({
-    id: s.spotify_id,
-    name: s.album_name,
-    artist: s.artist_name,
-    image: s.image_url || undefined,
-  }));
+  // Fetch random fact (cached hourly)
+  const randomFact = await ai.getRandomFact().catch(() => null);
 
   return c.html(
     <Layout title="Home" description="Discover music, explore albums, and track your listening habits">
-      {/* Day Greeting */}
       <header>
         <h1>Happy {dayName}, friend!</h1>
       </header>
@@ -183,15 +165,12 @@ app.get('/', async (c) => {
         {/* Welcome Section */}
         <section id="lastfm-stats">
           <p>
-            ✨ Welcome, music traveler. Want to explore the history and seminal albums of a genre like{' '}
-            <strong><a href={`/genre/${randomGenre}`}>{displayGenre}</a></strong>?
-            Or check out your <strong><a href="/stats">listening stats</a></strong>.
+            Welcome, music traveler.{randomFact?.fact ? ` ${randomFact.fact}` : ''}
           </p>
-          {randomFact?.fact && <p>🧠 {randomFact.fact}</p>}
         </section>
 
         {/* Album Search */}
-        <h2 style={{ marginBottom: 0, marginTop: '2em' }}>💿 Learn more about an album</h2>
+        <h2 style={{ marginBottom: 0, marginTop: '2em' }}>Learn more about an album</h2>
         <form id="search-form" action="/album" method="get">
           <input
             type="text"
@@ -203,29 +182,60 @@ app.get('/', async (c) => {
           <button type="submit" class="button">Search</button>
         </form>
 
-        {/* Recent Community Searches */}
-        <h2>👀 From the community</h2>
-        <p style={{ textAlign: 'center' }}>
-          <strong>
-            Here are some albums that <a href="/about">Discord Bot</a> users recently shared with their friends.
-          </strong>
-        </p>
-
-        {recentSearches.length > 0 ? (
-          <div class="track-grid">
-            {recentSearches.map((album) => (
-              <TrackCard
-                key={album.id}
-                artist={album.artist}
-                name={album.name}
-                imageUrl={album.image}
-                href={`/album/${album.id}`}
-              />
-            ))}
+        {/* Recently Listened by Users - Progressive Loading */}
+        <h2>What we're listening to</h2>
+        <div id="user-listens-container">
+          <div class="loading-container">
+            <span class="spinner">↻</span>
+            <span class="loading-text">Loading...</span>
           </div>
-        ) : (
-          <p class="text-center text-muted">No recent searches yet.</p>
-        )}
+        </div>
+
+        {/* Progressive loading script */}
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              fetch('/api/internal/user-listens')
+                .then(function(res) { return res.json(); })
+                .then(function(result) {
+                  var container = document.getElementById('user-listens-container');
+                  if (!container) return;
+
+                  if (result.error || !result.data || result.data.length === 0) {
+                    container.innerHTML = '<p class="text-center text-muted">No recent listens available.</p>';
+                    return;
+                  }
+
+                  var html = '<div class="track-grid">';
+                  result.data.forEach(function(listen) {
+                    var subtitle = listen.nowPlaying
+                      ? listen.username + ' is listening now'
+                      : listen.username;
+                    var albumName = listen.album || listen.track;
+                    html += '<a href="/u/' + listen.username + '">';
+                    html += '<div class="track">';
+                    if (listen.image) {
+                      html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" class="track-image" loading="lazy"/>';
+                    }
+                    html += '<div class="track-content">';
+                    html += '<p class="track-artist">' + listen.artist + '</p>';
+                    html += '<p class="track-name">' + albumName + '</p>';
+                    html += '<p class="track-subtitle">' + subtitle + '</p>';
+                    html += '</div></div></a>';
+                  });
+                  html += '</div>';
+                  container.innerHTML = html;
+                })
+                .catch(function(err) {
+                  console.error('Failed to load user listens:', err);
+                  var container = document.getElementById('user-listens-container');
+                  if (container) {
+                    container.innerHTML = '<p class="text-center text-muted">Failed to load recent listens.</p>';
+                  }
+                });
+            })();
+          `
+        }} />
       </main>
     </Layout>
   );
@@ -366,6 +376,74 @@ app.get('/api/internal/search', async (c) => {
   } catch (error) {
     console.error('Internal search error:', error);
     return c.json({ error: 'Search failed' }, 500);
+  }
+});
+
+app.get('/api/internal/user-listens', async (c) => {
+  const CACHE_KEY = 'user-listens:recent';
+  const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userListens);
+  const MAX_RESULTS = 6;
+
+  try {
+    // Check KV cache first
+    const cached = await c.env.CACHE.get(CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      return c.json({ data: data.slice(0, MAX_RESULTS), cached: true });
+    }
+
+    // Cache miss - fetch from all users
+    const db = c.get('db');
+    const users = await db.getAllUsersWithLastfm();
+
+    // Fetch most recent track for each user in parallel
+    const userTracks = await Promise.all(
+      users.map(async (user) => {
+        if (!user.lastfm_username) return null;
+        try {
+          const userLastfm = new LastfmService({
+            apiKey: c.env.LASTFM_API_KEY,
+            username: user.lastfm_username,
+          });
+          const track = await userLastfm.getMostRecentTrack();
+          if (track) {
+            return {
+              username: user.username || user.lastfm_username,
+              artist: track.artist,
+              album: track.album,
+              track: track.name,
+              image: track.image,
+              playedAt: track.playedAt,
+              nowPlaying: track.nowPlaying,
+            };
+          }
+        } catch (error) {
+          console.error(`Failed to fetch recent track for ${user.lastfm_username}:`, error);
+        }
+        return null;
+      })
+    );
+
+    // Filter out nulls and sort by recency (now playing first, then by playedAt)
+    const validTracks = userTracks.filter((t): t is NonNullable<typeof t> => t !== null);
+    validTracks.sort((a, b) => {
+      if (a.nowPlaying && !b.nowPlaying) return -1;
+      if (!a.nowPlaying && b.nowPlaying) return 1;
+      if (!a.playedAt && !b.playedAt) return 0;
+      if (!a.playedAt) return 1;
+      if (!b.playedAt) return -1;
+      return new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime();
+    });
+
+    // Cache the full sorted list (we may want more than 6 later)
+    await c.env.CACHE.put(CACHE_KEY, JSON.stringify(validTracks), {
+      expirationTtl: CACHE_TTL_SECONDS,
+    });
+
+    return c.json({ data: validTracks.slice(0, MAX_RESULTS), cached: false });
+  } catch (error) {
+    console.error('Internal user-listens error:', error);
+    return c.json({ error: 'Failed to fetch user listens' }, 500);
   }
 });
 

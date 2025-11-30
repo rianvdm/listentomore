@@ -23,6 +23,7 @@ export const CACHE_CONFIG = {
     topArtists: { ttlHours: 1 },
     recentTracks: { ttlMinutes: 0 }, // No caching - always live
     lovedTracks: { ttlHours: 1 },
+    userListens: { ttlMinutes: 2 }, // Aggregated recent listens for home page
   },
 
   discogs: {

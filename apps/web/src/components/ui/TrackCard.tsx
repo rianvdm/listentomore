@@ -7,6 +7,7 @@ interface TrackCardProps {
   album?: string;
   playcount?: number;
   href?: string;
+  subtitle?: string;
 }
 
 export function TrackCard({
@@ -16,6 +17,7 @@ export function TrackCard({
   album,
   playcount,
   href,
+  subtitle,
 }: TrackCardProps) {
   const content = (
     <div class="track">
@@ -34,6 +36,7 @@ export function TrackCard({
         {playcount !== undefined && (
           <p class="track-playcount">{playcount.toLocaleString()} plays</p>
         )}
+        {subtitle && <p class="track-subtitle">{subtitle}</p>}
       </div>
     </div>
   );
