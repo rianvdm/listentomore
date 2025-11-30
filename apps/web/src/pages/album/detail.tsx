@@ -119,10 +119,10 @@ export function AlbumDetailPage({ album, aiSummary, streamingLinks, error }: Alb
             </div>
           </div>
 
-          {/* AI Summary */}
+          {/* AI Summary - renders markdown as HTML */}
           {aiSummary?.text && (
-            <div>
-              <p>{aiSummary.text}</p>
+            <div class="ai-summary">
+              <div dangerouslySetInnerHTML={{ __html: formatMarkdown(aiSummary.text) }} />
               {aiSummary.citations && aiSummary.citations.length > 0 && (
                 <div class="citations" style={{ marginTop: '1rem' }}>
                   <h4>Sources</h4>
@@ -152,6 +152,24 @@ export function AlbumDetailPage({ album, aiSummary, streamingLinks, error }: Alb
       </main>
     </Layout>
   );
+}
+
+// Simple markdown to HTML converter
+function formatMarkdown(text: string): string {
+  return text
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h4>$1</h4>')
+    // Bold and italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Paragraphs (double newlines)
+    .replace(/\n\n/g, '</p><p>')
+    // Single newlines to <br>
+    .replace(/\n/g, '<br/>')
+    // Wrap in paragraph tags
+    .replace(/^(.+)$/, '<p>$1</p>');
 }
 
 // Route handler
@@ -193,43 +211,32 @@ export async function handleAlbumDetail(c: Context) {
       songlink.getLinks(album.spotifyUrl).catch(() => null),
     ]);
 
-    // Format streaming links
+    // Format streaming links from Songlink service
+    // SonglinkService returns StreamingLinks with appleUrl, youtubeUrl, etc.
     const streamingLinks: StreamingLink[] = [];
-    if (songlinkData?.linksByPlatform) {
-      const platformNames: Record<string, string> = {
-        spotify: 'Spotify',
-        appleMusic: 'Apple Music',
-        youtube: 'YouTube',
-        amazonMusic: 'Amazon Music',
-        tidal: 'Tidal',
-        deezer: 'Deezer',
-      };
 
-      // Add Spotify first (from our album data)
-      streamingLinks.push({ platform: 'Spotify', url: album.spotifyUrl });
+    // Always add Spotify first
+    streamingLinks.push({ platform: 'Spotify', url: album.spotifyUrl });
 
-      for (const [platform, data] of Object.entries(songlinkData.linksByPlatform)) {
-        if (platform !== 'spotify' && platformNames[platform] && data?.url) {
-          streamingLinks.push({
-            platform: platformNames[platform],
-            url: data.url,
-          });
-        }
+    if (songlinkData) {
+      if (songlinkData.appleUrl) {
+        streamingLinks.push({ platform: 'Apple Music', url: songlinkData.appleUrl });
       }
-
-      // Add Songlink page
+      if (songlinkData.youtubeUrl) {
+        streamingLinks.push({ platform: 'YouTube', url: songlinkData.youtubeUrl });
+      }
+      if (songlinkData.deezerUrl) {
+        streamingLinks.push({ platform: 'Deezer', url: songlinkData.deezerUrl });
+      }
       if (songlinkData.pageUrl) {
         streamingLinks.push({ platform: 'Songlink', url: songlinkData.pageUrl });
       }
-    } else {
-      // Fallback to just Spotify
-      streamingLinks.push({ platform: 'Spotify', url: album.spotifyUrl });
     }
 
     return c.html(
       <AlbumDetailPage
         album={album}
-        aiSummary={aiSummary ? { text: aiSummary.text, citations: aiSummary.citations } : undefined}
+        aiSummary={aiSummary ? { text: aiSummary.content, citations: aiSummary.citations } : undefined}
         streamingLinks={streamingLinks}
       />
     );
