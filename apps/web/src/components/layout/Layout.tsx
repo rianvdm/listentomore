@@ -36,6 +36,9 @@ export function Layout({ children, title, description, image, url }: LayoutProps
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content={SITE_CONFIG.name} />
         <meta property="og:image" content={ogImage} />
+        <meta property="og:image:width" content="640" />
+        <meta property="og:image:height" content="640" />
+        <meta property="og:image:type" content="image/jpeg" />
         {url && <meta property="og:url" content={url} />}
 
         {/* Twitter Card */}
