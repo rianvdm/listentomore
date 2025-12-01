@@ -56,6 +56,9 @@ export function Layout({ children, title, description, image, url }: LayoutProps
         {/* Global Styles */}
         <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
 
+        {/* Markdown parser for AI summaries */}
+        <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+
         {/* Theme Script - runs before render to prevent flash */}
         <script
           dangerouslySetInnerHTML={{

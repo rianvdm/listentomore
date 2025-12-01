@@ -195,6 +195,7 @@ app.get('/', async (c) => {
 
         {/* Recently Listened by Users - Progressive Loading */}
         <h2>What we're listening to</h2>
+        <p class="text-muted text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>Updates every 10 minutes</p>
         <div id="user-listens-container">
           <div class="loading-container">
             <span class="spinner">↻</span>

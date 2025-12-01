@@ -108,7 +108,8 @@ export class PerplexityClient {
 
     // Clean up citation markers like [1], [2], [1][2], etc.
     // These are inline and we return the full citations array separately
-    content = content.replace(/[\[【]\d+[\]】]\s*/g, '');
+    // Only remove trailing spaces (not newlines) to preserve paragraph breaks
+    content = content.replace(/[\[【]\d+[\]】] */g, '');
     // Also clean up markdown-style citation links
     content = content.replace(/\(?\[([^\]]+)\]\([^)]+\)\)?/g, '$1');
 

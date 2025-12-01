@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import type { SpotifyService } from '@listentomore/spotify';
-import { formatMarkdownScript, enrichLinksScript, renderCitationsScript } from '../../utils/client-scripts';
+import { enrichLinksScript, renderCitationsScript } from '../../utils/client-scripts';
 
 interface ArtistData {
   id: string;
@@ -99,7 +99,6 @@ export function ArtistDetailPage({
 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
-        ${formatMarkdownScript}
         ${enrichLinksScript}
         ${renderCitationsScript}
 
@@ -236,7 +235,7 @@ export function ArtistDetailPage({
               var summary = data.data;
               var text = summary.text || summary.summary || '';
               var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
-              html += '<div>' + formatMarkdown(text) + '</div>';
+              html += '<div>' + marked.parse(text) + '</div>';
               html += renderCitations(summary.citations);
 
               document.getElementById('ai-summary').innerHTML = html;

@@ -1,68 +1,7 @@
 // Shared client-side JavaScript utilities
 // These are exported as strings to be included in inline <script> tags
-
-/**
- * formatMarkdown - Converts markdown text to HTML
- * Handles: headers, bold, italic, links, bullet points, paragraphs
- */
-export const formatMarkdownScript = `
-function formatMarkdown(text) {
-  if (!text) return '';
-
-  var result = text
-    // Headers (must be before other processing)
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h4>$1</h4>')
-    // Convert listentomore.com artist URLs to local search
-    .replace(/\\[([^\\]]+)\\]\\(https:\\/\\/listentomore\\.com\\/artist\\/[^)]+\\)/g, function(match, name) {
-      return '[' + name + '](/artist?q=' + encodeURIComponent(name) + ')';
-    })
-    // Convert listentomore.com album URLs to local search
-    .replace(/\\[([^\\]]+)\\]\\(https:\\/\\/listentomore\\.com\\/album\\/[^)]+\\)/g, function(match, name) {
-      return '[' + name + '](/album?q=' + encodeURIComponent(name) + ')';
-    })
-    // Markdown links [text](url)
-    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, linkText, url) {
-      if (url.startsWith('/')) {
-        return '<a href="' + url + '">' + linkText + '</a>';
-      }
-      return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + linkText + '</a>';
-    })
-    // Bullet points: - text (must be before bold/italic to preserve content)
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    // Bold + italic
-    .replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>')
-    // Bold
-    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-    // Italic - single asterisks (after bold is processed, only italic remains)
-    .replace(/\\*([^*\\n]+)\\*/g, '<em>$1</em>')
-    // Wrap consecutive <li> in <ul>
-    .replace(/(<li>[\\s\\S]*?<\\/li>\\n?)+/g, function(match) {
-      return '<ul>' + match.replace(/\\n/g, '') + '</ul>';
-    })
-    // Double newlines = new paragraph
-    .replace(/\\n\\n/g, '</p><p>')
-    // Single newlines = line break
-    .replace(/\\n/g, '<br/>');
-
-  // Wrap in paragraph tags
-  result = '<p>' + result + '</p>';
-
-  // Clean up empty paragraphs and formatting artifacts
-  result = result
-    .replace(/<p><h([34])>/g, '<h$1>')
-    .replace(/<\\/h([34])><\\/p>/g, '</h$1>')
-    .replace(/<p><ul>/g, '<ul>')
-    .replace(/<\\/ul><\\/p>/g, '</ul>')
-    .replace(/<p><\\/p>/g, '')
-    .replace(/<br\\/><ul>/g, '</p><ul>')
-    .replace(/<\\/ul><br\\/>/g, '</ul><p>')
-    .replace(/<p><br\\/>/g, '<p>')
-    .replace(/<br\\/><\\/p>/g, '</p>');
-
-  return result;
-}
 `;
+// Note: Markdown parsing is handled by the 'marked' library loaded via CDN in Layout.tsx
 
 /**
  * enrichLinks - Enriches search links with Spotify IDs for direct navigation
@@ -183,4 +122,4 @@ function enrichAlbumMentions(containerId) {
 /**
  * Combined utility scripts - include all common functions
  */
-export const clientUtilsScript = formatMarkdownScript + enrichLinksScript + renderCitationsScript + enrichAlbumMentionsScript;
+export const clientUtilsScript = enrichLinksScript + renderCitationsScript + enrichAlbumMentionsScript;
