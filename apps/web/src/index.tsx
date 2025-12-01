@@ -805,8 +805,16 @@ app.get('/api/spotify/artist/:id', async (c) => {
 
 // Last.fm API routes
 app.get('/api/lastfm/recent', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing required parameter: username' }, 400);
+  }
   try {
-    const lastfm = c.get('lastfm');
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username,
+      cache: c.env.CACHE,
+    });
     const tracks = await lastfm.recentTracks.getRecentTracks(10);
     return c.json({ data: tracks });
   } catch (error) {
@@ -816,8 +824,16 @@ app.get('/api/lastfm/recent', async (c) => {
 });
 
 app.get('/api/lastfm/top-albums', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing required parameter: username' }, 400);
+  }
   try {
-    const lastfm = c.get('lastfm');
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username,
+      cache: c.env.CACHE,
+    });
     const period = (c.req.query('period') as '7day' | '1month' | '3month' | '6month' | '12month' | 'overall') || '1month';
     const albums = await lastfm.getTopAlbums(period, 6);
     return c.json({ data: albums });
@@ -828,8 +844,16 @@ app.get('/api/lastfm/top-albums', async (c) => {
 });
 
 app.get('/api/lastfm/top-artists', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing required parameter: username' }, 400);
+  }
   try {
-    const lastfm = c.get('lastfm');
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username,
+      cache: c.env.CACHE,
+    });
     const period = (c.req.query('period') as '7day' | '1month' | '3month' | '6month' | '12month' | 'overall') || '7day';
     const artists = await lastfm.getTopArtists(period, 6);
     return c.json({ data: artists });
@@ -840,8 +864,16 @@ app.get('/api/lastfm/top-artists', async (c) => {
 });
 
 app.get('/api/lastfm/loved', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing required parameter: username' }, 400);
+  }
   try {
-    const lastfm = c.get('lastfm');
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username,
+      cache: c.env.CACHE,
+    });
     const tracks = await lastfm.getLovedTracks(10);
     return c.json({ data: tracks });
   } catch (error) {

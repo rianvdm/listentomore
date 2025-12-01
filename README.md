@@ -78,11 +78,11 @@ The platform exposes a REST API that requires authentication. All requests must 
 - `GET /api/spotify/album/:id` - Get album details
 - `GET /api/spotify/artist/:id` - Get artist details
 
-**Last.fm**
-- `GET /api/lastfm/recent` - Recent tracks
-- `GET /api/lastfm/top-albums?period=:period` - Top albums
-- `GET /api/lastfm/top-artists?period=:period` - Top artists
-- `GET /api/lastfm/loved` - Loved tracks
+**Last.fm** (all require `username` parameter)
+- `GET /api/lastfm/recent?username=:username` - Recent tracks
+- `GET /api/lastfm/top-albums?username=:username&period=:period` - Top albums
+- `GET /api/lastfm/top-artists?username=:username&period=:period` - Top artists
+- `GET /api/lastfm/loved?username=:username` - Loved tracks
 
 **AI**
 - `GET /api/ai/artist-summary?name=:name` - AI-generated artist summary
