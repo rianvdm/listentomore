@@ -78,7 +78,7 @@ export async function generateAndStoreFact(
   const decade = randomChoice(DECADES);
   const focus = randomChoice(FOCUSES);
 
-  const prompt = `Give me an interesting, verifiable fact about a ${genre} ${unit} from the ${decade}, focusing on ${focus}. Use two sentences or less, and start with the phrase "Did you know". Use plain text with no Markdown formatting. Critical instruction: Responses MUST be less than 300 characters in total length.`;
+  const prompt = `Give me an interesting, verifiable fact about a ${genre} ${unit} from the ${decade}, focusing on ${focus}. Use two sentences or less, and start with the phrase "Did you know". Use plain text with no Markdown formatting. Critical instruction: Responses MUST be less than 300 characters in total length. Don't ask me questions about this prompt, just execute it and provide the fact. You don't need to search the web.`;
 
   const response = await client.chatCompletion({
     model: config.model,
