@@ -53,6 +53,12 @@ export function Layout({ children, title, description, image, url }: LayoutProps
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
 
+        {/* PWA */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#1DB954" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
         {/* Global Styles */}
         <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
 
