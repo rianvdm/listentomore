@@ -55,7 +55,7 @@ export async function generateArtistSummary(
 
 Use Markdown formatting for the summary. Do NOT use bullet points.
 
-If no verifiable facts are available for the artist, simply state "I don't have any additional information about this artist." Nothing else.`;
+IMPORTANT: If you cannot find sufficient verifiable information about this artist, respond with ONLY the text "Not enough information available for this artist." and nothing else. Do not explain what you couldn't find or apologize.`;
 
   const response = await client.chatCompletion({
     model: config.model,

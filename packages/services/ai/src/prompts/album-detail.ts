@@ -33,13 +33,15 @@ export async function generateAlbumDetail(
 
   const config = AI_TASKS.albumDetail;
 
-  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary and of the album's critical reception (if available), with examples/quotes.
+  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes.
 
 Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.
 
 You MUST attempt to find at least 5 sources from web searches.
 
-Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").`;
+Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").
+
+IMPORTANT: If you cannot find sufficient information about this album to write a meaningful summary, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
 
   const response = await client.chatCompletion({
     model: config.model,

@@ -78,7 +78,7 @@ Enclose artist names in double square brackets like [[Artist Name]] and album na
 
 Use Markdown formatting for the summary. Do NOT start with a preamble or end with follow-up suggestions.
 
-If you cannot find verifiable information about this specific music genre, respond only with: "I don't have any information about this genre."`;
+IMPORTANT: If you cannot find sufficient verifiable information about this music genre, respond with ONLY the text "Not enough information available for this genre." and nothing else. Do not explain what you couldn't find or apologize.`;
 
 
 
