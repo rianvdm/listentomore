@@ -64,13 +64,12 @@ listentomore/
 
 ## API
 
-The platform exposes a REST API with tiered rate limiting:
+The platform exposes a REST API that requires authentication. All requests must include an `X-API-Key` header.
 
-| Tier | Rate Limit | Access |
-|------|------------|--------|
-| Public | 10 req/min | Unauthenticated |
-| Standard | 60 req/min | API key required |
-| Premium | 300 req/min | API key required |
+| Tier | Rate Limit |
+|------|------------|
+| Standard | 60 req/min |
+| Premium | 300 req/min |
 
 ### Endpoints
 
