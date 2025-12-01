@@ -43,7 +43,7 @@ routes = [
 
 # Scheduled triggers (CRON jobs)
 [triggers]
-crons = ["0 * * * *"]  # Run every hour at minute 0
+crons = ["*/10 * * * *"]  # Run every 10 minutes (random fact only at top of hour)
 
 # Note: Secrets should be set with `wrangler secret put`:
 # - SPOTIFY_CLIENT_ID

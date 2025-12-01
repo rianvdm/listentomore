@@ -1029,27 +1029,86 @@ app.notFound((c) => {
   );
 });
 
-// Scheduled handler for CRON jobs
+// Scheduled handler for CRON jobs (runs every 10 minutes)
 async function scheduled(
   _event: ScheduledEvent,
   env: Bindings,
   _ctx: ExecutionContext
 ): Promise<void> {
-  console.log(`[CRON] Running scheduled task at ${new Date().toISOString()}`);
+  const now = new Date();
+  const minute = now.getMinutes();
+  console.log(`[CRON] Running scheduled task at ${now.toISOString()}`);
 
-  // Initialize AI service for CRON
-  const ai = new AIService({
-    openaiApiKey: env.OPENAI_API_KEY,
-    perplexityApiKey: env.PERPLEXITY_API_KEY,
-    cache: env.CACHE,
-  });
+  // Generate random fact only at the top of the hour (minute 0-9)
+  // This avoids expensive OpenAI calls every 10 minutes
+  if (minute < 10) {
+    const ai = new AIService({
+      openaiApiKey: env.OPENAI_API_KEY,
+      perplexityApiKey: env.PERPLEXITY_API_KEY,
+      cache: env.CACHE,
+    });
 
-  // Generate and store a new random fact
+    try {
+      const result = await ai.generateAndStoreRandomFact();
+      console.log(`[CRON] Generated new fact: ${result.fact.substring(0, 50)}...`);
+    } catch (error) {
+      console.error('[CRON] Failed to generate random fact:', error);
+    }
+  }
+
+  // Pre-warm user listens cache (runs every 10 minutes)
   try {
-    const result = await ai.generateAndStoreRandomFact();
-    console.log(`[CRON] Generated new fact: ${result.fact.substring(0, 50)}...`);
+    const db = new Database(env.DB);
+    const users = await db.getAllUsersWithLastfm();
+
+    const userTracks = await Promise.all(
+      users.map(async (user) => {
+        if (!user.lastfm_username) return null;
+        try {
+          const userLastfm = new LastfmService({
+            apiKey: env.LASTFM_API_KEY,
+            username: user.lastfm_username,
+          });
+          const track = await userLastfm.getMostRecentTrack();
+          if (track) {
+            return {
+              username: user.username || user.lastfm_username,
+              artist: track.artist,
+              album: track.album,
+              track: track.name,
+              image: track.image,
+              playedAt: track.playedAt,
+              nowPlaying: track.nowPlaying,
+            };
+          }
+        } catch (error) {
+          console.error(`[CRON] Failed to fetch recent track for ${user.lastfm_username}:`, error);
+        }
+        return null;
+      })
+    );
+
+    // Filter and sort
+    const validTracks = userTracks.filter((t): t is NonNullable<typeof t> => t !== null);
+    validTracks.sort((a, b) => {
+      if (a.nowPlaying && !b.nowPlaying) return -1;
+      if (!a.nowPlaying && b.nowPlaying) return 1;
+      if (!a.playedAt && !b.playedAt) return 0;
+      if (!a.playedAt) return 1;
+      if (!b.playedAt) return -1;
+      return new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime();
+    });
+
+    // Cache with 12-minute TTL (cron runs every 10 min, gives 2 min overlap)
+    const CACHE_KEY = 'user-listens:recent';
+    const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userListens);
+    await env.CACHE.put(CACHE_KEY, JSON.stringify(validTracks), {
+      expirationTtl: CACHE_TTL_SECONDS,
+    });
+
+    console.log(`[CRON] Pre-warmed user listens cache with ${validTracks.length} tracks`);
   } catch (error) {
-    console.error('[CRON] Failed to generate random fact:', error);
+    console.error('[CRON] Failed to pre-warm user listens cache:', error);
   }
 }
 
