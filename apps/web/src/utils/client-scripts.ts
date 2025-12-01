@@ -1,6 +1,5 @@
 // Shared client-side JavaScript utilities
 // These are exported as strings to be included in inline <script> tags
-`;
 // Note: Markdown parsing is handled by the 'marked' library loaded via CDN in Layout.tsx
 
 /**
