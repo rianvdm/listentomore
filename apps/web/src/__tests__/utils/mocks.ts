@@ -69,7 +69,7 @@ export function setupFetchMock(handlers: Array<{ pattern: RegExp | string; respo
     return mockFetchResponse({ error: 'Not found' }, { status: 404, ok: false });
   });
 
-  global.fetch = mockFetch;
+  globalThis.fetch = mockFetch;
   return mockFetch;
 }
 

@@ -1,14 +1,20 @@
 // Album page handler tests
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { handleAlbumSearch } from '../../pages/album/search';
 
+// Define minimal types for test context
+type TestVariables = {
+  spotify: unknown;
+  db: unknown;
+};
+
 describe('Album Handlers', () => {
-  let app: Hono;
+  let app: Hono<{ Variables: TestVariables }>;
 
   beforeEach(() => {
-    app = new Hono();
+    app = new Hono<{ Variables: TestVariables }>();
 
     // Set up middleware to inject mock services
     app.use('*', async (c, next) => {

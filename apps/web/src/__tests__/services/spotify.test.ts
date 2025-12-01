@@ -59,7 +59,7 @@ describe('SpotifyAlbums', () => {
       const result = await albums.getAlbum('4LH4d3cOWNNsVw41Gqt2kv');
 
       expect(result.name).toBe('In Rainbows (cached)');
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
     it('throws error for non-existent album', async () => {
@@ -82,7 +82,7 @@ describe('SpotifyAlbums', () => {
       const results = await albums.getAlbums(['id1', 'id2']);
 
       expect(results).toHaveLength(2);
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     });
   });
 });
@@ -124,7 +124,7 @@ describe('SpotifyArtists', () => {
       const result = await artists.getArtist('4Z8W4fKeB5YxbusRsdQVPb');
 
       expect(result.name).toBe('Radiohead (cached)');
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
     it('throws error for non-existent artist', async () => {

@@ -194,6 +194,6 @@ describe('generateArtistSummary', () => {
     const result = await generateArtistSummary('Radiohead', mockClient, cache);
 
     expect(result).toEqual(cachedResult);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

@@ -1,8 +1,8 @@
 // Global test setup
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 
 // Mock fetch globally
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn() as typeof fetch;
 
 // Reset mocks between tests
 beforeEach(() => {

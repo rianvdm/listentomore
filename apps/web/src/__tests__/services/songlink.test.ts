@@ -69,7 +69,7 @@ describe('SonglinkService', () => {
       const result = await songlink.getLinks('https://open.spotify.com/track/abc123');
 
       expect(result.pageUrl).toBe('https://song.link/cached');
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
     it('falls back to youtube when youtubeMusic not available', async () => {

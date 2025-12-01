@@ -1,7 +1,7 @@
 // Main entry point for the Listen To More web application
 // Built with Hono on Cloudflare Workers
 
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { SITE_CONFIG, CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { Database, ParsedApiKey } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';

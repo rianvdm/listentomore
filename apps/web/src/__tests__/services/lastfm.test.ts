@@ -184,7 +184,7 @@ describe('TopAlbums', () => {
       const result = await topAlbums.getTopAlbums();
 
       expect(result).toEqual(cachedAlbums);
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
     it('uses backup image when no image available', async () => {
@@ -249,7 +249,7 @@ describe('TopArtists', () => {
 
     it('fetches top artists with details', async () => {
       const mockFetch = vi.fn();
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       // First call: gettopartists
       mockFetch.mockResolvedValueOnce({
