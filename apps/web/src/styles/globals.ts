@@ -32,6 +32,8 @@ html {
   font-family: Optima, Candara, 'Noto Sans', source-sans-pro, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
