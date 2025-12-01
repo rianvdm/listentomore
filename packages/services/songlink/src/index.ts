@@ -53,6 +53,7 @@ export class SonglinkService {
       return cached;
     }
 
+    const startTime = Date.now();
     console.log(`[Songlink] Fetching ${streamingUrl}`);
     const encodedUrl = encodeURIComponent(streamingUrl);
 
@@ -60,13 +61,18 @@ export class SonglinkService {
     try {
       response = await fetch(`${SONGLINK_API_BASE}?url=${encodedUrl}`);
     } catch (fetchError) {
-      console.error(`[Songlink] Fetch failed for ${streamingUrl}:`, fetchError);
+      const duration = Date.now() - startTime;
+      console.error(`[Songlink] Fetch failed for ${streamingUrl} (${duration}ms):`, fetchError);
       throw fetchError;
     }
 
+    const duration = Date.now() - startTime;
+    const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+    const rateLimitReset = response.headers.get('x-ratelimit-reset');
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Songlink] API error ${response.status} for ${streamingUrl}: ${errorText}`);
+      console.error(`[Songlink] API error ${response.status} for ${streamingUrl} (${duration}ms): ${errorText}${rateLimitRemaining ? ` | Rate limit: ${rateLimitRemaining} remaining` : ''}${rateLimitReset ? `, resets ${rateLimitReset}` : ''}`);
 
       // On rate limit or other errors, return partial data with just the original URL
       if (response.status === 429 || response.status >= 500) {
@@ -109,6 +115,11 @@ export class SonglinkService {
       thumbnailUrl: entity?.thumbnailUrl || null,
       type: (entity?.type as MediaType) || 'unknown',
     };
+
+    // Count platforms found
+    const platformCount = [links.appleUrl, links.youtubeUrl, links.deezerUrl, links.spotifyUrl, links.tidalUrl]
+      .filter(Boolean).length;
+    console.log(`[Songlink] Success for "${links.title}" by ${links.artistName} (${duration}ms) | ${platformCount} platforms${rateLimitRemaining ? ` | Rate limit: ${rateLimitRemaining} remaining` : ''}`);
 
     // Cache results
     await this.cache.put(cacheKey, JSON.stringify(links), {
