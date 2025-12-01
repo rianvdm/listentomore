@@ -8,16 +8,6 @@ export interface ArtistSentenceResult {
   sentence: string;
 }
 
-/**
- * Clean up citation artifacts from the response
- */
-function cleanResponse(text: string): string {
-  // Remove citation markers like [1], [2], 【1】, etc.
-  let cleaned = text.replace(/[\[【]\d+[\]】]\s*/g, '');
-  // Remove markdown-style citation links
-  cleaned = cleaned.replace(/\(?\[([^\]]+)\]\([^)]+\)\)?/g, '$1');
-  return cleaned.trim();
-}
 
 /**
  * Generate a short artist description using Perplexity
@@ -67,7 +57,7 @@ CRITICAL REQUIREMENTS:
   });
 
   const result: ArtistSentenceResult = {
-    sentence: cleanResponse(response.content),
+    sentence: response.content.trim(),
   };
 
   // Cache the result

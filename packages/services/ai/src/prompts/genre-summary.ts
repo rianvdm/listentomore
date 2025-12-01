@@ -40,8 +40,8 @@ function replacePlaceholders(content: string): string {
     return `[${artist}](/artist?q=${query})`;
   });
 
-  // Fix missing spaces after periods (Perplexity quirk)
-  result = result.replace(/\.([A-Z])/g, '. $1');
+  // Fix missing spaces before placeholder markers (capital letters handled in perplexity.ts)
+  result = result.replace(/\.(\[{1,2}|\{{1,2})/g, '. $1');
 
   return result;
 }

@@ -112,6 +112,8 @@ export class PerplexityClient {
     content = content.replace(/[\[【]\d+[\]】] */g, '');
     // Also clean up markdown-style citation links
     content = content.replace(/\(?\[([^\]]+)\]\([^)]+\)\)?/g, '$1');
+    // Fix missing spaces after periods (citation removal can leave ".The" instead of ". The")
+    content = content.replace(/\.([A-Z])/g, '. $1');
 
     return {
       content,

@@ -27,6 +27,9 @@ function replacePlaceholders(summary: string, artistName: string): string {
     return `[${album}](/album?q=${query})`;
   });
 
+  // Fix missing spaces before placeholder markers (capital letters handled in perplexity.ts)
+  result = result.replace(/\.(\[{1,2}|\{{1,2})/g, '. $1');
+
   return result;
 }
 
