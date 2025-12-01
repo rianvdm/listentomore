@@ -7,6 +7,7 @@ import { Database, ParsedApiKey } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { SonglinkService } from '@listentomore/songlink';
+import { StreamingLinksService } from '@listentomore/streaming-links';
 import { AIService } from '@listentomore/ai';
 import {
   corsMiddleware,
@@ -48,6 +49,7 @@ type Bindings = {
   LASTFM_USERNAME: string;
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
+  YOUTUBE_API_KEY?: string;
   ENVIRONMENT?: string;
   ADMIN_SECRET?: string;
 };
@@ -58,6 +60,7 @@ type Variables = {
   spotify: SpotifyService;
   lastfm: LastfmService;
   songlink: SonglinkService;
+  streamingLinks: StreamingLinksService;
   ai: AIService;
   // Auth context
   apiKey: ParsedApiKey | null;
@@ -105,6 +108,13 @@ app.use('*', async (c, next) => {
   );
 
   c.set('songlink', new SonglinkService(c.env.CACHE));
+
+  c.set(
+    'streamingLinks',
+    new StreamingLinksService(c.env.CACHE, {
+      youtubeApiKey: c.env.YOUTUBE_API_KEY,
+    })
+  );
 
   c.set(
     'ai',
@@ -301,6 +311,61 @@ app.get('/api/internal/songlink', async (c) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Internal songlink error:', errorMessage, error);
+    return c.json({ error: 'Failed to fetch streaming links', details: errorMessage }, 500);
+  }
+});
+
+// New streaming links endpoint (replaces songlink)
+app.get('/api/internal/streaming-links', async (c) => {
+  const spotifyId = c.req.query('spotifyId');
+  const type = c.req.query('type') as 'track' | 'album' | undefined;
+
+  if (!spotifyId) {
+    return c.json({ error: 'Missing spotifyId parameter' }, 400);
+  }
+  if (!type || (type !== 'track' && type !== 'album')) {
+    return c.json({ error: 'Invalid type parameter, must be "track" or "album"' }, 400);
+  }
+
+  try {
+    const spotify = c.get('spotify');
+    const streamingLinks = c.get('streamingLinks');
+
+    if (type === 'album') {
+      const album = await spotify.getAlbum(spotifyId);
+      const metadata = StreamingLinksService.albumMetadataFromSpotify({
+        id: album.id,
+        name: album.name,
+        artists: album.artistIds.map((_, i) => ({ name: album.artist.split(', ')[i] || album.artist })),
+        total_tracks: album.tracks,
+        release_date: album.releaseDate,
+      });
+
+      const links = await streamingLinks.getAlbumLinks(metadata);
+
+      // Return in legacy songlink format for backward compatibility
+      return c.json({
+        data: {
+          pageUrl: '',
+          appleUrl: links.appleMusic?.url || null,
+          youtubeUrl: links.youtube?.url || null,
+          deezerUrl: null,
+          spotifyUrl: album.url,
+          tidalUrl: null,
+          artistName: album.artist,
+          title: album.name,
+          thumbnailUrl: album.image,
+          type: 'album',
+        },
+      });
+    } else {
+      // For tracks, we'd need to fetch track data from Spotify
+      // For now, return an error - tracks can be added later
+      return c.json({ error: 'Track streaming links not yet implemented' }, 501);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Internal streaming-links error:', errorMessage, error);
     return c.json({ error: 'Failed to fetch streaming links', details: errorMessage }, 500);
   }
 });

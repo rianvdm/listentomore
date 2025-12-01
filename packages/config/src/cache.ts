@@ -36,6 +36,10 @@ export const CACHE_CONFIG = {
     links: { ttlDays: 30 },
   },
 
+  streamingLinks: {
+    links: { ttlDays: 30 }, // Music metadata rarely changes
+  },
+
   // HTTP cache headers for responses
   http: {
     static: { maxAge: 86400, staleWhileRevalidate: 43200 }, // 1 day

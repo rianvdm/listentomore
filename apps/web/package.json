@@ -18,6 +18,7 @@
     "@listentomore/shared": "workspace:*",
     "@listentomore/songlink": "workspace:*",
     "@listentomore/spotify": "workspace:*",
+    "@listentomore/streaming-links": "workspace:*",
     "hono": "^4.6.0"
   },
   "devDependencies": {

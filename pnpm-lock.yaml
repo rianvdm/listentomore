@@ -78,6 +78,9 @@ importers:
       '@listentomore/spotify':
         specifier: workspace:*
         version: link:../../packages/services/spotify
+      '@listentomore/streaming-links':
+        specifier: workspace:*
+        version: link:../../packages/services/streaming-links
       hono:
         specifier: ^4.6.0
         version: 4.10.7
@@ -151,6 +154,19 @@ importers:
         version: 5.9.3
 
   packages/services/spotify:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/services/streaming-links:
     dependencies:
       '@listentomore/config':
         specifier: workspace:*
