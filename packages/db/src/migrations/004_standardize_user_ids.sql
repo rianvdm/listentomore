@@ -1,0 +1,21 @@
+-- Migration: Standardize user IDs to lowercase usernames
+-- Run date: 2025-12-01
+-- This migration updates all user IDs to use lowercase username format
+--
+-- ALREADY APPLIED MANUALLY - This file documents what was done:
+--
+-- 1. Deleted orphan discogs_sync_state row (had no real data):
+--    DELETE FROM discogs_sync_state WHERE user_id = 'default';
+--
+-- 2. Updated all user IDs to lowercase username:
+--    UPDATE users SET id = LOWER(username) WHERE id != LOWER(username);
+--
+-- Changes made:
+--   'default' -> 'bordesak'
+--   'user_draklef' -> 'draklef'
+--   'user_troegie' -> 'troegie'
+--   'user_maur-c3' -> 'maur-c3'
+--   '55c287dab6afa36ed9a57fd40b261950' -> 'sundancerza'
+--   '8d7e692085d568d795fc7e49d0b1c41d' -> 'imsickofmaps'
+--
+-- For future user creation, ensure id = LOWER(username)
