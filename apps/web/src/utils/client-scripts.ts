@@ -51,19 +51,37 @@ function enrichLinks(containerId) {
 `;
 
 /**
- * renderCitations - Renders citation links from AI responses
+ * transformCitations - Transforms [1], [2] markers into clickable superscript links
+ * Call this on HTML content after marked.parse() but before inserting into DOM
+ * Pass citations array to link directly to sources (opens in new tab)
+ */
+export const transformCitationsScript = `
+function transformCitations(html, citations) {
+  // Transform [1], [2], [1][2] etc. into superscript links
+  // Handles both square brackets [1] and Chinese brackets【1】
+  return html.replace(/[\\[【](\\d+)[\\]】]/g, function(match, num) {
+    var index = parseInt(num, 10) - 1;
+    var url = (citations && citations[index]) || '#cite-' + num;
+    return '<sup class="cite-ref"><a href="' + url + '" target="_blank" rel="noopener noreferrer" title="Source ' + num + '">[' + num + ']</a></sup>';
+  });
+}
+`;
+
+/**
+ * renderCitations - Renders citation links from AI responses as numbered list
  */
 export const renderCitationsScript = `
 function renderCitations(citations) {
   if (!citations || citations.length === 0) return '';
 
-  var html = '<div class="citations"><h4>Sources</h4><ul>';
-  citations.forEach(function(url) {
+  var html = '<div class="citations"><h4>Sources</h4><ol>';
+  citations.forEach(function(url, index) {
+    var num = index + 1;
     var hostname = url;
     try { hostname = new URL(url).hostname.replace('www.', ''); } catch(e) {}
-    html += '<li><a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
+    html += '<li id="cite-' + num + '"><a href="' + url + '" target="_blank" rel="noopener noreferrer">' + hostname + '</a></li>';
   });
-  html += '</ul></div>';
+  html += '</ol></div>';
   return html;
 }
 `;
@@ -123,4 +141,4 @@ function enrichAlbumMentions(containerId) {
 /**
  * Combined utility scripts - include all common functions
  */
-export const clientUtilsScript = enrichLinksScript + renderCitationsScript + enrichAlbumMentionsScript;
+export const clientUtilsScript = enrichLinksScript + transformCitationsScript + renderCitationsScript + enrichAlbumMentionsScript;

@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import type { SpotifyService } from '@listentomore/spotify';
-import { renderCitationsScript } from '../../utils/client-scripts';
+import { renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
 
 interface AlbumData {
   id: string;
@@ -115,6 +115,7 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
+        ${transformCitationsScript}
         ${renderCitationsScript}
 
         (function() {
@@ -152,7 +153,7 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var summary = data.data;
-              var html = '<div>' + marked.parse(summary.content) + '</div>';
+              var html = '<div>' + transformCitations(marked.parse(summary.content), summary.citations) + '</div>';
               html += renderCitations(summary.citations);
               document.getElementById('ai-summary').innerHTML = html;
             })

@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { slugToDisplayName } from '../../data/genres';
-import { enrichLinksScript, renderCitationsScript } from '../../utils/client-scripts';
+import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
 
 interface GenreDetailProps {
   displayName: string;
@@ -44,6 +44,7 @@ export function GenreDetailPage({ displayName, slug, internalToken }: GenreDetai
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
+        ${transformCitationsScript}
         ${renderCitationsScript}
 
         (function() {
@@ -60,8 +61,8 @@ export function GenreDetailPage({ displayName, slug, internalToken }: GenreDetai
               var summary = data.data;
               var content = summary.content || summary.text || '';
 
-              // Format markdown and add citations
-              var html = marked.parse(content);
+              // Format markdown, transform citations to superscript links, and add source list
+              var html = transformCitations(marked.parse(content), summary.citations);
               html += renderCitations(summary.citations);
 
               document.getElementById('genre-summary').innerHTML = html;

@@ -35,14 +35,16 @@ describe('SpotifyAlbums', () => {
         label: 'XL Recordings',
         popularity: 82,
         copyrights: ['2007 XL Recordings Ltd'],
+        upc: null,
+        ean: null,
         trackList: [
           { number: 1, name: '15 Step', duration: 237000, preview: null, artists: ['Radiohead'] },
           { number: 2, name: 'Bodysnatchers', duration: 242000, preview: null, artists: ['Radiohead'] },
         ],
       });
 
-      // Verify cache was written
-      expect(mockKV.put).toHaveBeenCalledWith('spotify:album:4LH4d3cOWNNsVw41Gqt2kv', expect.any(String), expect.objectContaining({ expirationTtl: expect.any(Number) }));
+      // Verify cache was written (v2 key includes UPC/EAN fields)
+      expect(mockKV.put).toHaveBeenCalledWith('spotify:album:v2:4LH4d3cOWNNsVw41Gqt2kv', expect.any(String), expect.objectContaining({ expirationTtl: expect.any(Number) }));
     });
 
     it('returns cached album without API call', async () => {

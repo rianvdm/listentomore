@@ -28,10 +28,10 @@ describe('PerplexityClient', () => {
       expect(result.citations).toEqual(['https://en.wikipedia.org/wiki/Radiohead']);
     });
 
-    it('cleans citation markers from response', async () => {
+    it('preserves citation markers in response', async () => {
       const response = {
         choices: [{ message: { content: 'Radiohead [1] formed in 1985 [2] in Oxford.' } }],
-        citations: ['https://example.com'],
+        citations: ['https://example.com', 'https://example2.com'],
       };
       setupFetchMock([{ pattern: /api\.perplexity\.ai/, response }]);
 
@@ -40,8 +40,9 @@ describe('PerplexityClient', () => {
         messages: [{ role: 'user', content: 'test' }],
       });
 
-      // The regex removes [n] and following whitespace, keeping remaining text intact
-      expect(result.content).toBe('Radiohead formed in 1985 in Oxford.');
+      // Citation markers are preserved for client-side transformation to superscript links
+      expect(result.content).toBe('Radiohead [1] formed in 1985 [2] in Oxford.');
+      expect(result.citations).toEqual(['https://example.com', 'https://example2.com']);
     });
 
     it('throws error on API failure', async () => {

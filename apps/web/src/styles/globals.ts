@@ -772,11 +772,11 @@ blockquote {
   opacity: 0.7;
 }
 
-.citations ul,
-.ai-summary .citations ul {
-  list-style-type: disc;
+.citations ol,
+.ai-summary .citations ol {
+  list-style-type: decimal;
   margin: 0;
-  padding-left: 1.2em;
+  padding-left: 1.5em;
 }
 
 .citations li,
@@ -784,10 +784,26 @@ blockquote {
   font-size: 12px;
   margin-bottom: 0.15em;
   line-height: 1.3em;
+  scroll-margin-top: 2rem;
 }
 
-.citation-number {
-  opacity: 0.6;
+/* Citation superscript links */
+.cite-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+  margin-left: 1px;
+}
+
+.cite-ref a {
+  color: var(--c-accent);
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.cite-ref a:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* Similar Artists (outside image-text-wrapper) */

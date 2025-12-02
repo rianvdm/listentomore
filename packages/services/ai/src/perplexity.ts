@@ -104,16 +104,11 @@ export class PerplexityClient {
       citations?: string[];
     };
 
-    let content = data.choices[0].message.content;
+    const content = data.choices[0].message.content;
 
-    // Clean up citation markers like [1], [2], [1][2], etc.
-    // These are inline and we return the full citations array separately
-    // Only remove trailing spaces (not newlines) to preserve paragraph breaks
-    content = content.replace(/[\[【]\d+[\]】] */g, '');
-    // Also clean up markdown-style citation links
-    content = content.replace(/\(?\[([^\]]+)\]\([^)]+\)\)?/g, '$1');
-    // Fix missing spaces after periods (citation removal can leave ".The" instead of ". The")
-    content = content.replace(/\.([A-Z])/g, '. $1');
+    // Keep citation markers like [1], [2] in the content
+    // They will be transformed to superscript links client-side
+    // The citations array provides the source URLs
 
     return {
       content,
