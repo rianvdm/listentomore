@@ -881,8 +881,8 @@ blockquote {
 }
 
 .track-item-image {
-  width: 100px;
-  height: 100px;
+  width: 150px;
+  height: 150px;
   flex-shrink: 0;
 }
 
@@ -938,8 +938,8 @@ blockquote {
   }
 
   .track-item-image {
-    width: 80px;
-    height: 80px;
+    width: 120px;
+    height: 120px;
   }
 }
 

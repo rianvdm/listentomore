@@ -36,6 +36,7 @@ import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
 import { DiscordPage } from './pages/discord';
+import { enrichLinksScript } from './utils/client-scripts';
 
 // Define environment bindings
 type Bindings = {
@@ -227,7 +228,11 @@ app.get('/', async (c) => {
         {/* Progressive loading script */}
         <script dangerouslySetInnerHTML={{
           __html: `
+            ${enrichLinksScript}
+
             (function() {
+              var MAX_ITEMS = 5;
+
               internalFetch('/api/internal/user-listens')
                 .then(function(res) { return res.json(); })
                 .then(function(result) {
@@ -239,25 +244,88 @@ app.get('/', async (c) => {
                     return;
                   }
 
-                  var html = '<div class="track-grid">';
-                  result.data.forEach(function(listen) {
-                    var subtitle = listen.nowPlaying
-                      ? listen.username + ' is listening now'
-                      : listen.username;
+                  // Limit to MAX_ITEMS
+                  var listens = result.data.slice(0, MAX_ITEMS);
+
+                  // Build list HTML
+                  var html = '<div class="track-list" id="user-listens-list">';
+                  listens.forEach(function(listen, index) {
                     var albumName = listen.album || listen.track;
-                    html += '<a href="/u/' + listen.username + '">';
-                    html += '<div class="track">';
+                    var nowPlayingBadge = listen.nowPlaying ? ' <span style="color: var(--accent-color);">▶ Now</span>' : '';
+
+                    html += '<div class="track-item" data-index="' + index + '">';
+                    html += '<div class="track-item-image" id="listen-image-' + index + '">';
+                    html += '<a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">';
                     if (listen.image) {
-                      html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" class="track-image" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
+                      html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
+                    } else {
+                      html += '<div class="placeholder-image"><span class="spinner">↻</span></div>';
                     }
-                    html += '<div class="track-content">';
-                    html += '<p class="track-artist">' + listen.artist + '</p>';
-                    html += '<p class="track-name">' + albumName + '</p>';
-                    html += '<p class="track-subtitle">' + subtitle + '</p>';
-                    html += '</div></div></a>';
+                    html += '</a></div>';
+                    html += '<div class="track-item-content">';
+                    html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
+                    html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + listen.artist + '</a></p>';
+                    html += '<p id="listen-sentence-' + index + '" class="text-muted"><span class="loading-inline">Loading...</span></p>';
+                    html += '<p id="listen-links-' + index + '"><a href="/u/' + listen.username + '">View ' + listen.username + "'s page →</a></p>";
+                    html += '</div></div>';
                   });
                   html += '</div>';
                   container.innerHTML = html;
+
+                  // Enrich album and artist links with Spotify IDs
+                  enrichLinks('user-listens-list');
+
+                  // Progressive loading: fetch artist sentences and streaming links
+                  listens.forEach(function(listen, index) {
+                    // Fetch artist sentence
+                    internalFetch('/api/internal/artist-sentence?name=' + encodeURIComponent(listen.artist))
+                      .then(function(r) { return r.json(); })
+                      .then(function(data) {
+                        var el = document.getElementById('listen-sentence-' + index);
+                        if (el && data.data && data.data.sentence) {
+                          el.innerHTML = data.data.sentence;
+                          el.className = 'text-muted';
+                        } else if (el) {
+                          el.innerHTML = '';
+                        }
+                      })
+                      .catch(function() {
+                        var el = document.getElementById('listen-sentence-' + index);
+                        if (el) el.innerHTML = '';
+                      });
+
+                    // Fetch streaming links via songlink
+                    if (listen.album && listen.artist) {
+                      internalFetch('/api/internal/search?q=' + encodeURIComponent(listen.artist + ' ' + listen.album) + '&type=album')
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                          if (data.data && data.data[0] && data.data[0].url) {
+                            var spotifyUrl = data.data[0].url;
+                            internalFetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl))
+                              .then(function(r) { return r.json(); })
+                              .then(function(linkData) {
+                                var linksEl = document.getElementById('listen-links-' + index);
+                                if (linksEl) {
+                                  var href = linkData.data && linkData.data.pageUrl ? linkData.data.pageUrl : spotifyUrl;
+                                  var existingContent = linksEl.innerHTML;
+                                  linksEl.innerHTML = '<a href="' + href + '" target="_blank" rel="noopener noreferrer">Listen ↗</a> • ' + existingContent;
+                                }
+                              })
+                              .catch(function() {
+                                // Fall back to Spotify URL
+                                var linksEl = document.getElementById('listen-links-' + index);
+                                if (linksEl) {
+                                  var existingContent = linksEl.innerHTML;
+                                  linksEl.innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Listen ↗</a> • ' + existingContent;
+                                }
+                              });
+                          }
+                        })
+                        .catch(function(err) {
+                          console.error('Error fetching Spotify data:', err);
+                        });
+                    }
+                  });
                 })
                 .catch(function(err) {
                   console.error('Failed to load user listens:', err);
