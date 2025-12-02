@@ -299,6 +299,51 @@ app.get('/discord', (c) => c.html(<DiscordPage />));
 app.get('/privacy', (c) => c.html(<PrivacyPage />));
 app.get('/terms', (c) => c.html(<TermsPage />));
 
+// Widget endpoint for external sites (public, no auth required)
+// Replicates the api-lastfm-recenttracks worker functionality for elezea.com
+app.get('/widget/recent', async (c) => {
+  const format = c.req.query('format');
+  const username = c.req.query('username') || 'bordesak';
+
+  try {
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username,
+    });
+
+    const track = await lastfm.getMostRecentTrack();
+
+    if (!track) {
+      if (format === 'html') {
+        return new Response('🎵 No recent tracks found.', {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      }
+      return c.json({ error: 'No recent tracks found' }, 404);
+    }
+
+    if (format === 'html') {
+      const html = `🎵 Most recently I listened to <strong>${track.album || track.name}</strong> by <strong>${track.artist}</strong>. <a href="https://listentomore.com/u/${username}" target="_blank">See more ↗</a>`;
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+
+    return c.json({
+      last_artist: track.artist,
+      last_album: track.album,
+    });
+  } catch (error) {
+    console.error('Widget recent error:', error);
+    if (format === 'html') {
+      return new Response('🎵 Unable to load music info.', {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+    return c.json({ error: 'Failed to fetch recent track' }, 500);
+  }
+});
+
 // Internal API routes for progressive loading
 // These are called by client-side JS on page load with signed tokens
 
