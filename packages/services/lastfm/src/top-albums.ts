@@ -1,6 +1,6 @@
 // Last.fm top albums functionality
 
-import { CACHE_CONFIG } from '@listentomore/config';
+import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 const BACKUP_IMAGE_URL = 'https://file.elezea.com/noun-no-image.png';
@@ -72,7 +72,7 @@ export class TopAlbums {
     // Cache results
     if (this.cache) {
       await this.cache.put(cacheKey, JSON.stringify(results), {
-        expirationTtl: CACHE_CONFIG.lastfm.topAlbums.ttlHours * 60 * 60,
+        expirationTtl: getTtlSeconds(CACHE_CONFIG.lastfm.topAlbums),
       });
     }
 

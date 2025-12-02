@@ -72,12 +72,6 @@ export function ArtistDetailPage({
                 <span class="text-muted">Loading...</span>
               </p>
 
-              {/* Playcount - loaded via JS */}
-              <p id="playcount-section">
-                <strong>My playcount:</strong>{' '}
-                <span class="text-muted">Loading...</span>
-              </p>
-
               {/* Popular Albums - loaded via JS from Last.fm */}
               <div id="popular-albums">
                 <p style={{ marginBottom: '0.2em' }}>
@@ -146,11 +140,6 @@ export function ArtistDetailPage({
               } else {
                 document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
               }
-
-              // Update playcount
-              var playcount = lastfm.userPlaycount || 0;
-              var formatted = new Intl.NumberFormat().format(playcount);
-              document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> ' + formatted + ' plays';
 
               // Update popular albums (from Last.fm, enriched with Spotify IDs)
               if (lastfm.topAlbums && lastfm.topAlbums.length > 0) {
@@ -225,7 +214,6 @@ export function ArtistDetailPage({
             .catch(function(e) {
               console.error('Last.fm error:', e);
               document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
-              document.getElementById('playcount-section').innerHTML = '<strong>My playcount:</strong> 0 plays';
             });
 
           // Fetch AI summary

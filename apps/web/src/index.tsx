@@ -109,6 +109,7 @@ app.use('*', async (c, next) => {
     new LastfmService({
       apiKey: c.env.LASTFM_API_KEY,
       username: c.env.LASTFM_USERNAME,
+      cache: c.env.CACHE,
     })
   );
 

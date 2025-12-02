@@ -18,7 +18,7 @@ export const CACHE_CONFIG = {
   },
 
   lastfm: {
-    artistDetail: { ttlDays: 7 },
+    artistDetail: { ttlDays: 30 },
     topAlbums: { ttlHours: 1 },
     topArtists: { ttlHours: 1 },
     recentTracks: { ttlMinutes: 0 }, // No caching - always live

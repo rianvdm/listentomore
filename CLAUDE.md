@@ -113,10 +113,60 @@ All cache TTLs defined in `packages/config/src/cache.ts`:
 
 - **AI content:** 120-180 days (expensive to regenerate)
 - **Spotify data:** 30 days
-- **Last.fm stats:** 1 hour (top albums/artists), 5 min (aggregated), 0 (recent tracks)
+- **Last.fm stats:** 30 days (artist detail), 1 hour (top albums/artists), 5 min (aggregated), 0 (recent tracks)
 - **Songlink:** 30 days
 
 Use `getTtlSeconds(CACHE_CONFIG.spotify.album)` for consistency.
+
+#### Implementing Caching in Services
+
+When adding caching to a service class, follow this pattern:
+
+```typescript
+// 1. Import from config
+import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
+
+// 2. Accept cache in constructor
+export class MyService {
+  constructor(
+    private config: ServiceConfig,
+    private cache?: KVNamespace
+  ) {}
+
+  async getData(key: string): Promise<MyData> {
+    // 3. Create normalized cache key
+    const cacheKey = `prefix:dataType:${key.toLowerCase().trim()}`;
+
+    // 4. Check cache first
+    if (this.cache) {
+      const cached = await this.cache.get(cacheKey, 'json');
+      if (cached) {
+        return cached as MyData;
+      }
+    }
+
+    // 5. Fetch from API
+    const result = await this.fetchFromApi(key);
+
+    // 6. Store in cache with TTL from config
+    if (this.cache) {
+      await this.cache.put(cacheKey, JSON.stringify(result), {
+        expirationTtl: getTtlSeconds(CACHE_CONFIG.myService.dataType),
+      });
+    }
+
+    return result;
+  }
+}
+```
+
+**Key points:**
+- Always use `getTtlSeconds()` helper - never manually calculate seconds
+- Normalize cache keys (lowercase, trim) to avoid duplicates
+- Add TTL config to `packages/config/src/cache.ts` before implementing
+- Pass `cache` from parent service (e.g., `LastfmService` passes to `ArtistDetails`)
+- **Important:** Verify `cache: c.env.CACHE` is passed when instantiating services in middleware (`apps/web/src/index.tsx`). Missing this means caching silently fails.
+- Don't cache user-specific data that changes frequently (e.g., playcount)
 
 ### 6. URL Strategy
 
