@@ -19,6 +19,10 @@ export interface AlbumDetails {
   popularity: number;
   copyrights: string[];
   trackList: AlbumTrack[];
+  /** Universal Product Code - used for Apple Music lookups */
+  upc: string | null;
+  /** European Article Number - alternative to UPC */
+  ean: string | null;
 }
 
 export interface AlbumTrack {
@@ -37,6 +41,7 @@ interface SpotifyAlbumResponse {
   total_tracks: number;
   genres: string[];
   external_urls: { spotify: string };
+  external_ids?: { upc?: string; ean?: string };
   images: Array<{ url: string }>;
   label: string;
   popularity: number;
@@ -59,7 +64,8 @@ export class SpotifyAlbums {
   ) {}
 
   async getAlbum(albumId: string): Promise<AlbumDetails> {
-    const cacheKey = `spotify:album:${albumId}`;
+    // v2: Added upc/ean fields
+    const cacheKey = `spotify:album:v2:${albumId}`;
 
     // Check cache
     const cached = await this.cache.get<AlbumDetails>(cacheKey, 'json');
@@ -95,6 +101,8 @@ export class SpotifyAlbums {
       label: data.label || null,
       popularity: data.popularity,
       copyrights: data.copyrights.map((c) => c.text),
+      upc: data.external_ids?.upc || null,
+      ean: data.external_ids?.ean || null,
       trackList: data.tracks.items.map((track) => ({
         number: track.track_number,
         name: track.name,

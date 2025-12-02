@@ -397,6 +397,7 @@ app.get('/api/internal/streaming-links', async (c) => {
         artists: album.artistIds.map((_, i) => ({ name: album.artist.split(', ')[i] || album.artist })),
         total_tracks: album.tracks,
         release_date: album.releaseDate,
+        external_ids: album.upc ? { upc: album.upc } : undefined,
       });
 
       const links = await streamingLinks.getAlbumLinks(metadata);
