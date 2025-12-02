@@ -5,6 +5,7 @@
 /**
  * enrichLinks - Enriches search links with Spotify IDs for direct navigation
  * Call this after inserting HTML with artist/album search links
+ * Note: Uses internalFetch() which is defined in Layout.tsx and includes the auth token
  */
 export const enrichLinksScript = `
 function enrichLinks(containerId) {
@@ -19,7 +20,7 @@ function enrichLinks(containerId) {
     if (!match) return;
 
     var query = match[1];
-    fetch('/api/internal/search?q=' + query + '&type=artist')
+    internalFetch('/api/internal/search?q=' + query + '&type=artist')
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.data && data.data[0] && data.data[0].id) {
@@ -37,7 +38,7 @@ function enrichLinks(containerId) {
     if (!match) return;
 
     var query = match[1];
-    fetch('/api/internal/search?q=' + query + '&type=album')
+    internalFetch('/api/internal/search?q=' + query + '&type=album')
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.data && data.data[0] && data.data[0].id) {
@@ -71,6 +72,7 @@ function renderCitations(citations) {
  * enrichAlbumMentions - Finds "Album by Artist" in bold text and converts to links
  * Pattern: <strong>Album Name by Artist Name</strong>
  * First wraps in search link, then enriches with Spotify ID
+ * Note: Uses internalFetch() which is defined in Layout.tsx and includes the auth token
  */
 export const enrichAlbumMentionsScript = `
 function enrichAlbumMentions(containerId) {
@@ -106,7 +108,7 @@ function enrichAlbumMentions(containerId) {
 
   // Enrich with Spotify IDs
   albumsToEnrich.forEach(function(item) {
-    fetch('/api/internal/search?q=' + encodeURIComponent(item.query) + '&type=album')
+    internalFetch('/api/internal/search?q=' + encodeURIComponent(item.query) + '&type=album')
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.data && data.data[0] && data.data[0].id) {
