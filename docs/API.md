@@ -86,15 +86,18 @@ curl -H "X-API-Key: your_key" \
     "name": "OK Computer",
     "artist": "Radiohead",
     "artistIds": ["4Z8W4fKeB5YxbusRsdQVPb"],
-    "releaseDate": "1997-05-21",
+    "releaseDate": "1997-05-28",
     "tracks": 12,
-    "genres": ["alternative rock", "art rock"],
+    "genres": [],
     "image": "https://i.scdn.co/image/...",
     "url": "https://open.spotify.com/album/6dVIqQ8qmQ5GBnJ9shOYGE",
     "label": "XL Recordings",
-    "popularity": 82,
+    "popularity": 87,
+    "copyrights": ["1997 XL Recordings Ltd"],
+    "upc": "634904078164",
+    "ean": null,
     "trackList": [
-      { "number": 1, "name": "Airbag", "duration": 283000 }
+      { "number": 1, "name": "Airbag", "duration": 287880, "preview": null, "artists": ["Radiohead"] }
     ]
   }
 }
