@@ -54,3 +54,4 @@ crons = ["*/10 * * * *"]  # Run every 10 minutes (random fact only at top of hou
 # - PERPLEXITY_API_KEY
 # - DISCOGS_API_TOKEN
 # - YOUTUBE_API_KEY (for streaming links service)
+# - INTERNAL_API_SECRET (for signing internal API tokens)

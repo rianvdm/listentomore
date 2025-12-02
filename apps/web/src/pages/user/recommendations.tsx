@@ -12,6 +12,7 @@ interface UserRecommendationsPageProps {
   lastfmUsername: string;
   lovedTracks: LovedTrack[];
   topArtists: TopArtist[];
+  internalToken?: string;
 }
 
 export function UserRecommendationsPage({
@@ -19,6 +20,7 @@ export function UserRecommendationsPage({
   lastfmUsername,
   lovedTracks,
   topArtists,
+  internalToken,
 }: UserRecommendationsPageProps) {
   const hasLovedTracks = lovedTracks.length > 0;
   const hasTopArtists = topArtists.length > 0;
@@ -31,6 +33,7 @@ export function UserRecommendationsPage({
       title={`Recommendations from ${username}`}
       description={`Music recommendations from ${username} - loved tracks and artist discoveries`}
       url={`https://listentomore.com/u/${username}/recommendations`}
+      internalToken={internalToken}
     >
       <header>
         <h1>
@@ -132,7 +135,7 @@ export function UserRecommendationsPage({
           // Fetch artist sentences and streaming links for loved tracks
           lovedTracks.forEach(function(track, index) {
             // Fetch artist sentence
-            fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(track.artist))
+            internalFetch('/api/internal/artist-sentence?name=' + encodeURIComponent(track.artist))
               .then(function(r) { return r.json(); })
               .then(function(data) {
                 var el = document.getElementById('loved-sentence-' + index);
@@ -149,7 +152,7 @@ export function UserRecommendationsPage({
               });
 
             // Fetch Spotify album data for image and streaming link
-            fetch('/api/internal/search?q=' + encodeURIComponent(track.artist + ' ' + track.title) + '&type=album')
+            internalFetch('/api/internal/search?q=' + encodeURIComponent(track.artist + ' ' + track.title) + '&type=album')
               .then(function(r) { return r.json(); })
               .then(function(data) {
                 if (data.data && data.data[0]) {
@@ -166,7 +169,7 @@ export function UserRecommendationsPage({
                   // Add streaming link
                   if (spotifyAlbum.url) {
                     // Get songlink for universal link
-                    fetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyAlbum.url))
+                    internalFetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyAlbum.url))
                       .then(function(r) { return r.json(); })
                       .then(function(linkData) {
                         var linksEl = document.getElementById('loved-links-' + index);
@@ -191,7 +194,7 @@ export function UserRecommendationsPage({
 
           // Fetch recommended artists based on top artists
           ${hasTopArtists ? `
-          fetch('/api/internal/user-recommendations?username=' + encodeURIComponent(username))
+          internalFetch('/api/internal/user-recommendations?username=' + encodeURIComponent(username))
             .then(function(res) { return res.json(); })
             .then(function(result) {
               var container = document.getElementById('recommended-artists');
@@ -262,6 +265,7 @@ function UserNotFound({ username }: { username: string }) {
 export async function handleUserRecommendations(c: Context) {
   const username = c.req.param('username');
   const db = c.get('db') as Database;
+  const internalToken = c.get('internalToken') as string;
 
   // Look up user by username
   const user = await db.getUserByUsername(username);
@@ -290,6 +294,7 @@ export async function handleUserRecommendations(c: Context) {
       lastfmUsername={user.lastfm_username}
       lovedTracks={lovedTracks}
       topArtists={topArtists}
+      internalToken={internalToken}
     />
   );
 }

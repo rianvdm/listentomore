@@ -9,14 +9,16 @@ import type { Database } from '@listentomore/db';
 interface UserStatsPageProps {
   username: string;
   lastfmUsername: string;
+  internalToken?: string;
 }
 
-export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, internalToken }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
       description={`Real-time listening statistics for ${username}`}
       url={`https://listentomore.com/u/${username}`}
+      internalToken={internalToken}
     >
       <header>
         <h1>
@@ -78,7 +80,7 @@ export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) 
           var username = ${JSON.stringify(username)};
 
           // Fetch recent track (fastest - renders first)
-          fetch('/api/internal/user-recent-track?username=' + encodeURIComponent(username))
+          internalFetch('/api/internal/user-recent-track?username=' + encodeURIComponent(username))
             .then(function(r) { return r.json(); })
             .then(function(result) {
               var recentEl = document.getElementById('recent-listening');
@@ -110,7 +112,7 @@ export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) 
             });
 
           // Fetch top artists (parallel)
-          fetch('/api/internal/user-top-artists?username=' + encodeURIComponent(username))
+          internalFetch('/api/internal/user-top-artists?username=' + encodeURIComponent(username))
             .then(function(r) { return r.json(); })
             .then(function(result) {
               var artistsEl = document.getElementById('top-artists');
@@ -143,7 +145,7 @@ export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) 
             });
 
           // Fetch top albums (parallel)
-          fetch('/api/internal/user-top-albums?username=' + encodeURIComponent(username))
+          internalFetch('/api/internal/user-top-albums?username=' + encodeURIComponent(username))
             .then(function(r) { return r.json(); })
             .then(function(result) {
               var albumsEl = document.getElementById('top-albums');
@@ -205,7 +207,7 @@ export function UserStatsPage({ username, lastfmUsername }: UserStatsPageProps) 
           }
 
           function fetchArtistSentence(artistName) {
-            fetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
+            internalFetch('/api/internal/artist-sentence?name=' + encodeURIComponent(artistName))
               .then(function(r) { return r.json(); })
               .then(function(data) {
                 if (data.error) throw new Error(data.error);
@@ -252,6 +254,7 @@ function UserNotFound({ username }: { username: string }) {
 export async function handleUserStats(c: Context) {
   const username = c.req.param('username');
   const db = c.get('db') as Database;
+  const internalToken = c.get('internalToken') as string;
 
   // Look up user by username
   const user = await db.getUserByUsername(username);
@@ -265,6 +268,7 @@ export async function handleUserStats(c: Context) {
     <UserStatsPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
+      internalToken={internalToken}
     />
   );
 }

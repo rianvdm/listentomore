@@ -43,7 +43,7 @@ export async function handleAlbumDetail(c: Context) {
   <p class="text-muted">Loading AI summary...</p>
 </div>
 <script dangerouslySetInnerHTML={{ __html: `
-  fetch('/api/internal/album-summary?artist=...')
+  internalFetch('/api/internal/album-summary?artist=...')
     .then(r => r.json())
     .then(data => {
       document.getElementById('ai-summary').innerHTML = formatMarkdown(data.data.content);
@@ -51,7 +51,7 @@ export async function handleAlbumDetail(c: Context) {
 ` }} />
 ```
 
-**Internal endpoints** (`/api/internal/*`) are used for progressive loading - they don't require API key auth.
+**Internal endpoints** (`/api/internal/*`) are used for progressive loading. They require signed tokens (not API keys) - see "Internal API Security" below.
 
 ### 2. Services via Context
 
@@ -132,6 +132,47 @@ artistUrl(spotifyId) // → /artist/0k17h0D3J5VfsdmQ1iZtE9
 genreUrl(slug)       // → /genre/indie-rock
 ```
 
+### 7. Internal API Security
+
+Internal APIs (`/api/internal/*`) are protected with short-lived signed tokens to prevent abuse (especially costly AI endpoints).
+
+**How it works:**
+1. Server generates a 5-minute HMAC-SHA256 token on each page render
+2. Token is embedded in HTML via `window.__INTERNAL_TOKEN__`
+3. Client JS uses `internalFetch()` which adds the token header automatically
+4. Middleware validates the token before allowing access
+
+**For pages using internal APIs:**
+
+```typescript
+// 1. Route handler - get token from context and pass to component
+export async function handleMyPage(c: Context) {
+  const internalToken = c.get('internalToken') as string;
+  return c.html(<MyPage data={data} internalToken={internalToken} />);
+}
+
+// 2. Component - pass token to Layout
+export function MyPage({ data, internalToken }: Props) {
+  return (
+    <Layout title="My Page" internalToken={internalToken}>
+      {/* content */}
+    </Layout>
+  );
+}
+
+// 3. In client-side scripts - use internalFetch() instead of fetch()
+<script dangerouslySetInnerHTML={{ __html: `
+  internalFetch('/api/internal/my-endpoint')
+    .then(r => r.json())
+    .then(data => { /* ... */ });
+` }} />
+```
+
+**Key files:**
+- `src/utils/internal-token.ts` - Token generation/validation
+- `src/middleware/internal-auth.ts` - Auth middleware
+- `src/components/layout/Layout.tsx` - Embeds token and `internalFetch()` helper
+
 ---
 
 ## Do's and Don'ts
@@ -143,6 +184,8 @@ genreUrl(slug)       // → /genre/indie-rock
 - Use `Promise.all()` for parallel independent fetches
 - Add routes to `apps/web/src/index.tsx`
 - Return HTML with `c.html(<Component />)`
+- Use `internalFetch()` for all `/api/internal/*` calls in client-side scripts
+- Pass `internalToken` to Layout for pages that use internal APIs
 
 ### Don't
 - Create new workers or separate API services
@@ -150,6 +193,7 @@ genreUrl(slug)       // → /genre/indie-rock
 - Expose API keys to browser
 - Hardcode cache TTLs (use `CACHE_CONFIG`)
 - Create duplicate components - check `components/ui/` first
+- Use regular `fetch()` for internal APIs - always use `internalFetch()`
 
 ---
 

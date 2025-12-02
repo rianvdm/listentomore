@@ -17,11 +17,13 @@ interface ArtistData {
 interface ArtistDetailProps {
   artist: ArtistData | null;
   error?: string;
+  internalToken?: string;
 }
 
 export function ArtistDetailPage({
   artist,
   error,
+  internalToken,
 }: ArtistDetailProps) {
   if (error || !artist) {
     return (
@@ -47,6 +49,7 @@ export function ArtistDetailPage({
       description={`Learn about ${artist.name} - discography, bio, and more`}
       image={artistImage}
       url={`https://listentomore.com/artist/${artist.id}`}
+      internalToken={internalToken}
     >
       {/* Header */}
       <header>
@@ -117,7 +120,7 @@ export function ArtistDetailPage({
           }
 
           // Fetch Last.fm data (playcount, genres, and similar artists)
-          fetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+          internalFetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
             .then(function(r) {
               if (!r.ok) throw new Error('HTTP ' + r.status);
               return r.json();
@@ -161,7 +164,7 @@ export function ArtistDetailPage({
 
                 // Enrich with Spotify IDs for direct links
                 Promise.all(lastfm.topAlbums.map(function(albumName) {
-                  return fetch('/api/internal/search?q=' + encodeURIComponent(artistName + ' ' + albumName) + '&type=album')
+                  return internalFetch('/api/internal/search?q=' + encodeURIComponent(artistName + ' ' + albumName) + '&type=album')
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                       if (data.data && data.data[0]) {
@@ -197,7 +200,7 @@ export function ArtistDetailPage({
 
                 // Enrich with Spotify IDs for direct links
                 Promise.all(lastfm.similar.map(function(name) {
-                  return fetch('/api/internal/search?q=' + encodeURIComponent(name) + '&type=artist')
+                  return internalFetch('/api/internal/search?q=' + encodeURIComponent(name) + '&type=artist')
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                       if (data.data && data.data[0]) {
@@ -225,7 +228,7 @@ export function ArtistDetailPage({
             });
 
           // Fetch AI summary
-          fetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+          internalFetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
             .then(function(r) {
               if (!r.ok) throw new Error('HTTP ' + r.status);
               return r.json();
@@ -257,13 +260,14 @@ export function ArtistDetailPage({
 export async function handleArtistDetail(c: Context) {
   const spotifyId = c.req.param('id');
   const spotify = c.get('spotify') as SpotifyService;
+  const internalToken = c.get('internalToken') as string;
 
   try {
     const artistData = await spotify.getArtist(spotifyId);
 
     if (!artistData) {
       return c.html(
-        <ArtistDetailPage artist={null} error="Artist not found" />
+        <ArtistDetailPage artist={null} error="Artist not found" internalToken={internalToken} />
       );
     }
 
@@ -275,11 +279,11 @@ export async function handleArtistDetail(c: Context) {
       spotifyUrl: artistData.url,
     };
 
-    return c.html(<ArtistDetailPage artist={artist} />);
+    return c.html(<ArtistDetailPage artist={artist} internalToken={internalToken} />);
   } catch (error) {
     console.error('Artist detail error:', error);
     return c.html(
-      <ArtistDetailPage artist={null} error="Failed to load artist" />
+      <ArtistDetailPage artist={null} error="Failed to load artist" internalToken={internalToken} />
     );
   }
 }

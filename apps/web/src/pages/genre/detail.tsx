@@ -9,14 +9,16 @@ import { enrichLinksScript, renderCitationsScript } from '../../utils/client-scr
 interface GenreDetailProps {
   displayName: string;
   slug: string;
+  internalToken?: string;
 }
 
-export function GenreDetailPage({ displayName, slug }: GenreDetailProps) {
+export function GenreDetailPage({ displayName, slug, internalToken }: GenreDetailProps) {
   return (
     <Layout
       title={displayName}
       description={`Learn about the history, musical elements, and seminal albums of ${displayName} music`}
       url={`https://listentomore.com/genre/${slug}`}
+      internalToken={internalToken}
     >
       <header>
         <h1>{displayName}</h1>
@@ -48,7 +50,7 @@ export function GenreDetailPage({ displayName, slug }: GenreDetailProps) {
           var genreName = ${JSON.stringify(displayName)};
 
           // Fetch genre summary
-          fetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName), { cache: 'no-store' })
+          internalFetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName), { cache: 'no-store' })
             .then(function(r) {
               if (!r.ok) throw new Error('HTTP ' + r.status);
               return r.json();
@@ -82,8 +84,9 @@ export function GenreDetailPage({ displayName, slug }: GenreDetailProps) {
 export async function handleGenreDetail(c: Context) {
   const slug = c.req.param('slug');
   const displayName = slugToDisplayName(slug);
+  const internalToken = c.get('internalToken') as string;
 
   return c.html(
-    <GenreDetailPage displayName={displayName} slug={slug} />
+    <GenreDetailPage displayName={displayName} slug={slug} internalToken={internalToken} />
   );
 }

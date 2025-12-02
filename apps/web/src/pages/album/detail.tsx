@@ -20,9 +20,10 @@ interface AlbumData {
 interface AlbumDetailProps {
   album: AlbumData | null;
   error?: string;
+  internalToken?: string;
 }
 
-export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
+export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProps) {
   if (error || !album) {
     return (
       <Layout title="Album Not Found">
@@ -48,6 +49,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
       description={`Listen to ${album.name} by ${album.artist}`}
       image={albumImage}
       url={`https://listentomore.com/album/${album.id}`}
+      internalToken={internalToken}
     >
       {/* Header with linked artist */}
       <header>
@@ -122,7 +124,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
           var albumName = ${JSON.stringify(album.name)};
 
           // Fetch streaming links
-          fetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl), { cache: 'no-store' })
+          internalFetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl), { cache: 'no-store' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
@@ -142,7 +144,7 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
             });
 
           // Fetch AI summary
-          fetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
+          internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
             .then(function(r) {
               if (!r.ok) throw new Error('HTTP ' + r.status);
               return r.json();
@@ -168,13 +170,14 @@ export function AlbumDetailPage({ album, error }: AlbumDetailProps) {
 export async function handleAlbumDetail(c: Context) {
   const spotifyId = c.req.param('id');
   const spotify = c.get('spotify') as SpotifyService;
+  const internalToken = c.get('internalToken') as string;
 
   try {
     // Fetch album data from Spotify (fast)
     const albumData = await spotify.getAlbum(spotifyId);
 
     if (!albumData) {
-      return c.html(<AlbumDetailPage album={null} error="Album not found" />);
+      return c.html(<AlbumDetailPage album={null} error="Album not found" internalToken={internalToken} />);
     }
 
     const album: AlbumData = {
@@ -188,9 +191,9 @@ export async function handleAlbumDetail(c: Context) {
       spotifyUrl: albumData.url,
     };
 
-    return c.html(<AlbumDetailPage album={album} />);
+    return c.html(<AlbumDetailPage album={album} internalToken={internalToken} />);
   } catch (error) {
     console.error('Album detail error:', error);
-    return c.html(<AlbumDetailPage album={null} error="Failed to load album" />);
+    return c.html(<AlbumDetailPage album={null} error="Failed to load album" internalToken={internalToken} />);
   }
 }

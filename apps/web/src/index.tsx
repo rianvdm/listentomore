@@ -20,6 +20,8 @@ import {
   userRateLimitMiddleware,
   apiLoggingMiddleware,
 } from './middleware/auth';
+import { internalAuthMiddleware } from './middleware/internal-auth';
+import { generateInternalToken } from './utils/internal-token';
 import { Layout } from './components/layout';
 import { handleAlbumSearch } from './pages/album/search';
 import { handleAlbumDetail } from './pages/album/detail';
@@ -50,6 +52,7 @@ type Bindings = {
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
   YOUTUBE_API_KEY?: string;
+  INTERNAL_API_SECRET: string;
   ENVIRONMENT?: string;
   ADMIN_SECRET?: string;
 };
@@ -65,6 +68,8 @@ type Variables = {
   // Auth context
   apiKey: ParsedApiKey | null;
   authTier: 'public' | 'standard' | 'premium';
+  // Internal API token (for progressive loading)
+  internalToken: string;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -125,6 +130,10 @@ app.use('*', async (c, next) => {
     })
   );
 
+  // Generate internal API token for this request (used by progressive loading)
+  const internalToken = await generateInternalToken(c.env.INTERNAL_API_SECRET);
+  c.set('internalToken', internalToken);
+
   await next();
 });
 
@@ -137,7 +146,7 @@ app.use('/api/*', async (c, next) => {
   if (c.req.path === '/api/auth/keys') {
     return next();
   }
-  // Skip auth for internal endpoints (used by page progressive loading)
+  // Skip auth for internal endpoints (they use signed token auth instead)
   if (c.req.path.startsWith('/api/internal/')) {
     return next();
   }
@@ -168,6 +177,7 @@ app.get('/health', (c) => {
 // Home page - matches original my-music-next structure
 app.get('/', async (c) => {
   const ai = c.get('ai');
+  const internalToken = c.get('internalToken');
 
   // Get day greeting (e.g., "Happy Friday, friend!") using user's timezone
   const userTimezone = (c.req.raw.cf as { timezone?: string } | undefined)?.timezone || 'UTC';
@@ -177,7 +187,7 @@ app.get('/', async (c) => {
   const randomFact = await ai.getRandomFact().catch(() => null);
 
   return c.html(
-    <Layout title="Home" description="Discover music, explore albums, and track your listening habits">
+    <Layout title="Home" description="Discover music, explore albums, and track your listening habits" internalToken={internalToken}>
       <header>
         <h1>Happy {dayName}, friend!</h1>
       </header>
@@ -217,7 +227,7 @@ app.get('/', async (c) => {
         <script dangerouslySetInnerHTML={{
           __html: `
             (function() {
-              fetch('/api/internal/user-listens')
+              internalFetch('/api/internal/user-listens')
                 .then(function(res) { return res.json(); })
                 .then(function(result) {
                   var container = document.getElementById('user-listens-container');
@@ -289,8 +299,11 @@ app.get('/discord', (c) => c.html(<DiscordPage />));
 app.get('/privacy', (c) => c.html(<PrivacyPage />));
 app.get('/terms', (c) => c.html(<TermsPage />));
 
-// Internal API routes for progressive loading (no auth required)
-// These are called by client-side JS on page load
+// Internal API routes for progressive loading
+// These are called by client-side JS on page load with signed tokens
+
+// Apply internal auth middleware (validates signed token)
+app.use('/api/internal/*', internalAuthMiddleware());
 
 // Prevent browser/edge caching of internal API responses
 app.use('/api/internal/*', async (c, next) => {

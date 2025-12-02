@@ -7,11 +7,12 @@ import { Input, Button, LoadingSpinner } from '../../components/ui';
 
 interface AlbumSearchProps {
   query: string;
+  internalToken?: string;
 }
 
-export function AlbumSearchPage({ query }: AlbumSearchProps) {
+export function AlbumSearchPage({ query, internalToken }: AlbumSearchProps) {
   return (
-    <Layout title="Search Albums" description="Search for albums on Spotify">
+    <Layout title="Search Albums" description="Search for albums on Spotify" internalToken={internalToken}>
       <h1>💿 Search Albums</h1>
 
       {/* Search Form */}
@@ -49,7 +50,7 @@ export function AlbumSearchPage({ query }: AlbumSearchProps) {
             var query = ${JSON.stringify(query)};
             var container = document.getElementById('search-results');
 
-            fetch('/api/internal/search?type=album&q=' + encodeURIComponent(query))
+            internalFetch('/api/internal/search?type=album&q=' + encodeURIComponent(query))
               .then(function(r) { return r.json(); })
               .then(function(response) {
                 if (response.error) throw new Error(response.error);
@@ -92,5 +93,6 @@ export function AlbumSearchPage({ query }: AlbumSearchProps) {
 // Route handler - renders immediately, no API call
 export async function handleAlbumSearch(c: Context) {
   const query = c.req.query('q') || '';
-  return c.html(<AlbumSearchPage query={query} />);
+  const internalToken = c.get('internalToken') as string;
+  return c.html(<AlbumSearchPage query={query} internalToken={internalToken} />);
 }

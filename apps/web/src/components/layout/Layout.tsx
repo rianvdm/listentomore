@@ -12,12 +12,13 @@ interface LayoutProps {
   description?: string;
   image?: string;
   url?: string;
+  internalToken?: string;
 }
 
 // Default fallback image for social sharing
 const DEFAULT_OG_IMAGE = 'https://file.elezea.com/listentomore-og.png';
 
-export function Layout({ children, title, description, image, url }: LayoutProps) {
+export function Layout({ children, title, description, image, url, internalToken }: LayoutProps) {
   const pageTitle = title ? `${title} | ${SITE_CONFIG.name}` : SITE_CONFIG.name;
   const pageDescription = description || SITE_CONFIG.description;
   const ogImage = image || DEFAULT_OG_IMAGE;
@@ -80,6 +81,23 @@ export function Layout({ children, title, description, image, url }: LayoutProps
             `,
           }}
         />
+
+        {/* Internal API Token - for progressive loading fetch calls */}
+        {internalToken && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.__INTERNAL_TOKEN__ = '${internalToken}';
+                window.internalFetch = function(url, options) {
+                  options = options || {};
+                  options.headers = options.headers || {};
+                  options.headers['X-Internal-Token'] = window.__INTERNAL_TOKEN__;
+                  return fetch(url, options);
+                };
+              `,
+            }}
+          />
+        )}
       </head>
       <body>
         <NavBar />
