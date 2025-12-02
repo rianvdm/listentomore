@@ -97,6 +97,7 @@ The platform exposes a REST API that requires authentication. All requests must 
 
 **Cache Management** (requires premium-tier API key)
 - `GET /api/cache?prefix=:prefix` - List cache keys by prefix
+  - Prefixes: `ai:albumDetail`, `ai:artistSummary`, `ai:genreSummary`, `spotify:album`, `spotify:artist`, `songlink:`
 - `DELETE /api/cache?type=albumDetail&artist=:artist&album=:album` - Clear album summary cache
 - `DELETE /api/cache?type=artistSummary&artist=:artist` - Clear artist summary cache
 - `DELETE /api/cache?type=genreSummary&genre=:genre` - Clear genre summary cache
