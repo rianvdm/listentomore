@@ -64,45 +64,7 @@ listentomore/
 
 ## API
 
-The platform exposes a REST API that requires authentication. All requests must include an `X-API-Key` header.
-
-| Tier | Rate Limit |
-|------|------------|
-| Standard | 60 req/min |
-| Premium | 300 req/min |
-
-### Endpoints
-
-**Spotify**
-- `GET /api/spotify/search?q=:query&type=:type` - Search for tracks, albums, or artists
-- `GET /api/spotify/album/:id` - Get album details
-- `GET /api/spotify/artist/:id` - Get artist details
-
-**Last.fm** (all require `username` parameter)
-- `GET /api/lastfm/recent?username=:username` - Recent tracks
-- `GET /api/lastfm/top-albums?username=:username&period=:period` - Top albums
-- `GET /api/lastfm/top-artists?username=:username&period=:period` - Top artists
-- `GET /api/lastfm/loved?username=:username` - Loved tracks
-
-**AI**
-- `GET /api/ai/artist-summary?name=:name` - AI-generated artist summary
-- `GET /api/ai/album-detail?artist=:artist&album=:album` - AI-generated album analysis
-- `GET /api/ai/genre-summary?genre=:genre` - AI-generated genre overview
-- `POST /api/ai/ask` - Ask the music AI chatbot
-- `POST /api/ai/playlist-cover/prompt` - Generate DALL-E prompt for playlist art
-- `POST /api/ai/playlist-cover/image` - Generate playlist cover image
-
-**Songlink**
-- `GET /api/songlink?url=:streamingUrl` - Get universal streaming links
-
-**Cache Management** (requires premium-tier API key)
-- `GET /api/cache?prefix=:prefix` - List cache keys by prefix
-  - Prefixes: `ai:albumDetail`, `ai:artistSummary`, `ai:genreSummary`, `spotify:album`, `spotify:artist`, `songlink:`
-- `DELETE /api/cache?type=albumDetail&artist=:artist&album=:album` - Clear album summary cache
-- `DELETE /api/cache?type=artistSummary&artist=:artist` - Clear artist summary cache
-- `DELETE /api/cache?type=genreSummary&genre=:genre` - Clear genre summary cache
-- `DELETE /api/cache?type=spotify:album&id=:id` - Clear Spotify album cache
-- `DELETE /api/cache?type=spotify:artist&id=:id` - Clear Spotify artist cache
+The platform exposes a REST API for programmatic access to music discovery features. See the **[API Documentation](docs/API.md)** for full details including authentication, rate limits, and endpoint reference.
 
 ## Getting Started
 

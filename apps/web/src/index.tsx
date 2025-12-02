@@ -827,7 +827,6 @@ app.get('/api', (c) => {
         topArtists: '/api/lastfm/top-artists',
         lovedTracks: '/api/lastfm/loved',
       },
-      songlink: '/api/songlink?url=:streamingUrl',
       ai: {
         artistSummary: '/api/ai/artist-summary?name=:artistName',
         albumDetail: '/api/ai/album-detail?artist=:artistName&album=:albumName',
@@ -1121,24 +1120,6 @@ app.get('/api/lastfm/loved', async (c) => {
   } catch (error) {
     console.error('Last.fm loved tracks error:', error);
     return c.json({ error: 'Failed to fetch loved tracks' }, 500);
-  }
-});
-
-// Songlink API route
-app.get('/api/songlink', async (c) => {
-  const url = c.req.query('url');
-
-  if (!url) {
-    return c.json({ error: 'Missing url parameter' }, 400);
-  }
-
-  try {
-    const songlink = c.get('songlink');
-    const links = await songlink.getLinks(url);
-    return c.json({ data: links });
-  } catch (error) {
-    console.error('Songlink error:', error);
-    return c.json({ error: 'Failed to fetch streaming links' }, 500);
   }
 });
 
