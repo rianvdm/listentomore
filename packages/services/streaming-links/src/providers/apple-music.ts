@@ -1,4 +1,11 @@
 // Apple Music provider using iTunes Search API
+//
+// NOTE: iTunes Search/Lookup APIs block requests from cloud providers (Cloudflare Workers, AWS, etc.)
+// with 403 Forbidden. This means this provider will fall back to search URLs in production.
+// To get direct album links, you would need:
+// 1. Apple Music API access ($99/year Apple Developer enrollment)
+// 2. Route requests through a proxy server
+// 3. Use a different service that has Apple Music data (e.g., Odesli/song.link)
 
 import type {
   StreamingProvider,
