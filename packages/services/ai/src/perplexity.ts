@@ -104,15 +104,21 @@ export class PerplexityClient {
       citations?: string[];
     };
 
-    const content = data.choices[0].message.content;
+    let content = data.choices[0].message.content;
 
-    // Keep citation markers like [1], [2] in the content
+    // When citations are requested, keep markers like [1], [2] in the content
     // They will be transformed to superscript links client-side
     // The citations array provides the source URLs
+    //
+    // When citations are NOT requested, strip any citation markers
+    // since they would be orphaned without corresponding URLs
+    if (options.returnCitations === false) {
+      content = content.replace(/\s*\[\d+\]/g, '');
+    }
 
     return {
       content,
-      citations: data.citations ?? [],
+      citations: options.returnCitations === false ? [] : (data.citations ?? []),
     };
   }
 }
