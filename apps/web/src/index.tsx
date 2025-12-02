@@ -248,7 +248,7 @@ app.get('/', async (c) => {
                     html += '<a href="/u/' + listen.username + '">';
                     html += '<div class="track">';
                     if (listen.image) {
-                      html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" class="track-image" loading="lazy"/>';
+                      html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" class="track-image" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
                     }
                     html += '<div class="track-content">';
                     html += '<p class="track-artist">' + listen.artist + '</p>';

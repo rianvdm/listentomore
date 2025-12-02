@@ -66,7 +66,7 @@ export function AlbumSearchPage({ query, internalToken }: AlbumSearchProps) {
                   var year = album.releaseDate ? album.releaseDate.split('-')[0] : '';
                   html += '<a href="/album/' + album.id + '" class="track">';
                   if (album.image) {
-                    html += '<img src="' + album.image + '" alt="' + album.name.replace(/"/g, '&quot;') + '" class="track-image" loading="lazy" />';
+                    html += '<img src="' + album.image + '" alt="' + album.name.replace(/"/g, '&quot;') + '" class="track-image" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'" />';
                   } else {
                     html += '<div class="track-image" style="background:rgba(var(--c-accent-rgb),0.2);display:flex;align-items:center;justify-content:center;font-size:2rem;">' + album.name.charAt(0) + '</div>';
                   }

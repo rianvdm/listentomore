@@ -190,7 +190,7 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
               html += '<a href="' + item.href + '">';
               html += '<div class="track">';
               if (item.image) {
-                html += '<img src="' + item.image + '" alt="' + escapeHtml(item.title) + '" class="track-image" loading="lazy"/>';
+                html += '<img src="' + item.image + '" alt="' + escapeHtml(item.title) + '" class="track-image" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
               } else {
                 html += '<div class="track-image placeholder-image"></div>';
               }

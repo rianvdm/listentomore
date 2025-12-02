@@ -27,6 +27,7 @@ export function TrackCard({
           alt={`${name} by ${artist}`}
           class="track-image"
           loading="lazy"
+          onerror="this.onerror=null;this.src='https://file.elezea.com/noun-no-image.png'"
         />
       )}
       <div class="track-content">

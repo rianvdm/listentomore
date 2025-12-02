@@ -62,7 +62,7 @@ export function UserRecommendationsPage({
                 <div key={`${track.artist}-${track.title}`} class="track-item" data-index={index}>
                   <div class="track-item-image" id={`loved-image-${index}`}>
                     {track.image ? (
-                      <img src={track.image} alt={`${track.title} by ${track.artist}`} loading="lazy" />
+                      <img src={track.image} alt={`${track.title} by ${track.artist}`} loading="lazy" onerror="this.onerror=null;this.src='https://file.elezea.com/noun-no-image.png'" />
                     ) : (
                       <div class="placeholder-image">
                         <span class="spinner">↻</span>
@@ -162,7 +162,7 @@ export function UserRecommendationsPage({
                   if (spotifyAlbum.image) {
                     var imgEl = document.getElementById('loved-image-' + index);
                     if (imgEl) {
-                      imgEl.innerHTML = '<img src="' + spotifyAlbum.image + '" alt="' + track.title + ' by ' + track.artist + '" loading="lazy"/>';
+                      imgEl.innerHTML = '<img src="' + spotifyAlbum.image + '" alt="' + track.title + ' by ' + track.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
                     }
                   }
 
@@ -211,7 +211,7 @@ export function UserRecommendationsPage({
                 html += '<a href="' + href + '">';
                 html += '<div class="track">';
                 if (artist.image) {
-                  html += '<img src="' + artist.image + '" alt="' + artist.name + '" class="track-image" loading="lazy"/>';
+                  html += '<img src="' + artist.image + '" alt="' + artist.name + '" class="track-image" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
                 }
                 html += '<div class="track-content">';
                 html += '<p class="track-artist">' + artist.name + '</p>';

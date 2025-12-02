@@ -64,6 +64,7 @@ export function ArtistDetailPage({
               src={artistImage}
               alt={artist.name}
               style={{ maxWidth: '100%', width: '220px', height: 'auto' }}
+              onerror="this.onerror=null;this.src='https://file.elezea.com/noun-no-image.png'"
             />
             <div class="no-wrap-text">
               {/* Genre - loaded via JS from Last.fm tags */}
