@@ -37,7 +37,7 @@ export async function generateAlbumDetail(
 
 Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.
 
-You MUST attempt to find at least 5 sources from web searches.
+You MUST attempt to find at least 5 sources from web searches. Include inline citation numbers like [1], [2], etc. in your response to reference your sources.
 
 Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").
 

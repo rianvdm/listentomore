@@ -76,7 +76,7 @@ export async function generateGenreSummary(
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
-Use Markdown formatting for the summary. Do NOT start with a preamble or end with follow-up suggestions.
+Use Markdown formatting for the summary. Include inline citation numbers like [1], [2], etc. to reference your sources. Do NOT start with a preamble or end with follow-up suggestions.
 
 IMPORTANT: If you cannot find sufficient verifiable information about this music genre, respond with ONLY the text "Not enough information available for this genre." and nothing else. Do not explain what you couldn't find or apologize.`;
 
