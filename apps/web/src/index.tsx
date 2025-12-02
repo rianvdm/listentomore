@@ -882,14 +882,9 @@ app.post('/api/auth/keys', async (c) => {
   }
 });
 
-// Admin endpoint to clear cache entries
+// Admin endpoint to clear cache entries (requires premium API key)
 // Supports: albumDetail, artistSummary, genreSummary, spotify:album, spotify:artist
-app.delete('/api/cache', async (c) => {
-  const adminSecret = c.req.header('X-Admin-Secret');
-
-  if (!c.env.ADMIN_SECRET || adminSecret !== c.env.ADMIN_SECRET) {
-    return c.json({ error: 'Unauthorized', message: 'Admin access required' }, 401);
-  }
+app.delete('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
 
   const type = c.req.query('type');
   const cache = c.env.CACHE;
@@ -983,14 +978,8 @@ app.delete('/api/cache', async (c) => {
   }
 });
 
-// Admin endpoint to list cache keys by prefix
-app.get('/api/cache', async (c) => {
-  const adminSecret = c.req.header('X-Admin-Secret');
-
-  if (!c.env.ADMIN_SECRET || adminSecret !== c.env.ADMIN_SECRET) {
-    return c.json({ error: 'Unauthorized', message: 'Admin access required' }, 401);
-  }
-
+// Admin endpoint to list cache keys by prefix (requires premium API key)
+app.get('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
   const prefix = c.req.query('prefix') || 'ai:';
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 100);
   const cache = c.env.CACHE;

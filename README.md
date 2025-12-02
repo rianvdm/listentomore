@@ -95,7 +95,7 @@ The platform exposes a REST API that requires authentication. All requests must 
 **Songlink**
 - `GET /api/songlink?url=:streamingUrl` - Get universal streaming links
 
-**Cache Management** (Admin only - requires `X-Admin-Secret` header)
+**Cache Management** (requires premium-tier API key)
 - `GET /api/cache?prefix=:prefix` - List cache keys by prefix
 - `DELETE /api/cache?type=albumDetail&artist=:artist&album=:album` - Clear album summary cache
 - `DELETE /api/cache?type=artistSummary&artist=:artist` - Clear artist summary cache
