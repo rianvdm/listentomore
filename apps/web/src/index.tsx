@@ -1318,6 +1318,14 @@ async function scheduled(
     const db = new Database(env.DB);
     const users = await db.getAllUsersWithLastfm();
 
+    // Create Spotify service for image lookups
+    const spotify = new SpotifyService({
+      clientId: env.SPOTIFY_CLIENT_ID,
+      clientSecret: env.SPOTIFY_CLIENT_SECRET,
+      refreshToken: env.SPOTIFY_REFRESH_TOKEN,
+      cache: env.CACHE,
+    });
+
     const userTracks = await Promise.all(
       users.map(async (user) => {
         if (!user.lastfm_username) return null;
@@ -1328,12 +1336,25 @@ async function scheduled(
           });
           const track = await userLastfm.getMostRecentTrack();
           if (track) {
+            // Try to get Spotify image for better quality/reliability
+            let image = track.image;
+            if (track.album && track.artist) {
+              try {
+                const spotifyAlbum = await spotify.searchAlbum(`${track.artist} ${track.album}`);
+                if (spotifyAlbum?.image) {
+                  image = spotifyAlbum.image;
+                }
+              } catch (err) {
+                // Silently fall back to Last.fm image
+              }
+            }
+
             return {
               username: user.username || user.lastfm_username,
               artist: track.artist,
               album: track.album,
               track: track.name,
-              image: track.image,
+              image,
               playedAt: track.playedAt,
               nowPlaying: track.nowPlaying,
             };
