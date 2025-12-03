@@ -1,6 +1,8 @@
-// Last.fm top artists functionality
+// ABOUTME: Last.fm top artists functionality with optional detail enrichment.
+// ABOUTME: Fetches user's top artists with images, tags, and bio.
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 const BACKUP_IMAGE_URL = 'https://file.elezea.com/noun-no-image.png';
@@ -69,7 +71,7 @@ export class TopArtists {
 
     const url = `${LASTFM_API_BASE}/?method=user.gettopartists&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&period=${period}&limit=${limit}&format=json`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
 
     if (!response.ok) {
       throw new Error(`Last.fm API responded with status ${response.status}`);
@@ -127,7 +129,7 @@ export class TopArtists {
   ): Promise<TopArtist> {
     const url = `${LASTFM_API_BASE}/?method=artist.getinfo&artist=${encodeURIComponent(name)}&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
     const data = (await response.json()) as LastfmArtistInfoResponse;
 
     if (data.error) {

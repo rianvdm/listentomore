@@ -1,4 +1,5 @@
-// Apple Music provider using iTunes Search API
+// ABOUTME: Apple Music provider using iTunes Search API.
+// ABOUTME: Note: iTunes APIs block cloud providers, falls back to search URLs in production.
 //
 // NOTE: iTunes Search/Lookup APIs block requests from cloud providers (Cloudflare Workers, AWS, etc.)
 // with 403 Forbidden. This means this provider will fall back to search URLs in production.
@@ -7,6 +8,7 @@
 // 2. Route requests through a proxy server
 // 3. Use a different service that has Apple Music data (e.g., Odesli/song.link)
 
+import { fetchWithTimeout } from '@listentomore/shared';
 import type {
   StreamingProvider,
   TrackMetadata,
@@ -39,7 +41,7 @@ export class AppleMusicProvider implements StreamingProvider {
 
       console.log(`[AppleMusic] Searching for track: "${query}"`);
 
-      const response = await fetch(url.toString());
+      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
 
       if (!response.ok) {
         console.error(`[AppleMusic] Search failed: ${response.status}`);
@@ -119,7 +121,7 @@ export class AppleMusicProvider implements StreamingProvider {
 
       console.log(`[AppleMusic] Searching for album: "${query}"`);
 
-      const response = await fetch(url.toString());
+      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
 
       if (!response.ok) {
         console.error(`[AppleMusic] Search failed: ${response.status}`);

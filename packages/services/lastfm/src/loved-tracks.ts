@@ -1,4 +1,7 @@
-// Last.fm loved tracks functionality
+// ABOUTME: Last.fm loved tracks functionality.
+// ABOUTME: Fetches user's favorited/loved tracks.
+
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 
@@ -33,7 +36,7 @@ export class LovedTracks {
   async getLovedTracks(limit: number = 10): Promise<LovedTrack[]> {
     const url = `${LASTFM_API_BASE}/?method=user.getlovedtracks&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&limit=${limit}`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
 
     if (!response.ok) {
       throw new Error(`Last.fm API responded with status ${response.status}`);

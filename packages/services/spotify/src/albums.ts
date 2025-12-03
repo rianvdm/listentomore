@@ -1,6 +1,8 @@
-// Spotify album operations
+// ABOUTME: Spotify album operations - fetching album details and track lists.
+// ABOUTME: Includes caching with configurable TTLs.
 
 import { CACHE_CONFIG } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 import type { SpotifyAuth } from './auth';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
@@ -75,8 +77,9 @@ export class SpotifyAlbums {
 
     const accessToken = await this.auth.getAccessToken();
 
-    const response = await fetch(`${SPOTIFY_API_BASE}/albums/${encodeURIComponent(albumId)}`, {
+    const response = await fetchWithTimeout(`${SPOTIFY_API_BASE}/albums/${encodeURIComponent(albumId)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 'fast',
     });
 
     if (!response.ok) {

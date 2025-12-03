@@ -1,6 +1,8 @@
-// Last.fm top albums functionality
+// ABOUTME: Last.fm top albums functionality with caching.
+// ABOUTME: Fetches user's most played albums for various time periods.
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 const BACKUP_IMAGE_URL = 'https://file.elezea.com/noun-no-image.png';
@@ -51,7 +53,7 @@ export class TopAlbums {
 
     const url = `${LASTFM_API_BASE}/?method=user.gettopalbums&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&period=${period}&limit=${limit}&format=json`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
 
     if (!response.ok) {
       throw new Error(`Last.fm API responded with status ${response.status}`);

@@ -1,5 +1,7 @@
-// YouTube Music provider using YouTube Data API v3
+// ABOUTME: YouTube Music provider using YouTube Data API v3.
+// ABOUTME: Searches for tracks and albums with smart scoring and fallback URLs.
 
+import { fetchWithTimeout } from '@listentomore/shared';
 import type {
   StreamingProvider,
   TrackMetadata,
@@ -56,7 +58,7 @@ export class YouTubeProvider implements StreamingProvider {
 
       console.log(`[YouTube] Searching for track: "${query}"`);
 
-      const response = await fetch(url.toString());
+      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -132,7 +134,7 @@ export class YouTubeProvider implements StreamingProvider {
 
       console.log(`[YouTube] Searching for album: "${query}"`);
 
-      const response = await fetch(url.toString());
+      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
 
       if (!response.ok) {
         const errorText = await response.text();

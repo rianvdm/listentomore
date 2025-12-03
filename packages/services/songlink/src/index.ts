@@ -1,6 +1,8 @@
-// Songlink service - get streaming links for songs and albums
+// ABOUTME: Songlink service - get streaming links for songs and albums.
+// ABOUTME: Aggregates links from multiple streaming platforms via song.link API.
 
 import { CACHE_CONFIG } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const SONGLINK_API_BASE = 'https://api.song.link/v1-alpha.1/links';
 
@@ -59,7 +61,9 @@ export class SonglinkService {
 
     let response: Response;
     try {
-      response = await fetch(`${SONGLINK_API_BASE}?url=${encodedUrl}`);
+      response = await fetchWithTimeout(`${SONGLINK_API_BASE}?url=${encodedUrl}`, {
+        timeout: 'fast',
+      });
     } catch (fetchError) {
       const duration = Date.now() - startTime;
       console.error(`[Songlink] Fetch failed for ${streamingUrl} (${duration}ms):`, fetchError);

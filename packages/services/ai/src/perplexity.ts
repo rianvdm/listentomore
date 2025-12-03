@@ -1,6 +1,8 @@
-// Perplexity API client for web-grounded AI responses
+// ABOUTME: Perplexity API client for web-grounded AI responses.
+// ABOUTME: Includes rate limiting and citation extraction from web search.
 
 import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -75,7 +77,7 @@ export class PerplexityClient {
   ): Promise<ChatCompletionResponse> {
     await this.checkRateLimit();
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,6 +90,7 @@ export class PerplexityClient {
         temperature: options.temperature ?? 0.5,
         return_citations: options.returnCitations ?? true,
       }),
+      timeout: 'slow', // 30 seconds for AI
     });
 
     if (!response.ok) {

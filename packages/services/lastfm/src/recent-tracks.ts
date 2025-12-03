@@ -1,4 +1,7 @@
-// Last.fm recent tracks functionality
+// ABOUTME: Last.fm recent tracks functionality.
+// ABOUTME: Fetches user's recently played tracks including now playing.
+
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 
@@ -37,7 +40,7 @@ export class RecentTracks {
   async getRecentTracks(limit: number = 10): Promise<RecentTrack[]> {
     const url = `${LASTFM_API_BASE}/?method=user.getrecenttracks&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&limit=${limit}&format=json`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
 
     if (!response.ok) {
       throw new Error(`Last.fm API responded with status ${response.status}`);

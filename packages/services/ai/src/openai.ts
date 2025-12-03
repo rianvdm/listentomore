@@ -1,6 +1,8 @@
-// OpenAI API client for text and image generation
+// ABOUTME: OpenAI API client for text and image generation.
+// ABOUTME: Includes rate limiting and citation handling for web search models.
 
 import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -99,13 +101,14 @@ export class OpenAIClient {
       requestBody.temperature = options.temperature;
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(requestBody),
+      timeout: 'slow', // 30 seconds for AI
     });
 
     if (!response.ok) {
@@ -174,7 +177,7 @@ export class OpenAIClient {
   ): Promise<ImageGenerationResponse> {
     await this.checkRateLimit();
 
-    const response = await fetch(`${this.baseUrl}/images/generations`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/images/generations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -189,6 +192,7 @@ export class OpenAIClient {
         moderation: 'auto',
         output_format: 'png',
       }),
+      timeout: 'verySlow', // 60 seconds for image generation
     });
 
     if (!response.ok) {

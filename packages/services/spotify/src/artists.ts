@@ -1,6 +1,8 @@
-// Spotify artist operations
+// ABOUTME: Spotify artist operations - details, albums, and related artists.
+// ABOUTME: Includes caching with configurable TTLs.
 
 import { CACHE_CONFIG } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 import type { SpotifyAuth } from './auth';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
@@ -42,8 +44,9 @@ export class SpotifyArtists {
 
     const accessToken = await this.auth.getAccessToken();
 
-    const response = await fetch(`${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}`, {
+    const response = await fetchWithTimeout(`${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 'fast',
     });
 
     if (!response.ok) {
@@ -121,10 +124,11 @@ export class SpotifyArtists {
       market: 'US',
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}/albums?${params}`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 'fast',
       }
     );
 
@@ -166,10 +170,11 @@ export class SpotifyArtists {
 
     const accessToken = await this.auth.getAccessToken();
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${SPOTIFY_API_BASE}/artists/${artistId}/related-artists`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 'fast',
       }
     );
 

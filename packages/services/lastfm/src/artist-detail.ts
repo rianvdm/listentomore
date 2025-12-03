@@ -1,6 +1,8 @@
-// Last.fm artist detail functionality
+// ABOUTME: Last.fm artist detail functionality.
+// ABOUTME: Fetches artist info, tags, similar artists, and bio.
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
 
@@ -78,7 +80,7 @@ export class ArtistDetails {
 
     const url = `${LASTFM_API_BASE}/?method=artist.getInfo&artist=${encodeURIComponent(artistName)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&autocorrect=1`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
     const data = (await response.json()) as LastfmArtistInfoResponse;
 
     if (data.error) {
@@ -128,7 +130,7 @@ export class ArtistDetails {
 
     const url = `${LASTFM_API_BASE}/?method=artist.getTopAlbums&artist=${encodeURIComponent(artistName)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&autocorrect=1&limit=${limit}`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { timeout: 'fast' });
     const data = (await response.json()) as LastfmTopAlbumsResponse;
 
     if (data.error) {

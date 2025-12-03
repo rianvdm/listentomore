@@ -1,6 +1,8 @@
-// Spotify search functionality
+// ABOUTME: Spotify search functionality for tracks, albums, and artists.
+// ABOUTME: Includes caching and prefers full albums over singles/EPs.
 
 import { CACHE_CONFIG } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 import type { SpotifyAuth } from './auth';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
@@ -113,8 +115,9 @@ export class SpotifySearch {
     const accessToken = await this.auth.getAccessToken();
 
     const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 'fast',
     });
 
     if (!response.ok) {

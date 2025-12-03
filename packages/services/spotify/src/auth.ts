@@ -1,6 +1,8 @@
-// Spotify OAuth token management
+// ABOUTME: Spotify OAuth token management with automatic refresh.
+// ABOUTME: Caches access tokens and refreshes them before expiry.
 
 import { CACHE_CONFIG } from '@listentomore/config';
+import { fetchWithTimeout } from '@listentomore/shared';
 
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const TOKEN_CACHE_KEY = 'spotify:token';
@@ -37,13 +39,14 @@ export class SpotifyAuth {
   private async refreshAccessToken(): Promise<string> {
     const credentials = btoa(`${this.config.clientId}:${this.config.clientSecret}`);
 
-    const response = await fetch(SPOTIFY_TOKEN_URL, {
+    const response = await fetchWithTimeout(SPOTIFY_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Authorization: `Basic ${credentials}`,
       },
       body: `grant_type=refresh_token&refresh_token=${this.config.refreshToken}`,
+      timeout: 'fast',
     });
 
     if (!response.ok) {
