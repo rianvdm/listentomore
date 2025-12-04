@@ -10,7 +10,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Album & Artist Search** - Search the Spotify catalog with instant results
 - **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by Perplexity AI
 - **Genre Exploration** - Discover music by genre with AI-generated descriptions and key artists
-- **Universal Streaming Links** - Every album includes links to all major streaming platforms via Songlink/Odesli
+- **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and YouTube via UPC matching
 
 ### Personal Stats
 - **Real-time Listening Stats** - Connect your Last.fm account to see your recent listening activity
@@ -55,11 +55,12 @@ listentomore/
 │   │   ├── spotify/            # Spotify Web API client
 │   │   ├── lastfm/             # Last.fm API client
 │   │   ├── ai/                 # OpenAI + Perplexity clients
-│   │   └── songlink/           # Odesli/Songlink API client
+│   │   ├── songlink/           # Odesli/Songlink API client
+│   │   └── streaming-links/    # Apple Music + YouTube link matching
 │   ├── db/                     # D1 schema, migrations, queries
 │   ├── config/                 # Centralized config (cache TTLs, AI prompts)
 │   └── shared/                 # Shared types and utilities
-└── tools/scripts/              # Setup and migration scripts
+└── docs/                       # Technical documentation
 ```
 
 ## API
@@ -70,7 +71,7 @@ The platform exposes a REST API for programmatic access to music discovery featu
 
 ### Prerequisites
 - Node.js 18+
-- pnpm 8+
+- pnpm 9+
 - Cloudflare account (for D1 and KV)
 
 ### Installation
@@ -83,8 +84,8 @@ cd listentomore
 # Install dependencies
 pnpm install
 
-# Set up environment variables
-cp apps/web/.dev.vars.example apps/web/.dev.vars
+# Set up environment variables (see Environment Variables section below)
+touch apps/web/.dev.vars
 # Edit .dev.vars with your API keys
 ```
 
@@ -93,6 +94,7 @@ cp apps/web/.dev.vars.example apps/web/.dev.vars
 Create `apps/web/.dev.vars`:
 
 ```bash
+# Required
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 SPOTIFY_REFRESH_TOKEN=your_spotify_refresh_token
@@ -100,6 +102,16 @@ LASTFM_API_KEY=your_lastfm_api_key
 LASTFM_USERNAME=your_lastfm_username
 OPENAI_API_KEY=your_openai_api_key
 PERPLEXITY_API_KEY=your_perplexity_api_key
+INTERNAL_API_SECRET=your_random_secret_for_internal_apis
+
+# Optional - for admin features
+ADMIN_SECRET=your_admin_secret
+
+# Optional - for cross-platform streaming links
+YOUTUBE_API_KEY=your_youtube_api_key
+APPLE_TEAM_ID=your_apple_team_id
+APPLE_KEY_ID=your_apple_key_id
+APPLE_PRIVATE_KEY=your_apple_private_key
 ```
 
 ### Development
@@ -127,7 +139,8 @@ pnpm deploy
 - **[Last.fm API](https://www.last.fm/api)** - Listening history and scrobbles
 - **[OpenAI API](https://platform.openai.com)** - GPT-4 for chatbot and fact generation, DALL-E for image generation
 - **[Perplexity API](https://docs.perplexity.ai)** - Sonar model for grounded, cited summaries
-- **[Songlink/Odesli](https://odesli.co)** - Universal streaming links
+- **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
+- **[YouTube Data API](https://developers.google.com/youtube/v3)** - YouTube album/playlist links
 
 ## License
 

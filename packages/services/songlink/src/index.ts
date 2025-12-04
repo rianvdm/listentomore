@@ -102,9 +102,9 @@ export class SonglinkService {
 
     const entity = data.entitiesByUniqueId?.[data.entityUniqueId];
 
-    // Prefer youtubeMusic over youtube for music-specific links
-    const youtubeUrl = data.linksByPlatform?.youtubeMusic?.url
-      || data.linksByPlatform?.youtube?.url
+    // Prefer youtube over youtubeMusic for regular YouTube links
+    const youtubeUrl = data.linksByPlatform?.youtube?.url
+      || data.linksByPlatform?.youtubeMusic?.url
       || null;
 
     const links: StreamingLinks = {

@@ -1,5 +1,5 @@
-// ABOUTME: YouTube Music provider using YouTube Data API v3.
-// ABOUTME: Searches for tracks and albums with smart scoring and fallback URLs.
+// ABOUTME: YouTube provider using YouTube Data API v3.
+// ABOUTME: Searches for track videos with smart scoring, albums use search URLs.
 
 import { fetchWithTimeout } from '@listentomore/shared';
 import type {
@@ -10,7 +10,7 @@ import type {
   YouTubeSearchResponse,
   YouTubeSearchItem,
 } from '../types';
-import { similarity, normalizeString } from '../matching';
+import { normalizeString } from '../matching';
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const MUSIC_CATEGORY_ID = '10'; // Music category
@@ -23,9 +23,6 @@ const OFFICIAL_CHANNEL_PATTERNS = [
   /records$/i,
   /music$/i,
 ];
-
-// Official album playlist IDs from YouTube Music start with OLAK5uy_
-const OFFICIAL_ALBUM_PLAYLIST_PREFIX = 'OLAK5uy_';
 
 const OFFICIAL_TITLE_PATTERNS = [
   /official\s*(music\s*)?video/i,
@@ -68,7 +65,6 @@ export class YouTubeProvider implements StreamingProvider {
         console.error(`[YouTube] Search failed: ${response.status} - ${errorText}`);
 
         if (response.status === 403) {
-          // Quota exceeded or API key invalid
           console.log('[YouTube] API quota may be exceeded, using fallback');
         }
 
@@ -84,7 +80,7 @@ export class YouTubeProvider implements StreamingProvider {
 
       // Score and rank results
       const scoredResults = data.items
-        .filter((item) => item.id.videoId) // Only videos
+        .filter((item) => item.id.videoId)
         .map((item) => ({
           item,
           score: this.scoreTrackResult(metadata, item),
@@ -100,7 +96,7 @@ export class YouTubeProvider implements StreamingProvider {
         );
 
         return {
-          url: `https://music.youtube.com/watch?v=${videoId}`,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
           confidence: best.score,
           matched: {
             title: best.item.snippet.title,
@@ -118,74 +114,10 @@ export class YouTubeProvider implements StreamingProvider {
   }
 
   async searchAlbum(metadata: AlbumMetadata): Promise<ProviderResult | null> {
-    if (!this.apiKey) {
-      console.log('[YouTube] No API key configured, using fallback');
-      return this.getFallbackAlbumUrl(metadata);
-    }
-
-    const artist = metadata.artists[0] || '';
-    const album = metadata.name;
-    // Don't add "full album" - that tends to return user playlists rather than official albums
-    const query = `${artist} ${album} album`;
-
-    try {
-      const url = new URL(`${YOUTUBE_API_BASE}/search`);
-      url.searchParams.set('part', 'snippet');
-      url.searchParams.set('q', query);
-      url.searchParams.set('type', 'playlist');
-      url.searchParams.set('maxResults', '10');
-      url.searchParams.set('key', this.apiKey);
-
-      console.log(`[YouTube] Searching for album: "${query}"`);
-
-      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[YouTube] Search failed: ${response.status} - ${errorText}`);
-        return this.getFallbackAlbumUrl(metadata);
-      }
-
-      const data = (await response.json()) as YouTubeSearchResponse;
-
-      if (!data.items || data.items.length === 0) {
-        console.log(`[YouTube] No playlist results for: "${query}"`);
-        return this.getFallbackAlbumUrl(metadata);
-      }
-
-      // Score and rank results
-      const scoredResults = data.items
-        .filter((item) => item.id.playlistId) // Only playlists
-        .map((item) => ({
-          item,
-          score: this.scoreAlbumResult(metadata, item),
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      const best = scoredResults[0];
-
-      if (best && best.score > 0.5) {
-        const playlistId = best.item.id.playlistId!;
-        console.log(
-          `[YouTube] Match found: "${best.item.snippet.title}" by ${best.item.snippet.channelTitle} (score: ${best.score.toFixed(2)})`
-        );
-
-        return {
-          url: `https://music.youtube.com/playlist?list=${playlistId}`,
-          confidence: best.score,
-          matched: {
-            title: best.item.snippet.title,
-            channel: best.item.snippet.channelTitle,
-          },
-        };
-      }
-
-      console.log('[YouTube] No high-confidence album match found, using search fallback');
-      return this.getFallbackAlbumUrl(metadata);
-    } catch (error) {
-      console.error('[YouTube] Search error:', error);
-      return this.getFallbackAlbumUrl(metadata);
-    }
+    // Albums don't have a direct YouTube equivalent, so just return a search URL
+    // This saves an API call and provides a reasonable user experience
+    console.log(`[YouTube] Returning search URL for album: "${metadata.name}" by ${metadata.artists[0]}`);
+    return this.getFallbackAlbumUrl(metadata);
   }
 
   private scoreTrackResult(metadata: TrackMetadata, item: YouTubeSearchItem): number {
@@ -197,14 +129,30 @@ export class YouTubeProvider implements StreamingProvider {
     const normalizedArtist = normalizeString(metadata.artists[0] || '');
 
     // Check if title contains the track name (0.4 max)
-    const trackSim = similarity(normalizedTrack, normalizedTitle);
-    score += 0.4 * Math.min(1, trackSim * 1.5); // Boost partial matches
+    if (normalizedTitle.includes(normalizedTrack)) {
+      score += 0.4;
+    } else {
+      // Check token overlap for partial matches
+      const trackTokens = normalizedTrack.split(/\s+/).filter((t) => t.length > 2);
+      const titleTokens = normalizedTitle.split(/\s+/);
+      const matchedTokens = trackTokens.filter((t) => titleTokens.includes(t));
+      const tokenOverlap = trackTokens.length > 0 ? matchedTokens.length / trackTokens.length : 0;
+      score += 0.4 * tokenOverlap;
+    }
 
     // Check if title or channel contains artist (0.3 max)
     const normalizedChannel = normalizeString(channel);
-    const artistInTitle = normalizedTitle.includes(normalizedArtist) ? 1 : 0;
-    const artistInChannel = normalizedChannel.includes(normalizedArtist) ? 1 : 0;
-    score += 0.3 * Math.max(artistInTitle, artistInChannel);
+    if (normalizedTitle.includes(normalizedArtist) || normalizedChannel.includes(normalizedArtist)) {
+      score += 0.3;
+    } else {
+      const artistTokens = normalizedArtist.split(/\s+/).filter((t) => t.length > 2);
+      const channelTokens = normalizedChannel.split(/\s+/);
+      const titleTokens = normalizedTitle.split(/\s+/);
+      const allTargetTokens = [...new Set([...channelTokens, ...titleTokens])];
+      const matchedArtistTokens = artistTokens.filter((t) => allTargetTokens.includes(t));
+      const artistOverlap = artistTokens.length > 0 ? matchedArtistTokens.length / artistTokens.length : 0;
+      score += 0.3 * artistOverlap;
+    }
 
     // Bonus for official channels (0.15 max)
     const isOfficialChannel = OFFICIAL_CHANNEL_PATTERNS.some((pattern) => pattern.test(channel));
@@ -221,54 +169,19 @@ export class YouTubeProvider implements StreamingProvider {
     return Math.min(1, score);
   }
 
-  private scoreAlbumResult(metadata: AlbumMetadata, item: YouTubeSearchItem): number {
-    let score = 0;
-    const title = item.snippet.title;
-    const channel = item.snippet.channelTitle;
-    const playlistId = item.id.playlistId || '';
-    const normalizedTitle = normalizeString(title);
-    const normalizedAlbum = normalizeString(metadata.name);
-    const normalizedArtist = normalizeString(metadata.artists[0] || '');
-
-    // MAJOR bonus for official YouTube Music album playlists (OLAK5uy_ prefix)
-    // These are the official album releases from labels
-    if (playlistId.startsWith(OFFICIAL_ALBUM_PLAYLIST_PREFIX)) {
-      score += 0.4;
-      console.log(`[YouTube] Found official album playlist: ${playlistId}`);
-    }
-
-    // Check if title contains the album name (0.25 max)
-    const albumSim = similarity(normalizedAlbum, normalizedTitle);
-    score += 0.25 * Math.min(1, albumSim * 1.5);
-
-    // Check if title or channel contains artist (0.2 max)
-    const normalizedChannel = normalizeString(channel);
-    const artistInTitle = normalizedTitle.includes(normalizedArtist) ? 1 : 0;
-    const artistInChannel = normalizedChannel.includes(normalizedArtist) ? 1 : 0;
-    score += 0.2 * Math.max(artistInTitle, artistInChannel);
-
-    // Bonus for Topic channels (auto-generated by YouTube) (0.15 max)
-    // Topic channels host the official album playlists
-    if (/- topic$/i.test(channel)) {
-      score += 0.15;
-    }
-
-    return Math.min(1, score);
-  }
-
   private getFallbackTrackUrl(metadata: TrackMetadata): ProviderResult {
     const query = `${metadata.artists[0] || ''} ${metadata.name}`;
     return {
-      url: `https://music.youtube.com/search?q=${encodeURIComponent(query)}`,
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
       confidence: 0,
       fallback: true,
     };
   }
 
   private getFallbackAlbumUrl(metadata: AlbumMetadata): ProviderResult {
-    const query = `${metadata.artists[0] || ''} ${metadata.name}`;
+    const query = `${metadata.artists[0] || ''} ${metadata.name} album`;
     return {
-      url: `https://music.youtube.com/search?q=${encodeURIComponent(query)}`,
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
       confidence: 0,
       fallback: true,
     };

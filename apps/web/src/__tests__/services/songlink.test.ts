@@ -42,7 +42,7 @@ describe('SonglinkService', () => {
       expect(result).toEqual({
         pageUrl: 'https://song.link/s/abc123',
         appleUrl: 'https://music.apple.com/track/123',
-        youtubeUrl: 'https://music.youtube.com/watch?v=xyz', // Prefers youtubeMusic
+        youtubeUrl: 'https://youtube.com/watch?v=xyz', // Prefers youtube over youtubeMusic
         deezerUrl: 'https://deezer.com/track/456',
         spotifyUrl: 'https://open.spotify.com/track/abc123',
         tidalUrl: 'https://tidal.com/track/789',

@@ -49,7 +49,24 @@ export function similarity(a: string, b: string): number {
 }
 
 /**
+ * Decode common HTML entities that appear in API responses (e.g., YouTube)
+ */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#38;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+/**
  * Normalize a string for comparison
+ * - Decode HTML entities
  * - Lowercase
  * - Remove special characters
  * - Normalize whitespace
@@ -57,7 +74,7 @@ export function similarity(a: string, b: string): number {
  */
 export function normalizeString(str: string): string {
   return (
-    str
+    decodeHtmlEntities(str)
       .toLowerCase()
       // Remove content in parentheses/brackets (remaster notes, etc.)
       .replace(/\s*[\(\[][^\)\]]*[\)\]]\s*/g, ' ')
