@@ -228,7 +228,7 @@ app.get('/', async (c) => {
 
         {/* Recently Listened by Users - Progressive Loading */}
         <h2>What we're listening to</h2>
-        <p class="text-muted text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>Updates every 10 minutes</p>
+        <p id="user-listens-updated" class="text-muted text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>Loading...</p>
         <div id="user-listens-container">
           <div class="loading-container">
             <span class="spinner">↻</span>
@@ -252,7 +252,18 @@ app.get('/', async (c) => {
 
                   if (result.error || !result.data || result.data.length === 0) {
                     container.innerHTML = '<p class="text-center text-muted">No recent listens available.</p>';
+                    document.getElementById('user-listens-updated').textContent = '';
                     return;
+                  }
+
+                  // Update "last updated" text in user's local timezone
+                  var updatedEl = document.getElementById('user-listens-updated');
+                  if (updatedEl && result.lastUpdated) {
+                    var date = new Date(result.lastUpdated);
+                    var timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                    updatedEl.textContent = 'Last updated ' + timeStr;
+                  } else if (updatedEl) {
+                    updatedEl.textContent = '';
                   }
 
                   // Limit to MAX_ITEMS
@@ -747,8 +758,11 @@ app.get('/api/internal/user-listens', async (c) => {
     // Check KV cache first
     const cached = await c.env.CACHE.get(CACHE_KEY);
     if (cached) {
-      const data = JSON.parse(cached);
-      return c.json({ data: data.slice(0, MAX_RESULTS), cached: true });
+      const parsed = JSON.parse(cached);
+      // Handle both old format (array) and new format (object with tracks/lastUpdated)
+      const tracks = Array.isArray(parsed) ? parsed : parsed.tracks;
+      const lastUpdated = Array.isArray(parsed) ? null : parsed.lastUpdated;
+      return c.json({ data: tracks.slice(0, MAX_RESULTS), lastUpdated, cached: true });
     }
 
     // Cache miss - fetch from all users
@@ -795,11 +809,13 @@ app.get('/api/internal/user-listens', async (c) => {
     });
 
     // Cache the full sorted list (we may want more than 6 later)
-    await c.env.CACHE.put(CACHE_KEY, JSON.stringify(validTracks), {
+    const lastUpdated = new Date().toISOString();
+    const cacheData = { tracks: validTracks, lastUpdated };
+    await c.env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
       expirationTtl: CACHE_TTL_SECONDS,
     });
 
-    return c.json({ data: validTracks.slice(0, MAX_RESULTS), cached: false });
+    return c.json({ data: validTracks.slice(0, MAX_RESULTS), lastUpdated, cached: false });
   } catch (error) {
     console.error('Internal user-listens error:', error);
     return c.json({ error: 'Failed to fetch user listens' }, 500);
@@ -1518,7 +1534,11 @@ async function scheduled(
     // Cache with 12-minute TTL (cron runs every 10 min, gives 2 min overlap)
     const CACHE_KEY = 'user-listens:recent';
     const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userListens);
-    await env.CACHE.put(CACHE_KEY, JSON.stringify(validTracks), {
+    const cacheData = {
+      tracks: validTracks,
+      lastUpdated: new Date().toISOString(),
+    };
+    await env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
       expirationTtl: CACHE_TTL_SECONDS,
     });
 
