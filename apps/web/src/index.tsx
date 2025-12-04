@@ -319,17 +319,20 @@ app.get('/', async (c) => {
                                 var linksEl = document.getElementById('listen-links-' + index);
                                 if (linksEl) {
                                   var existingContent = linksEl.innerHTML;
-                                  // Build link with Apple Music if available, fallback to Spotify
-                                  var href = (linkData.data && linkData.data.appleUrl) ? linkData.data.appleUrl : spotifyUrl;
-                                  linksEl.innerHTML = '<a href="' + href + '" target="_blank" rel="noopener noreferrer">Listen ↗</a> • ' + existingContent;
+                                  // Build separate Spotify and Apple Music links
+                                  var links = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
+                                  if (linkData.data && linkData.data.appleUrl) {
+                                    links += ' • <a href="' + linkData.data.appleUrl + '" target="_blank" rel="noopener noreferrer">Apple Music ↗</a>';
+                                  }
+                                  linksEl.innerHTML = links + ' • ' + existingContent;
                                 }
                               })
                               .catch(function() {
-                                // Fall back to Spotify URL
+                                // Fall back to Spotify URL only
                                 var linksEl = document.getElementById('listen-links-' + index);
                                 if (linksEl) {
                                   var existingContent = linksEl.innerHTML;
-                                  linksEl.innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Listen ↗</a> • ' + existingContent;
+                                  linksEl.innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a> • ' + existingContent;
                                 }
                               });
                           }
