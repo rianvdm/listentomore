@@ -762,9 +762,11 @@ app.get('/api/internal/user-listens', async (c) => {
       // Handle both old format (array) and new format (object with tracks/lastUpdated)
       const tracks = Array.isArray(parsed) ? parsed : parsed.tracks;
       const lastUpdated = Array.isArray(parsed) ? null : parsed.lastUpdated;
+      console.log(`[API] Cache hit, returning ${tracks.length} tracks`);
       return c.json({ data: tracks.slice(0, MAX_RESULTS), lastUpdated, cached: true });
     }
 
+    console.log('[API] Cache MISS - fetching from all users');
     // Cache miss - fetch from all users
     const db = c.get('db');
     const users = await db.getAllUsersWithLastfm();
@@ -811,6 +813,7 @@ app.get('/api/internal/user-listens', async (c) => {
     // Cache the full sorted list (we may want more than 6 later)
     const lastUpdated = new Date().toISOString();
     const cacheData = { tracks: validTracks, lastUpdated };
+    console.log(`[API] Writing ${validTracks.length} tracks to cache with TTL ${CACHE_TTL_SECONDS}s`);
     await c.env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
       expirationTtl: CACHE_TTL_SECONDS,
     });
@@ -1471,6 +1474,7 @@ async function scheduled(
   try {
     const db = new Database(env.DB);
     const users = await db.getAllUsersWithLastfm();
+    console.log(`[CRON] Found ${users.length} users with Last.fm usernames`);
 
     // Create Spotify service for image lookups
     const spotify = new SpotifyService({
@@ -1521,6 +1525,8 @@ async function scheduled(
     );
 
     // Filter and sort
+    const nullCount = userTracks.filter(t => t === null).length;
+    console.log(`[CRON] API results: ${userTracks.length - nullCount} tracks, ${nullCount} failures`);
     const validTracks = userTracks.filter((t): t is NonNullable<typeof t> => t !== null);
     validTracks.sort((a, b) => {
       if (a.nowPlaying && !b.nowPlaying) return -1;
@@ -1538,6 +1544,7 @@ async function scheduled(
       tracks: validTracks,
       lastUpdated: new Date().toISOString(),
     };
+    console.log(`[CRON] Caching ${validTracks.length} tracks with TTL ${CACHE_TTL_SECONDS}s`);
     await env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
       expirationTtl: CACHE_TTL_SECONDS,
     });
