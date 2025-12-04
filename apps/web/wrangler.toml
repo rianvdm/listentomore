@@ -4,6 +4,11 @@ main = "src/index.tsx"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain
+routes = [
+  { pattern = "listentomore.com", custom_domain = true }
+]
+
 # Static assets (favicons, etc.)
 [assets]
 directory = "./public"
@@ -28,18 +33,9 @@ binding = "DB"
 database_name = "listentomore"
 database_id = "512d0c41-502c-41ba-82ff-635d0413b071"
 
-# Environment variables (non-sensitive defaults)
+# Environment variables
 [vars]
-ENVIRONMENT = "development"
-
-# Production environment overrides
-[env.production]
-vars = { ENVIRONMENT = "production" }
-
-# Custom domain
-routes = [
-  { pattern = "listentomore.com", custom_domain = true }
-]
+ENVIRONMENT = "production"
 
 # Scheduled triggers (CRON jobs)
 [triggers]
@@ -55,3 +51,6 @@ crons = ["*/10 * * * *"]  # Run every 10 minutes (random fact only at top of hou
 # - DISCOGS_API_TOKEN
 # - YOUTUBE_API_KEY (for streaming links service)
 # - INTERNAL_API_SECRET (for signing internal API tokens)
+# - APPLE_KEY_ID
+# - APPLE_TEAM_ID
+# - APPLE_PRIVATE_KEY
