@@ -183,6 +183,25 @@ export class SpotifySearch {
     return results[0] || null;
   }
 
+  /**
+   * Search for an album using Spotify field filters for more precise matching.
+   * Use this when you have structured artist/album data (e.g., from Last.fm).
+   */
+  async searchAlbumByArtist(artist: string, album: string): Promise<AlbumSearchResult | null> {
+    // Use Spotify's field filters for precise matching
+    const query = `artist:"${artist}" album:"${album}"`;
+    const results = await this.search(query, 'album', 1);
+    
+    // If field filter search fails, fall back to natural query
+    if (!results.length) {
+      const fallbackQuery = `${artist} ${album}`;
+      const fallbackResults = await this.search(fallbackQuery, 'album', 1);
+      return fallbackResults[0] || null;
+    }
+    
+    return results[0] || null;
+  }
+
   async searchArtist(query: string): Promise<ArtistSearchResult | null> {
     const results = await this.search(query, 'artist', 1);
     return results[0] || null;

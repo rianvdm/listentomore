@@ -55,6 +55,10 @@ export class SpotifyService {
     return this.search.searchAlbum(query);
   }
 
+  async searchAlbumByArtist(artist: string, album: string) {
+    return this.search.searchAlbumByArtist(artist, album);
+  }
+
   async searchArtist(query: string) {
     return this.search.searchArtist(query);
   }

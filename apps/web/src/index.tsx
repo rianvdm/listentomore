@@ -1471,7 +1471,7 @@ async function scheduled(
             let image = track.image;
             if (track.album && track.artist) {
               try {
-                const spotifyAlbum = await spotify.searchAlbum(`${track.artist} ${track.album}`);
+                const spotifyAlbum = await spotify.searchAlbumByArtist(track.artist, track.album);
                 if (spotifyAlbum?.image) {
                   image = spotifyAlbum.image;
                 }
