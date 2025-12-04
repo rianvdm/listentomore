@@ -167,14 +167,13 @@ export function UserRecommendationsPage({
                   }
 
                   // Add streaming link
-                  if (spotifyAlbum.url) {
-                    // Get songlink for universal link
-                    internalFetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyAlbum.url))
+                  if (spotifyAlbum.id) {
+                    internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(spotifyAlbum.id) + '&type=album')
                       .then(function(r) { return r.json(); })
                       .then(function(linkData) {
                         var linksEl = document.getElementById('loved-links-' + index);
                         if (linksEl) {
-                          var href = linkData.data && linkData.data.pageUrl ? linkData.data.pageUrl : spotifyAlbum.url;
+                          var href = (linkData.data && linkData.data.appleUrl) ? linkData.data.appleUrl : spotifyAlbum.url;
                           linksEl.innerHTML = ' \\u2022 <a href="' + href + '" target="_blank" rel="noopener noreferrer">Listen \\u2197</a>';
                         }
                       })

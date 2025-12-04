@@ -174,7 +174,7 @@ describe('generateArtistSummary', () => {
     const result = await generateArtistSummary('Radiohead', mockClient, cache);
 
     expect(result.summary).toContain('Radiohead is an English rock band');
-    expect(result.summary).toContain('[OK Computer](/album?q=OK%20Computer%20Radiohead)');
+    expect(result.summary).toContain('data-album="OK Computer"');
     expect(result.summary).toContain('[Portishead](/artist?q=Portishead)');
     expect(result.citations).toContain('https://en.wikipedia.org/wiki/Radiohead');
 

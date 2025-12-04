@@ -126,7 +126,7 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
           var albumName = ${JSON.stringify(album.name)};
 
           // Fetch streaming links
-          internalFetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl), { cache: 'no-store' })
+          internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(albumId) + '&type=album', { cache: 'no-store' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
               if (data.error) throw new Error(data.error);
@@ -134,13 +134,10 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
               var html = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a><br/>';
               if (links.appleUrl) html += '<a href="' + links.appleUrl + '" target="_blank" rel="noopener noreferrer">Apple Music ↗</a><br/>';
               if (links.youtubeUrl) html += '<a href="' + links.youtubeUrl + '" target="_blank" rel="noopener noreferrer">YouTube Music ↗</a><br/>';
-              if (links.tidalUrl) html += '<a href="' + links.tidalUrl + '" target="_blank" rel="noopener noreferrer">Tidal ↗</a><br/>';
-              if (links.deezerUrl) html += '<a href="' + links.deezerUrl + '" target="_blank" rel="noopener noreferrer">Deezer ↗</a><br/>';
-              if (links.pageUrl) html += '<a href="' + links.pageUrl + '" target="_blank" rel="noopener noreferrer">Songlink ↗</a><br/>';
               document.getElementById('streaming-links').innerHTML = html;
             })
             .catch(function(e) {
-              console.error('Songlink error:', e);
+              console.error('Streaming links error:', e);
               // Keep just Spotify link on error
               document.getElementById('streaming-links').innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
             });

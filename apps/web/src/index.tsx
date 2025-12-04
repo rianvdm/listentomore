@@ -305,20 +305,22 @@ app.get('/', async (c) => {
                         if (el) el.innerHTML = '';
                       });
 
-                    // Fetch streaming links via songlink (using precise field-filter search)
+                    // Fetch streaming links (using precise field-filter search)
                     if (listen.album && listen.artist) {
                       internalFetch('/api/internal/search-album-by-artist?artist=' + encodeURIComponent(listen.artist) + '&album=' + encodeURIComponent(listen.album))
                         .then(function(r) { return r.json(); })
                         .then(function(data) {
-                          if (data.data && data.data[0] && data.data[0].url) {
+                          if (data.data && data.data[0] && data.data[0].id) {
+                            var albumId = data.data[0].id;
                             var spotifyUrl = data.data[0].url;
-                            internalFetch('/api/internal/songlink?url=' + encodeURIComponent(spotifyUrl))
+                            internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(albumId) + '&type=album')
                               .then(function(r) { return r.json(); })
                               .then(function(linkData) {
                                 var linksEl = document.getElementById('listen-links-' + index);
                                 if (linksEl) {
-                                  var href = linkData.data && linkData.data.pageUrl ? linkData.data.pageUrl : spotifyUrl;
                                   var existingContent = linksEl.innerHTML;
+                                  // Build link with Apple Music if available, fallback to Spotify
+                                  var href = (linkData.data && linkData.data.appleUrl) ? linkData.data.appleUrl : spotifyUrl;
                                   linksEl.innerHTML = '<a href="' + href + '" target="_blank" rel="noopener noreferrer">Listen ↗</a> • ' + existingContent;
                                 }
                               })
@@ -436,24 +438,7 @@ app.use('/api/internal/*', async (c, next) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
 });
 
-app.get('/api/internal/songlink', async (c) => {
-  const url = c.req.query('url');
-  if (!url) {
-    return c.json({ error: 'Missing url parameter' }, 400);
-  }
-
-  try {
-    const songlink = c.get('songlink');
-    const links = await songlink.getLinks(url);
-    return c.json({ data: links });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Internal songlink error:', errorMessage, error);
-    return c.json({ error: 'Failed to fetch streaming links', details: errorMessage }, 500);
-  }
-});
-
-// New streaming links endpoint (replaces songlink)
+// Streaming links endpoint using our own providers (Apple Music + YouTube)
 app.get('/api/internal/streaming-links', async (c) => {
   const spotifyId = c.req.query('spotifyId');
   const type = c.req.query('type') as 'track' | 'album' | undefined;
