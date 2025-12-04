@@ -33,12 +33,23 @@ function enrichLinks(containerId) {
   // Enrich album links
   var albumLinks = container.querySelectorAll('a[href^="/album?q="]');
   albumLinks.forEach(function(link) {
-    var href = link.getAttribute('href');
-    var match = href.match(/\\/album\\?q=([^&]+)/);
-    if (!match) return;
+    // Prefer data attributes for precise field-filter search
+    var artist = link.getAttribute('data-artist');
+    var album = link.getAttribute('data-album');
+    
+    var fetchUrl;
+    if (artist && album) {
+      // Use precise search with field filters
+      fetchUrl = '/api/internal/search-album-by-artist?artist=' + encodeURIComponent(artist) + '&album=' + encodeURIComponent(album);
+    } else {
+      // Fall back to natural query search
+      var href = link.getAttribute('href');
+      var match = href.match(/\\/album\\?q=([^&]+)/);
+      if (!match) return;
+      fetchUrl = '/api/internal/search?q=' + match[1] + '&type=album';
+    }
 
-    var query = match[1];
-    internalFetch('/api/internal/search?q=' + query + '&type=album')
+    internalFetch(fetchUrl)
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.data && data.data[0] && data.data[0].id) {
@@ -119,14 +130,15 @@ function enrichAlbumMentions(containerId) {
 
       albumsToEnrich.push({
         link: link,
-        query: searchQuery
+        artist: artistName,
+        album: albumName
       });
     }
   });
 
-  // Enrich with Spotify IDs
+  // Enrich with Spotify IDs (using precise field-filter search)
   albumsToEnrich.forEach(function(item) {
-    internalFetch('/api/internal/search?q=' + encodeURIComponent(item.query) + '&type=album')
+    internalFetch('/api/internal/search-album-by-artist?artist=' + encodeURIComponent(item.artist) + '&album=' + encodeURIComponent(item.album))
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.data && data.data[0] && data.data[0].id) {

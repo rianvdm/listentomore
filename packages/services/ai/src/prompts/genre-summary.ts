@@ -10,8 +10,20 @@ export interface GenreSummaryResult {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS in data attributes
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
  * Replace [[Artist Name]] and {{Album Name}} placeholders with search links.
  * Client-side enrichLinks() will then upgrade these to direct Spotify links.
+ * Albums include data-artist and data-album attributes for precise field-filter search.
  */
 function replacePlaceholders(content: string): string {
   // Replace album names FIRST (before artists, to avoid nested links)
@@ -21,17 +33,16 @@ function replacePlaceholders(content: string): string {
     
     // Parse "Album Name by Artist Name" for more precise Spotify search
     const byMatch = cleanAlbum.match(/^(.+?)\s+by\s+(.+)$/i);
-    let query: string;
     if (byMatch) {
       const albumName = byMatch[1].trim();
       const artistName = byMatch[2].trim();
-      // Use Spotify's field syntax: album:X artist:Y
-      query = encodeURIComponent(`album:${albumName} artist:${artistName}`);
+      // Include data attributes for precise field-filter search via enrichLinks
+      const query = encodeURIComponent(`${artistName} ${albumName}`);
+      return `<a href="/album?q=${query}" data-artist="${escapeHtml(artistName)}" data-album="${escapeHtml(albumName)}">${cleanAlbum}</a>`;
     } else {
-      query = encodeURIComponent(cleanAlbum);
+      const query = encodeURIComponent(cleanAlbum);
+      return `[${cleanAlbum}](/album?q=${query})`;
     }
-    
-    return `[${cleanAlbum}](/album?q=${query})`;
   });
 
   // Replace artist names: [[Artist Name]] -> search link

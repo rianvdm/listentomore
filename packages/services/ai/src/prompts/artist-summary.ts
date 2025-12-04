@@ -10,9 +10,21 @@ export interface ArtistSummaryResult {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS in data attributes
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
  * Replace [[Artist Name]] and {{Album Name}} placeholders with search links.
  * Since we don't have Spotify IDs for referenced artists/albums, we link to
  * search pages where users can find them.
+ * Albums include data-artist and data-album attributes for precise field-filter search.
  */
 function replacePlaceholders(summary: string, artistName: string): string {
   // Replace artist names: [[Artist Name]] -> search link
@@ -21,10 +33,10 @@ function replacePlaceholders(summary: string, artistName: string): string {
     return `[${artist}](/artist?q=${query})`;
   });
 
-  // Replace album names: {{Album Name}} -> search link (include artist for better results)
+  // Replace album names: {{Album Name}} -> search link with data attributes for precise search
   result = result.replace(/\{\{([^}]+)\}\}/g, (_match, album) => {
-    const query = encodeURIComponent(`${album} ${artistName}`);
-    return `[${album}](/album?q=${query})`;
+    const query = encodeURIComponent(`${artistName} ${album}`);
+    return `<a href="/album?q=${query}" data-artist="${escapeHtml(artistName)}" data-album="${escapeHtml(album)}">${album}</a>`;
   });
 
   // Fix missing spaces before placeholder markers (capital letters handled in perplexity.ts)

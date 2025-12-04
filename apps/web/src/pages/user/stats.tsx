@@ -94,7 +94,7 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
               var track = result.data;
               if (track) {
                 recentEl.innerHTML = '<p>Most recently listened to ' +
-                  '<a href="/album?q=' + encodeURIComponent(track.artist + ' ' + track.album) + '">' +
+                  '<a href="/album?q=' + encodeURIComponent(track.artist + ' ' + track.album) + '" data-artist="' + escapeHtml(track.artist) + '" data-album="' + escapeHtml(track.album) + '">' +
                   '<strong>' + escapeHtml(track.album) + '</strong></a> by ' +
                   '<a href="/artist?q=' + encodeURIComponent(track.artist) + '">' +
                   '<strong>' + escapeHtml(track.artist) + '</strong></a>.' +
@@ -164,7 +164,9 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
                     subtitle: album.artist,
                     extra: album.playcount + ' plays',
                     image: album.image,
-                    href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name)
+                    href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name),
+                    dataArtist: album.artist,
+                    dataAlbum: album.name
                   };
                 }));
                 enrichLinks('top-albums');
@@ -187,7 +189,11 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
           function renderTrackGrid(items) {
             var html = '<div class="track-grid">';
             items.forEach(function(item) {
-              html += '<a href="' + item.href + '">';
+              var dataAttrs = '';
+              if (item.dataArtist && item.dataAlbum) {
+                dataAttrs = ' data-artist="' + escapeHtml(item.dataArtist) + '" data-album="' + escapeHtml(item.dataAlbum) + '"';
+              }
+              html += '<a href="' + item.href + '"' + dataAttrs + '>';
               html += '<div class="track">';
               if (item.image) {
                 html += '<img src="' + item.image + '" alt="' + escapeHtml(item.title) + '" class="track-image" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';

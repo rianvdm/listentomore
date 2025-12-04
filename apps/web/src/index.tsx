@@ -305,9 +305,9 @@ app.get('/', async (c) => {
                         if (el) el.innerHTML = '';
                       });
 
-                    // Fetch streaming links via songlink
+                    // Fetch streaming links via songlink (using precise field-filter search)
                     if (listen.album && listen.artist) {
-                      internalFetch('/api/internal/search?q=' + encodeURIComponent(listen.artist + ' ' + listen.album) + '&type=album')
+                      internalFetch('/api/internal/search-album-by-artist?artist=' + encodeURIComponent(listen.artist) + '&album=' + encodeURIComponent(listen.album))
                         .then(function(r) { return r.json(); })
                         .then(function(data) {
                           if (data.data && data.data[0] && data.data[0].url) {
@@ -619,6 +619,25 @@ app.get('/api/internal/search', async (c) => {
     return c.json({ data: results });
   } catch (error) {
     console.error('Internal search error:', error);
+    return c.json({ error: 'Search failed' }, 500);
+  }
+});
+
+// Search for album using field filters (more precise than plain query)
+app.get('/api/internal/search-album-by-artist', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  }
+
+  try {
+    const spotify = c.get('spotify');
+    const result = await spotify.searchAlbumByArtist(artist, album);
+    return c.json({ data: result ? [result] : [] });
+  } catch (error) {
+    console.error('Internal search-album-by-artist error:', error);
     return c.json({ error: 'Search failed' }, 500);
   }
 });

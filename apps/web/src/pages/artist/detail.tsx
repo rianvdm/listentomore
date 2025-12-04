@@ -153,9 +153,9 @@ export function ArtistDetailPage({
                 html += '</ul>';
                 document.getElementById('popular-albums').innerHTML = html;
 
-                // Enrich with Spotify IDs for direct links
+                // Enrich with Spotify IDs for direct links (using precise field-filter search)
                 Promise.all(lastfm.topAlbums.map(function(albumName) {
-                  return internalFetch('/api/internal/search?q=' + encodeURIComponent(artistName + ' ' + albumName) + '&type=album')
+                  return internalFetch('/api/internal/search-album-by-artist?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName))
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                       if (data.data && data.data[0]) {

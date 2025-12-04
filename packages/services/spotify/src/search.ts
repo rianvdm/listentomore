@@ -190,11 +190,13 @@ export class SpotifySearch {
   async searchAlbumByArtist(artist: string, album: string): Promise<AlbumSearchResult | null> {
     // Use Spotify's field filters for precise matching
     const query = `artist:"${artist}" album:"${album}"`;
+    console.log(`[Spotify] Searching with field filters: ${query}`);
     const results = await this.search(query, 'album', 1);
     
     // If field filter search fails, fall back to natural query
     if (!results.length) {
       const fallbackQuery = `${artist} ${album}`;
+      console.log(`[Spotify] Field filter failed, falling back to: ${fallbackQuery}`);
       const fallbackResults = await this.search(fallbackQuery, 'album', 1);
       return fallbackResults[0] || null;
     }
