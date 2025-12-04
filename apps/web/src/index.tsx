@@ -242,7 +242,7 @@ app.get('/', async (c) => {
             ${enrichLinksScript}
 
             (function() {
-              var MAX_ITEMS = 5;
+              var MAX_ITEMS = 8;
 
               internalFetch('/api/internal/user-listens')
                 .then(function(res) { return res.json(); })
@@ -751,7 +751,7 @@ app.get('/api/internal/user-recommendations', async (c) => {
 
 app.get('/api/internal/user-listens', async (c) => {
   const CACHE_KEY = 'user-listens:v2:recent';
-  const MAX_RESULTS = 6;
+  const MAX_RESULTS = 8;
 
   try {
     // Read-only from cache - cron is responsible for writing
