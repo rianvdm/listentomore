@@ -56,7 +56,7 @@ export async function generateArtistSummary(
 
   const prompt = `Write a summary of the music artist/band ${artistName}. Include verifiable facts about the artist's history, genres, styles, and most popular albums. Include one or two interesting facts about them (without stating that it's an interesting fact). Also recommend similar artists to check out if one likes their music. Write no more than three paragraphs. Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name}}.
 
-Use Markdown formatting for the summary. Do NOT use bullet points. Include inline citation numbers like [1], [2], etc. to reference your sources.
+Use Markdown formatting for the summary. Do NOT use bullet points. Include inline citation numbers like [1], [2], etc. to reference your sources. Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
 
 IMPORTANT: If you cannot find sufficient verifiable information about this artist, respond with ONLY the text "Not enough information available for this artist." and nothing else. Do not explain what you couldn't find or apologize.`;
 

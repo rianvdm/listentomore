@@ -39,7 +39,7 @@ Use Markdown formatting with bold and italic text where appropriate, and h3 (###
 
 You MUST attempt to find at least 5 sources from web searches. Include inline citation numbers like [1], [2], etc. in your response to reference your sources.
 
-Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").
+Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also..."). Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
 
 IMPORTANT: If you cannot find sufficient information about this album to write a meaningful summary, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
 
