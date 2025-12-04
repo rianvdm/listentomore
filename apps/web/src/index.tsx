@@ -751,74 +751,38 @@ app.get('/api/internal/user-recommendations', async (c) => {
 
 app.get('/api/internal/user-listens', async (c) => {
   const CACHE_KEY = 'user-listens:recent';
-  const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userListens);
   const MAX_RESULTS = 6;
 
   try {
-    // Check KV cache first
+    // Read-only from cache - cron is responsible for writing
+    // This prevents race conditions where API and cron both write
     const cached = await c.env.CACHE.get(CACHE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
       // Handle both old format (array) and new format (object with tracks/lastUpdated)
       const tracks = Array.isArray(parsed) ? parsed : parsed.tracks;
       const lastUpdated = Array.isArray(parsed) ? null : parsed.lastUpdated;
+      
+      // Detect and log stale format (helps diagnose old worker instances)
+      if (Array.isArray(parsed)) {
+        console.log(`[API] WARNING: Cache has old format (bare array with ${parsed.length} items). Possible stale worker writing v1 format.`);
+      } else if (!parsed.version || parsed.version < 2) {
+        console.log(`[API] WARNING: Cache has outdated version (v${parsed.version || 1}). Expected v2.`);
+      }
+      
       console.log(`[API] Cache hit, returning ${tracks.length} tracks`);
       return c.json({ data: tracks.slice(0, MAX_RESULTS), lastUpdated, cached: true });
     }
 
-    console.log('[API] Cache MISS - fetching from all users');
-    // Cache miss - fetch from all users
-    const db = c.get('db');
-    const users = await db.getAllUsersWithLastfm();
-
-    // Fetch most recent track for each user in parallel
-    const userTracks = await Promise.all(
-      users.map(async (user) => {
-        if (!user.lastfm_username) return null;
-        try {
-          const userLastfm = new LastfmService({
-            apiKey: c.env.LASTFM_API_KEY,
-            username: user.lastfm_username,
-          });
-          const track = await userLastfm.getMostRecentTrack();
-          if (track) {
-            return {
-              username: user.username || user.lastfm_username,
-              artist: track.artist,
-              album: track.album,
-              track: track.name,
-              image: track.image,
-              playedAt: track.playedAt,
-              nowPlaying: track.nowPlaying,
-            };
-          }
-        } catch (error) {
-          console.error(`Failed to fetch recent track for ${user.lastfm_username}:`, error);
-        }
-        return null;
-      })
-    );
-
-    // Filter out nulls and sort by recency (now playing first, then by playedAt)
-    const validTracks = userTracks.filter((t): t is NonNullable<typeof t> => t !== null);
-    validTracks.sort((a, b) => {
-      if (a.nowPlaying && !b.nowPlaying) return -1;
-      if (!a.nowPlaying && b.nowPlaying) return 1;
-      if (!a.playedAt && !b.playedAt) return 0;
-      if (!a.playedAt) return 1;
-      if (!b.playedAt) return -1;
-      return new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime();
+    // Cache miss - cron should have pre-warmed, but if not, return empty
+    // The UI will show "Loading..." and cron will populate within 5 minutes
+    console.log('[API] Cache MISS - cron has not pre-warmed yet, returning empty');
+    return c.json({ 
+      data: [], 
+      lastUpdated: null, 
+      cached: false,
+      message: 'Cache warming in progress. Data will appear shortly.'
     });
-
-    // Cache the full sorted list (we may want more than 6 later)
-    const lastUpdated = new Date().toISOString();
-    const cacheData = { tracks: validTracks, lastUpdated };
-    console.log(`[API] Writing ${validTracks.length} tracks to cache with TTL ${CACHE_TTL_SECONDS}s`);
-    await c.env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
-      expirationTtl: CACHE_TTL_SECONDS,
-    });
-
-    return c.json({ data: validTracks.slice(0, MAX_RESULTS), lastUpdated, cached: false });
   } catch (error) {
     console.error('Internal user-listens error:', error);
     return c.json({ error: 'Failed to fetch user listens' }, 500);
@@ -1543,13 +1507,25 @@ async function scheduled(
     const cacheData = {
       tracks: validTracks,
       lastUpdated: new Date().toISOString(),
+      version: 2, // Version marker to detect stale workers (v1 wrote bare array, v2 writes object)
     };
     console.log(`[CRON] Caching ${validTracks.length} tracks with TTL ${CACHE_TTL_SECONDS}s`);
     await env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
       expirationTtl: CACHE_TTL_SECONDS,
     });
 
-    console.log(`[CRON] Pre-warmed user listens cache with ${validTracks.length} tracks`);
+    // Verify write succeeded by reading back
+    const verification = await env.CACHE.get(CACHE_KEY);
+    if (verification) {
+      const parsed = JSON.parse(verification);
+      if (parsed.version === 2 && parsed.tracks?.length === validTracks.length) {
+        console.log(`[CRON] Pre-warmed user listens cache with ${validTracks.length} tracks (verified)`);
+      } else {
+        console.log(`[CRON] WARNING: Cache verification mismatch! Expected v2 with ${validTracks.length} tracks, got v${parsed.version || 1} with ${parsed.tracks?.length ?? parsed.length} tracks`);
+      }
+    } else {
+      console.log(`[CRON] WARNING: Cache write verification failed - key not found after write`);
+    }
   } catch (error) {
     console.error('[CRON] Failed to pre-warm user listens cache:', error);
   }
