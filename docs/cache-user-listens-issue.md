@@ -1,112 +1,130 @@
-Problem Summary: Intermittent Cache Corruption in User Listens Feature
+# Problem Summary: Intermittent Cache Corruption in User Listens Feature
 
-  The Issue
+**Status: RESOLVED** (2025-12-04)
 
-  The "What we're listening to" feature on the home page intermittently shows "no recent listens available"
-  despite the cron job logging success.
+## The Issue
 
-  Pattern observed:
-  - :X5 minutes (5, 15, 25, 35, 45, 55) - works correctly
-  - :X0 minutes (0, 10, 20, 30, 40, 50) - shows empty data
+The "What we're listening to" feature on the home page intermittently shows "no recent listens available"
+despite the cron job logging success.
 
-  Key Files
+## Key Files
 
-  1. apps/web/src/index.tsx
-    - Lines 752-826: API endpoint /api/internal/user-listens - reads from cache, falls back to fetching all users
-   on miss
-    - Lines 1446-1556: scheduled() function - cron job that pre-warms the cache every 5 minutes
-    - Both write to KV key: user-listens:recent
-  2. packages/config/src/cache.ts
-    - Line 26: userListens: { ttlMinutes: 7 } - cache TTL config
-  3. apps/web/wrangler.toml
-    - Line 42: crons = ["*/5 * * * *"] - cron schedule
-
-  The Mystery
-
-  What the logs show:
-  10:10:20 AM - [CRON] Caching 13 tracks with TTL 420s
-  10:10:20 AM - [CRON] Pre-warmed user listens cache with 13 tracks
-  10:10:31 AM - [API] Cache hit, returning 0 tracks
-
-  The cron logs that it successfully cached 13 tracks, but 11 seconds later the API sees 0 tracks (cache HIT, not
-   miss).
-
-  What's in the cache:
-  npx wrangler kv key get --namespace-id=a6011a8b5bac4be9a472ff86f8d5fd91 --remote "user-listens:recent"
-  # Returns: []
-
-  The cache contains [] (empty array), but both current code paths write {"tracks": [...], "lastUpdated": "..."}
-  format:
-
-  - Cron (line 1543-1548): const cacheData = { tracks: validTracks, lastUpdated: new Date().toISOString() };
-  - API (line 815): const cacheData = { tracks: validTracks, lastUpdated };
-
-  Potential Causes to Investigate
-
-  1. Stale Worker Code: The [] format matches OLD code (pre-commit 2afdf13). Despite deploying, could there be
-  cached/stale workers running old code?
-  2. Race Condition: Could a slow API request (cache miss flow) be overwriting the cron's cache write?
-    - API cache miss at 10:09:45 starts fetching
-    - Cron runs at 10:10:00, writes good data
-    - API finishes at 10:10:20, overwrites with (empty?) data
-  3. KV Eventual Consistency: Cloudflare KV is eventually consistent. Could edge location differences cause the
-  cron write to not be visible to the API read?
-  4. Silent Write Failure: The cron logs success BEFORE await env.CACHE.put(). Could the PUT be failing silently?
-
-  Debug Logging Added (commit b6c968b)
-
-  Cron (lines 1528-1552):
-  console.log(`[CRON] Found ${users.length} users with Last.fm usernames`);
-  console.log(`[CRON] API results: ${userTracks.length - nullCount} tracks, ${nullCount} failures`);
-  console.log(`[CRON] Caching ${validTracks.length} tracks with TTL ${CACHE_TTL_SECONDS}s`);
-
-  API (lines 765, 769, 816):
-  console.log(`[API] Cache hit, returning ${tracks.length} tracks`);
-  console.log('[API] Cache MISS - fetching from all users');
-  console.log(`[API] Writing ${validTracks.length} tracks to cache with TTL ${CACHE_TTL_SECONDS}s`);
+1. `apps/web/src/index.tsx`
+   - API endpoint `/api/internal/user-listens` - reads from cache
+   - `scheduled()` function - cron job that pre-warms the cache every 5 minutes
+2. `packages/config/src/cache.ts`
+   - `userListens: { ttlMinutes: 7 }` - cache TTL config
+3. `apps/web/wrangler.toml`
+   - `crons = ["*/5 * * * *"]` - cron schedule
 
 ---
 
 ## Root Cause Analysis
 
-### The Pattern Explained
+### The Smoking Gun
 
-The failure pattern matches exactly with the cron schedule change from `*/10` to `*/5`:
-- **Old cron**: `*/10` → runs at 0, 10, 20, 30, 40, 50 (= `:X0` pattern)
-- **New cron**: `*/5` → also runs at 5, 15, 25, 35, 45, 55 (= `:X5` pattern)
+API logs showed this pattern intermittently:
 
-The cache contains `[]` (bare array), but **both current code paths** write `{tracks: [...], lastUpdated: "..."}`.
-This format only existed in the OLD code before commit `2afdf13`.
+```
+2025-12-04 14:25:13 [API] WARNING: Cache has old format (bare array with 0 items). Possible stale worker writing v1 format.
+2025-12-04 14:25:13 [API] Cache hit, returning 0 tracks
+```
 
-### Diagnosis
+The cache contained `[]` (bare empty array), but **no current code writes that format**. The bare array format was only in OLD code before commit `2afdf13`.
 
-**Stale Worker Instances**: Cloudflare Workers can have multiple instances running during/after deployments.
-An old worker instance running the pre-`2afdf13` code writes `[]` format (bare array) instead of `{tracks: [], lastUpdated}`.
+### Timeline Analysis
 
-At `:X5` times, only new workers run → works correctly.
-At `:X0` times, old worker may run and overwrite → fails.
+```
+14:20:29 - Cron writes 14 tracks (new format, verified) ✓
+14:25:07 - API sees [] (old format) ← Something overwrote the good data!
+14:25:10 - API sees [] (old format)
+14:25:13 - API sees [] (old format) + WARNING logged
+14:25:27 - Cron writes 14 tracks (new format) ✓
+14:26:22 - API sees 14 tracks ✓
+```
 
-**Secondary Issue**: Race condition between API cache-miss flow and cron (both writing to same key).
+**Between 14:20 and 14:25, old cron code executed and wrote `[]`, overwriting the good data.**
+
+### Root Cause: Stale Worker Instances
+
+Despite deployments showing "100%" rollout, **Cloudflare Workers can have stale instances that occasionally execute cron jobs**.
+
+The sequence:
+1. Old code writes bare arrays: `[]`
+2. New code writes objects: `{tracks: [...], lastUpdated: "...", version: 2}`
+3. Both wrote to the SAME cache key: `user-listens:recent`
+4. When old worker executed cron, it overwrote new data with old format
+5. This happened intermittently depending on which worker instance ran the cron
+
+### Why Version Marker Wasn't Enough
+
+We added a `version: 2` field inside the cache data to detect old format. However:
+- The version field helped us **detect** the problem (via WARNING logs)
+- But it didn't **prevent** old code from overwriting new data
+- Both old and new code wrote to the SAME cache key
+
+---
 
 ## Solution Implemented
 
-1. **Made API read-only** for the `user-listens:recent` cache key
+### Final Fix: Change Cache Key (2025-12-04)
+
+**Changed the cache key itself** from `user-listens:recent` to `user-listens:v2:recent`.
+
+```typescript
+// OLD (both old and new code used this):
+const CACHE_KEY = 'user-listens:recent';
+
+// NEW (only new code uses this):
+const CACHE_KEY = 'user-listens:v2:recent';
+```
+
+This ensures:
+- Old workers write to: `user-listens:recent` (ignored by new API)
+- New workers write to: `user-listens:v2:recent` (read by new API)
+- **Old code cannot corrupt new data because they use different keys**
+
+### Previous Mitigations (still in place)
+
+1. **Made API read-only** for the cache key
    - API no longer writes to cache on cache miss
    - Only the cron job manages cache writes
    - Eliminates race conditions
 
 2. **Added version marker** to cache data
-   - v1 = old format (bare array)
-   - v2 = new format (object with `tracks`, `lastUpdated`, `version`)
-   - Helps detect stale workers in logs
+   - Helps detect if any old format data appears (shouldn't happen with new key)
 
 3. **Added write verification** in cron
    - Reads back after write to confirm data is correct
    - Logs warning if verification fails
 
-### Post-Deploy Steps
+---
 
-After deploying this fix:
-1. Monitor logs for `[API] WARNING` messages about old format or version mismatch
-2. If warnings persist, consider deleting and redeploying the worker to clear stale instances
-3. Cache key can be manually cleared: `npx wrangler kv key delete --namespace-id=... "user-listens:recent"`
+## Lessons Learned
+
+1. **Stale workers persist longer than expected**: Even with "100%" deployment, old worker instances can execute cron jobs intermittently.
+
+2. **Version fields don't prevent overwrites**: Adding a version field inside the data helps detection but doesn't prevent old code from writing to the same key.
+
+3. **Key namespacing is the safest isolation**: When making breaking format changes, changing the cache key itself guarantees old code can't interfere.
+
+4. **Good logging is essential**: The `[API] WARNING` logs let us catch the exact moment old format was detected, which proved the root cause.
+
+---
+
+## Debug Commands
+
+Check current cache value:
+```bash
+npx wrangler kv key get --namespace-id=a6011a8b5bac4be9a472ff86f8d5fd91 --remote "user-listens:v2:recent"
+```
+
+Check cache keys (to verify old key exists separately):
+```bash
+npx wrangler kv key get --namespace-id=a6011a8b5bac4be9a472ff86f8d5fd91 --remote "user-listens:recent"
+```
+
+Delete old cache key (optional cleanup):
+```bash
+npx wrangler kv key delete --namespace-id=a6011a8b5bac4be9a472ff86f8d5fd91 --remote "user-listens:recent"
+```

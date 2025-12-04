@@ -750,7 +750,7 @@ app.get('/api/internal/user-recommendations', async (c) => {
 });
 
 app.get('/api/internal/user-listens', async (c) => {
-  const CACHE_KEY = 'user-listens:recent';
+  const CACHE_KEY = 'user-listens:v2:recent';
   const MAX_RESULTS = 6;
 
   try {
@@ -1502,14 +1502,14 @@ async function scheduled(
     });
 
     // Cache with 7-minute TTL (cron runs every 5 min, gives 2 min overlap)
-    const CACHE_KEY = 'user-listens:recent';
+    const CACHE_KEY = 'user-listens:v2:recent';
     const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userListens);
     const cacheData = {
       tracks: validTracks,
       lastUpdated: new Date().toISOString(),
       version: 2, // Version marker to detect stale workers (v1 wrote bare array, v2 writes object)
     };
-    console.log(`[CRON] Caching ${validTracks.length} tracks with TTL ${CACHE_TTL_SECONDS}s`);
+    console.log(`[CRON] Caching ${validTracks.length} tracks to key "${CACHE_KEY}" with TTL ${CACHE_TTL_SECONDS}s`);
     await env.CACHE.put(CACHE_KEY, JSON.stringify(cacheData), {
       expirationTtl: CACHE_TTL_SECONDS,
     });
