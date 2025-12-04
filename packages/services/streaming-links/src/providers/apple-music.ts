@@ -1,189 +1,390 @@
-// ABOUTME: Apple Music provider using iTunes Search API.
-// ABOUTME: Note: iTunes APIs block cloud providers, falls back to search URLs in production.
-//
-// NOTE: iTunes Search/Lookup APIs block requests from cloud providers (Cloudflare Workers, AWS, etc.)
-// with 403 Forbidden. This means this provider will fall back to search URLs in production.
-// To get direct album links, you would need:
-// 1. Apple Music API access ($99/year Apple Developer enrollment)
-// 2. Route requests through a proxy server
-// 3. Use a different service that has Apple Music data (e.g., Odesli/song.link)
+// ABOUTME: Apple Music provider using Apple MusicKit API.
+// ABOUTME: Uses ISRC/UPC lookup for high-confidence matching, with text search fallback.
 
+import { SignJWT, importPKCS8 } from 'jose';
 import { fetchWithTimeout } from '@listentomore/shared';
 import type {
   StreamingProvider,
   TrackMetadata,
   AlbumMetadata,
   ProviderResult,
-  ITunesSearchResponse,
-  ITunesTrackResult,
-  ITunesAlbumResult,
 } from '../types';
 import { calculateTrackConfidence, calculateAlbumConfidence, extractYear } from '../matching';
 
-const ITUNES_SEARCH_API = 'https://itunes.apple.com/search';
+const APPLE_MUSIC_API = 'https://api.music.apple.com/v1';
+const DEFAULT_STOREFRONT = 'us';
 const CONFIDENCE_THRESHOLD = 0.8;
+const ISRC_CONFIDENCE = 0.98; // ISRC matches are very reliable
+const UPC_CONFIDENCE = 0.98; // UPC matches are very reliable
+
+/**
+ * Convert a storefront-specific Apple Music URL to a geo-agnostic URL.
+ * Apple will redirect users to their local storefront automatically.
+ * e.g., https://music.apple.com/us/album/... → https://music.apple.com/album/...
+ */
+function toGeoAgnosticUrl(url: string): string {
+  return url.replace(/music\.apple\.com\/[a-z]{2}\//, 'music.apple.com/');
+}
+
+// MusicKit API response types
+interface AppleMusicSongAttributes {
+  name: string;
+  artistName: string;
+  albumName: string;
+  durationInMillis: number;
+  isrc?: string;
+  url: string;
+}
+
+interface AppleMusicAlbumAttributes {
+  name: string;
+  artistName: string;
+  trackCount: number;
+  releaseDate?: string;
+  upc?: string;
+  url: string;
+}
+
+interface AppleMusicResource<T> {
+  id: string;
+  type: string;
+  href: string;
+  attributes: T;
+}
+
+interface AppleMusicResponse<T> {
+  data: AppleMusicResource<T>[];
+}
+
+interface AppleMusicSearchResponse {
+  results: {
+    songs?: { data: AppleMusicResource<AppleMusicSongAttributes>[] };
+    albums?: { data: AppleMusicResource<AppleMusicAlbumAttributes>[] };
+  };
+}
+
+export interface AppleMusicConfig {
+  teamId: string;
+  keyId: string;
+  privateKey: string;
+}
 
 export class AppleMusicProvider implements StreamingProvider {
   name = 'appleMusic';
 
-  async searchTrack(metadata: TrackMetadata): Promise<ProviderResult | null> {
-    const artist = metadata.artists[0] || '';
-    const track = metadata.name;
+  private config: AppleMusicConfig | null;
+  private cachedToken: { token: string; expiresAt: number } | null = null;
 
-    // Build search query with quoted terms for better matching
-    const query = `${artist} ${track}`;
+  constructor(config?: AppleMusicConfig) {
+    this.config = config || null;
+  }
+
+  /**
+   * Generate a signed JWT for Apple Music API authentication.
+   * Tokens are cached for 50 minutes (API allows up to 6 months, but shorter is safer).
+   */
+  private async getToken(): Promise<string | null> {
+    if (!this.config) {
+      return null;
+    }
+
+    // Check if cached token is still valid (with 10 min buffer)
+    const now = Date.now();
+    if (this.cachedToken && this.cachedToken.expiresAt > now + 10 * 60 * 1000) {
+      return this.cachedToken.token;
+    }
 
     try {
-      const url = new URL(ITUNES_SEARCH_API);
-      url.searchParams.set('term', query);
-      url.searchParams.set('entity', 'song');
-      url.searchParams.set('limit', '10');
+      const key = await importPKCS8(this.config.privateKey, 'ES256');
 
-      console.log(`[AppleMusic] Searching for track: "${query}"`);
+      const token = await new SignJWT({})
+        .setProtectedHeader({ alg: 'ES256', kid: this.config.keyId })
+        .setIssuer(this.config.teamId)
+        .setIssuedAt()
+        .setExpirationTime('1h')
+        .sign(key);
 
-      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
+      // Cache for 50 minutes
+      this.cachedToken = {
+        token,
+        expiresAt: now + 50 * 60 * 1000,
+      };
 
-      if (!response.ok) {
-        console.error(`[AppleMusic] Search failed: ${response.status}`);
-        return this.getFallbackTrackUrl(metadata);
-      }
-
-      const data = (await response.json()) as ITunesSearchResponse;
-
-      if (data.resultCount === 0) {
-        console.log(`[AppleMusic] No results for: "${query}"`);
-        return this.getFallbackTrackUrl(metadata);
-      }
-
-      // Score each result and find the best match
-      let bestMatch: ITunesTrackResult | null = null;
-      let bestConfidence = 0;
-
-      for (const result of data.results as ITunesTrackResult[]) {
-        const confidence = calculateTrackConfidence(
-          {
-            artists: metadata.artists,
-            name: metadata.name,
-            durationMs: metadata.durationMs,
-            album: metadata.album,
-          },
-          {
-            artistName: result.artistName,
-            trackName: result.trackName,
-            trackTimeMillis: result.trackTimeMillis,
-            collectionName: result.collectionName,
-          }
-        );
-
-        if (confidence > bestConfidence) {
-          bestConfidence = confidence;
-          bestMatch = result;
-        }
-      }
-
-      if (bestMatch && bestConfidence >= CONFIDENCE_THRESHOLD) {
-        console.log(
-          `[AppleMusic] Match found: "${bestMatch.trackName}" by ${bestMatch.artistName} (confidence: ${bestConfidence.toFixed(2)})`
-        );
-
-        return {
-          url: bestMatch.trackViewUrl,
-          confidence: bestConfidence,
-          matched: {
-            artist: bestMatch.artistName,
-            track: bestMatch.trackName,
-            album: bestMatch.collectionName,
-          },
-        };
-      }
-
-      console.log(
-        `[AppleMusic] Best match confidence too low: ${bestConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD}`
-      );
-      return this.getFallbackTrackUrl(metadata);
+      console.log('[AppleMusic] Generated new JWT token');
+      return token;
     } catch (error) {
-      console.error('[AppleMusic] Search error:', error);
-      return this.getFallbackTrackUrl(metadata);
+      console.error('[AppleMusic] Failed to generate JWT:', error);
+      return null;
     }
   }
 
-  async searchAlbum(metadata: AlbumMetadata): Promise<ProviderResult | null> {
-    const artist = metadata.artists[0] || '';
-    const album = metadata.name;
+  /**
+   * Make an authenticated request to the Apple Music API
+   */
+  private async apiRequest<T>(endpoint: string): Promise<T | null> {
+    const token = await this.getToken();
+    if (!token) {
+      return null;
+    }
 
-    const query = `${artist} ${album}`;
+    const url = `${APPLE_MUSIC_API}${endpoint}`;
 
     try {
-      const url = new URL(ITUNES_SEARCH_API);
-      url.searchParams.set('term', query);
-      url.searchParams.set('entity', 'album');
-      url.searchParams.set('limit', '10');
-
-      console.log(`[AppleMusic] Searching for album: "${query}"`);
-
-      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
+      const response = await fetchWithTimeout(url, {
+        timeout: 'fast',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
-        console.error(`[AppleMusic] Search failed: ${response.status}`);
-        return this.getFallbackAlbumUrl(metadata);
+        console.error(`[AppleMusic] API request failed: ${response.status}`);
+        return null;
       }
 
-      const data = (await response.json()) as ITunesSearchResponse;
+      return (await response.json()) as T;
+    } catch (error) {
+      console.error('[AppleMusic] API request error:', error);
+      return null;
+    }
+  }
 
-      if (data.resultCount === 0) {
-        console.log(`[AppleMusic] No results for: "${query}"`);
-        return this.getFallbackAlbumUrl(metadata);
+  /**
+   * Search for a track by ISRC (most reliable method)
+   */
+  private async searchByIsrc(
+    isrc: string
+  ): Promise<AppleMusicResource<AppleMusicSongAttributes> | null> {
+    if (!isrc) return null;
+
+    console.log(`[AppleMusic] Searching by ISRC: ${isrc}`);
+    const data = await this.apiRequest<AppleMusicResponse<AppleMusicSongAttributes>>(
+      `/catalog/${DEFAULT_STOREFRONT}/songs?filter[isrc]=${isrc}`
+    );
+
+    if (data?.data?.length) {
+      console.log(`[AppleMusic] ISRC match found: "${data.data[0].attributes.name}"`);
+      return data.data[0];
+    }
+
+    console.log(`[AppleMusic] No ISRC match for: ${isrc}`);
+    return null;
+  }
+
+  /**
+   * Search for an album by UPC (most reliable method)
+   */
+  private async searchByUpc(
+    upc: string
+  ): Promise<AppleMusicResource<AppleMusicAlbumAttributes> | null> {
+    if (!upc) return null;
+
+    console.log(`[AppleMusic] Searching by UPC: ${upc}`);
+    const data = await this.apiRequest<AppleMusicResponse<AppleMusicAlbumAttributes>>(
+      `/catalog/${DEFAULT_STOREFRONT}/albums?filter[upc]=${upc}`
+    );
+
+    if (data?.data?.length) {
+      console.log(`[AppleMusic] UPC match found: "${data.data[0].attributes.name}"`);
+      return data.data[0];
+    }
+
+    console.log(`[AppleMusic] No UPC match for: ${upc}`);
+    return null;
+  }
+
+  /**
+   * Search for a track by text query (fallback)
+   */
+  private async searchTrackByText(
+    query: string,
+    metadata: TrackMetadata
+  ): Promise<ProviderResult | null> {
+    console.log(`[AppleMusic] Text search for track: "${query}"`);
+
+    const data = await this.apiRequest<AppleMusicSearchResponse>(
+      `/catalog/${DEFAULT_STOREFRONT}/search?term=${encodeURIComponent(query)}&types=songs&limit=10`
+    );
+
+    const songs = data?.results?.songs?.data;
+    if (!songs?.length) {
+      console.log(`[AppleMusic] No text search results for: "${query}"`);
+      return null;
+    }
+
+    // Score each result and find the best match
+    let bestMatch: AppleMusicResource<AppleMusicSongAttributes> | null = null;
+    let bestConfidence = 0;
+
+    for (const song of songs) {
+      const confidence = calculateTrackConfidence(
+        {
+          artists: metadata.artists,
+          name: metadata.name,
+          durationMs: metadata.durationMs,
+          album: metadata.album,
+        },
+        {
+          artistName: song.attributes.artistName,
+          trackName: song.attributes.name,
+          trackTimeMillis: song.attributes.durationInMillis,
+          collectionName: song.attributes.albumName,
+        }
+      );
+
+      if (confidence > bestConfidence) {
+        bestConfidence = confidence;
+        bestMatch = song;
       }
+    }
 
-      // Score each result and find the best match
-      let bestMatch: ITunesAlbumResult | null = null;
-      let bestConfidence = 0;
+    if (bestMatch && bestConfidence >= CONFIDENCE_THRESHOLD) {
+      console.log(
+        `[AppleMusic] Text match: "${bestMatch.attributes.name}" (confidence: ${bestConfidence.toFixed(2)})`
+      );
+      return {
+        url: toGeoAgnosticUrl(bestMatch.attributes.url),
+        confidence: bestConfidence,
+        matched: {
+          artist: bestMatch.attributes.artistName,
+          track: bestMatch.attributes.name,
+          album: bestMatch.attributes.albumName,
+        },
+      };
+    }
 
-      for (const result of data.results as ITunesAlbumResult[]) {
-        const confidence = calculateAlbumConfidence(
-          {
-            artists: metadata.artists,
-            name: metadata.name,
-            totalTracks: metadata.totalTracks,
-            releaseYear: metadata.releaseYear,
-          },
-          {
-            artistName: result.artistName,
-            albumName: result.collectionName,
-            trackCount: result.trackCount,
-            releaseYear: extractYear(result.releaseDate),
-          }
-        );
+    console.log(
+      `[AppleMusic] Best text match confidence too low: ${bestConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD}`
+    );
+    return null;
+  }
 
-        if (confidence > bestConfidence) {
-          bestConfidence = confidence;
-          bestMatch = result;
+  /**
+   * Search for an album by text query (fallback)
+   */
+  private async searchAlbumByText(
+    query: string,
+    metadata: AlbumMetadata
+  ): Promise<ProviderResult | null> {
+    console.log(`[AppleMusic] Text search for album: "${query}"`);
+
+    const data = await this.apiRequest<AppleMusicSearchResponse>(
+      `/catalog/${DEFAULT_STOREFRONT}/search?term=${encodeURIComponent(query)}&types=albums&limit=10`
+    );
+
+    const albums = data?.results?.albums?.data;
+    if (!albums?.length) {
+      console.log(`[AppleMusic] No text search results for: "${query}"`);
+      return null;
+    }
+
+    // Score each result and find the best match
+    let bestMatch: AppleMusicResource<AppleMusicAlbumAttributes> | null = null;
+    let bestConfidence = 0;
+
+    for (const album of albums) {
+      const confidence = calculateAlbumConfidence(
+        {
+          artists: metadata.artists,
+          name: metadata.name,
+          totalTracks: metadata.totalTracks,
+          releaseYear: metadata.releaseYear,
+        },
+        {
+          artistName: album.attributes.artistName,
+          albumName: album.attributes.name,
+          trackCount: album.attributes.trackCount,
+          releaseYear: extractYear(album.attributes.releaseDate),
+        }
+      );
+
+      if (confidence > bestConfidence) {
+        bestConfidence = confidence;
+        bestMatch = album;
+      }
+    }
+
+    if (bestMatch && bestConfidence >= CONFIDENCE_THRESHOLD) {
+      console.log(
+        `[AppleMusic] Text match: "${bestMatch.attributes.name}" (confidence: ${bestConfidence.toFixed(2)})`
+      );
+      return {
+        url: toGeoAgnosticUrl(bestMatch.attributes.url),
+        confidence: bestConfidence,
+        matched: {
+          artist: bestMatch.attributes.artistName,
+          album: bestMatch.attributes.name,
+        },
+      };
+    }
+
+    console.log(
+      `[AppleMusic] Best text match confidence too low: ${bestConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD}`
+    );
+    return null;
+  }
+
+  async searchTrack(metadata: TrackMetadata): Promise<ProviderResult | null> {
+    // If we have MusicKit credentials, try ISRC first, then text search
+    if (this.config) {
+      // Try ISRC lookup first (most reliable)
+      if (metadata.isrc) {
+        const isrcMatch = await this.searchByIsrc(metadata.isrc);
+        if (isrcMatch) {
+          return {
+            url: toGeoAgnosticUrl(isrcMatch.attributes.url),
+            confidence: ISRC_CONFIDENCE,
+            matched: {
+              artist: isrcMatch.attributes.artistName,
+              track: isrcMatch.attributes.name,
+              album: isrcMatch.attributes.albumName,
+              isrc: metadata.isrc,
+            },
+          };
         }
       }
 
-      if (bestMatch && bestConfidence >= CONFIDENCE_THRESHOLD) {
-        console.log(
-          `[AppleMusic] Match found: "${bestMatch.collectionName}" by ${bestMatch.artistName} (confidence: ${bestConfidence.toFixed(2)})`
-        );
+      // Fall back to text search via API
+      const query = `${metadata.artists[0] || ''} ${metadata.name}`;
+      const textResult = await this.searchTrackByText(query, metadata);
+      if (textResult) {
+        return textResult;
+      }
+    }
 
-        return {
-          url: bestMatch.collectionViewUrl,
-          confidence: bestConfidence,
-          matched: {
-            artist: bestMatch.artistName,
-            album: bestMatch.collectionName,
-          },
-        };
+    // No MusicKit config or API failed - return fallback search URL
+    return this.getFallbackTrackUrl(metadata);
+  }
+
+  async searchAlbum(metadata: AlbumMetadata): Promise<ProviderResult | null> {
+    // If we have MusicKit credentials, try UPC first, then text search
+    if (this.config) {
+      // Try UPC lookup first (most reliable)
+      if (metadata.upc) {
+        const upcMatch = await this.searchByUpc(metadata.upc);
+        if (upcMatch) {
+          return {
+            url: toGeoAgnosticUrl(upcMatch.attributes.url),
+            confidence: UPC_CONFIDENCE,
+            matched: {
+              artist: upcMatch.attributes.artistName,
+              album: upcMatch.attributes.name,
+              upc: metadata.upc,
+            },
+          };
+        }
       }
 
-      console.log(
-        `[AppleMusic] Best match confidence too low: ${bestConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD}`
-      );
-      return this.getFallbackAlbumUrl(metadata);
-    } catch (error) {
-      console.error('[AppleMusic] Search error:', error);
-      return this.getFallbackAlbumUrl(metadata);
+      // Fall back to text search via API
+      const query = `${metadata.artists[0] || ''} ${metadata.name}`;
+      const textResult = await this.searchAlbumByText(query, metadata);
+      if (textResult) {
+        return textResult;
+      }
     }
+
+    // No MusicKit config or API failed - return fallback search URL
+    return this.getFallbackAlbumUrl(metadata);
   }
 
   private getFallbackTrackUrl(metadata: TrackMetadata): ProviderResult {

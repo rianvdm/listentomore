@@ -173,6 +173,58 @@ GET /api/lastfm/loved?username=:username
 
 ---
 
+### Streaming Links
+
+Get cross-platform streaming links for albums. Uses Apple Music's MusicKit API with UPC matching for high accuracy.
+
+#### Get Album Links
+Get streaming links for a Spotify album across Apple Music and YouTube.
+
+```
+GET /api/streaming-links/album/:spotifyId
+```
+
+**Example:**
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://listentomore.com/api/streaming-links/album/6dVIqQ8qmQ5GBnJ9shOYGE"
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "album": {
+      "id": "6dVIqQ8qmQ5GBnJ9shOYGE",
+      "name": "OK Computer",
+      "artist": "Radiohead",
+      "upc": "634904078164"
+    },
+    "links": {
+      "spotify": "https://open.spotify.com/album/6dVIqQ8qmQ5GBnJ9shOYGE",
+      "appleMusic": "https://music.apple.com/us/album/ok-computer/1097861387",
+      "youtube": "https://www.youtube.com/playlist?list=..."
+    },
+    "confidence": {
+      "appleMusic": 0.98,
+      "youtube": 0.85
+    },
+    "matched": {
+      "appleMusic": { "artist": "Radiohead", "album": "OK Computer", "upc": "634904078164" },
+      "youtube": { "artist": "Radiohead", "album": "OK Computer" }
+    },
+    "cached": false
+  }
+}
+```
+
+**Confidence Scores:**
+- `0.98` - UPC/ISRC match (most reliable)
+- `0.8+` - Text search match with metadata validation
+- `null` - No match found, link may be a search URL fallback
+
+---
+
 ### AI
 
 AI endpoints use Perplexity and OpenAI to generate music insights. Responses are cached for efficiency.

@@ -53,6 +53,9 @@ type Bindings = {
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
   YOUTUBE_API_KEY?: string;
+  APPLE_TEAM_ID?: string;
+  APPLE_KEY_ID?: string;
+  APPLE_PRIVATE_KEY?: string;
   INTERNAL_API_SECRET: string;
   ENVIRONMENT?: string;
   ADMIN_SECRET?: string;
@@ -120,6 +123,14 @@ app.use('*', async (c, next) => {
     'streamingLinks',
     new StreamingLinksService(c.env.CACHE, {
       youtubeApiKey: c.env.YOUTUBE_API_KEY,
+      appleMusic:
+        c.env.APPLE_TEAM_ID && c.env.APPLE_KEY_ID && c.env.APPLE_PRIVATE_KEY
+          ? {
+              teamId: c.env.APPLE_TEAM_ID,
+              keyId: c.env.APPLE_KEY_ID,
+              privateKey: c.env.APPLE_PRIVATE_KEY,
+            }
+          : undefined,
     })
   );
 
@@ -1189,6 +1200,58 @@ app.get('/api/lastfm/loved', async (c) => {
   } catch (error) {
     console.error('Last.fm loved tracks error:', error);
     return c.json({ error: 'Failed to fetch loved tracks' }, 500);
+  }
+});
+
+// Streaming Links API routes
+
+// Get streaming links for an album (Apple Music, YouTube)
+app.get('/api/streaming-links/album/:id', requireAuth(), async (c) => {
+  const spotifyId = c.req.param('id');
+
+  try {
+    const spotify = c.get('spotify');
+    const streamingLinks = c.get('streamingLinks');
+
+    const album = await spotify.getAlbum(spotifyId);
+    const metadata = StreamingLinksService.albumMetadataFromSpotify({
+      id: album.id,
+      name: album.name,
+      artists: album.artistIds.map((_, i) => ({ name: album.artist.split(', ')[i] || album.artist })),
+      total_tracks: album.tracks,
+      release_date: album.releaseDate || '',
+      external_ids: album.upc ? { upc: album.upc } : undefined,
+    });
+
+    const links = await streamingLinks.getAlbumLinks(metadata);
+
+    return c.json({
+      data: {
+        album: {
+          id: album.id,
+          name: album.name,
+          artist: album.artist,
+          upc: album.upc,
+        },
+        links: {
+          spotify: album.url,
+          appleMusic: links.appleMusic?.url || null,
+          youtube: links.youtube?.url || null,
+        },
+        confidence: {
+          appleMusic: links.appleMusic?.confidence || null,
+          youtube: links.youtube?.confidence || null,
+        },
+        matched: {
+          appleMusic: links.appleMusic?.matched || null,
+          youtube: links.youtube?.matched || null,
+        },
+        cached: links.cached,
+      },
+    });
+  } catch (error) {
+    console.error('Streaming links error:', error);
+    return c.json({ error: 'Failed to fetch streaming links' }, 500);
   }
 });
 

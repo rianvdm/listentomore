@@ -1,7 +1,7 @@
 // Streaming Links Service - self-hosted alternative to Songlink
 
 import { CACHE_CONFIG } from '@listentomore/config';
-import { AppleMusicProvider } from './providers/apple-music';
+import { AppleMusicProvider, type AppleMusicConfig } from './providers/apple-music';
 import { YouTubeProvider } from './providers/youtube';
 import { extractYear } from './matching';
 import type {
@@ -11,7 +11,7 @@ import type {
 } from './types';
 
 export type { TrackMetadata, AlbumMetadata, StreamingLinksResult, ProviderResult } from './types';
-export { AppleMusicProvider } from './providers/apple-music';
+export { AppleMusicProvider, type AppleMusicConfig } from './providers/apple-music';
 export { YouTubeProvider } from './providers/youtube';
 
 // Backward compatibility type matching songlink service
@@ -57,9 +57,10 @@ export class StreamingLinksService {
     private cache: KVNamespace,
     config: {
       youtubeApiKey?: string;
+      appleMusic?: AppleMusicConfig;
     } = {}
   ) {
-    this.appleMusic = new AppleMusicProvider();
+    this.appleMusic = new AppleMusicProvider(config.appleMusic);
     this.youtube = new YouTubeProvider(config.youtubeApiKey);
   }
 
