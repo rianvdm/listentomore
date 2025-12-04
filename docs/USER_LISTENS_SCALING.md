@@ -2,6 +2,17 @@
 
 This document analyzes the scalability of the "What we're listening to" feature on the home page and outlines implementation options when user growth requires optimization.
 
+## Why We Poll All Users
+
+The home page displays the **5 most recent listens** across all users. To determine which users have the most recent activity, we must check every user's Last.fm profile - there's no API that tells us "which of these users listened most recently."
+
+Last.fm's API doesn't support:
+- Querying multiple users in a single request
+- Webhooks/push notifications for new scrobbles
+- Filtering by "most recently active" across accounts
+
+This means polling is the only option. The question becomes: how do we poll efficiently at scale?
+
 ## Current Implementation
 
 The cron job runs every 5 minutes and:
