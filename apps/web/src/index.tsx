@@ -1440,7 +1440,7 @@ app.notFound((c) => {
   );
 });
 
-// Scheduled handler for CRON jobs (runs every 10 minutes)
+// Scheduled handler for CRON jobs (runs every 5 minutes)
 async function scheduled(
   _event: ScheduledEvent,
   env: Bindings,
@@ -1450,9 +1450,9 @@ async function scheduled(
   const minute = now.getMinutes();
   console.log(`[CRON] Running scheduled task at ${now.toISOString()}`);
 
-  // Generate random fact only at the top of the hour (minute 0-9)
-  // This avoids expensive OpenAI calls every 10 minutes
-  if (minute < 10) {
+  // Generate random fact only at the top of the hour (minute 0-4)
+  // This avoids expensive OpenAI calls every 5 minutes
+  if (minute < 5) {
     const ai = new AIService({
       openaiApiKey: env.OPENAI_API_KEY,
       perplexityApiKey: env.PERPLEXITY_API_KEY,
@@ -1467,7 +1467,7 @@ async function scheduled(
     }
   }
 
-  // Pre-warm user listens cache (runs every 10 minutes)
+  // Pre-warm user listens cache (runs every 5 minutes)
   try {
     const db = new Database(env.DB);
     const users = await db.getAllUsersWithLastfm();
@@ -1531,7 +1531,7 @@ async function scheduled(
       return new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime();
     });
 
-    // Cache with 12-minute TTL (cron runs every 10 min, gives 2 min overlap)
+    // Cache with 7-minute TTL (cron runs every 5 min, gives 2 min overlap)
     const CACHE_KEY = 'user-listens:recent';
     const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userListens);
     const cacheData = {

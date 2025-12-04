@@ -39,7 +39,7 @@ ENVIRONMENT = "production"
 
 # Scheduled triggers (CRON jobs)
 [triggers]
-crons = ["*/10 * * * *"]  # Run every 10 minutes (random fact only at top of hour)
+crons = ["*/5 * * * *"]  # Run every 5 minutes (random fact only at top of hour)
 
 # Note: Secrets should be set with `wrangler secret put`:
 # - SPOTIFY_CLIENT_ID
