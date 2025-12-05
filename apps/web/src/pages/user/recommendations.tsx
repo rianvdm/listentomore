@@ -151,43 +151,32 @@ export function UserRecommendationsPage({
                 if (el) el.innerHTML = '';
               });
 
-            // Fetch Spotify album data for image and streaming link
-            internalFetch('/api/internal/search?q=' + encodeURIComponent(track.artist + ' ' + track.title) + '&type=album')
+            // Fetch Spotify track data for image and streaming link
+            internalFetch('/api/internal/search?q=' + encodeURIComponent(track.artist + ' ' + track.title) + '&type=track')
               .then(function(r) { return r.json(); })
               .then(function(data) {
                 if (data.data && data.data[0]) {
-                  var spotifyAlbum = data.data[0];
+                  var spotifyTrack = data.data[0];
 
                   // Always try to update image from Spotify (better quality)
-                  if (spotifyAlbum.image) {
+                  if (spotifyTrack.image) {
                     var imgEl = document.getElementById('loved-image-' + index);
                     if (imgEl) {
-                      imgEl.innerHTML = '<img src="' + spotifyAlbum.image + '" alt="' + track.title + ' by ' + track.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
+                      imgEl.innerHTML = '<img src="' + spotifyTrack.image + '" alt="' + track.title + ' by ' + track.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
                     }
                   }
 
-                  // Add streaming link
-                  if (spotifyAlbum.id) {
-                    internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(spotifyAlbum.id) + '&type=album')
-                      .then(function(r) { return r.json(); })
-                      .then(function(linkData) {
-                        var linksEl = document.getElementById('loved-links-' + index);
-                        if (linksEl) {
-                          var href = (linkData.data && linkData.data.appleUrl) ? linkData.data.appleUrl : spotifyAlbum.url;
-                          linksEl.innerHTML = ' \\u2022 <a href="' + href + '" target="_blank" rel="noopener noreferrer">Listen \\u2197</a>';
-                        }
-                      })
-                      .catch(function() {
-                        var linksEl = document.getElementById('loved-links-' + index);
-                        if (linksEl && spotifyAlbum.url) {
-                          linksEl.innerHTML = ' \\u2022 <a href="' + spotifyAlbum.url + '" target="_blank" rel="noopener noreferrer">Listen \\u2197</a>';
-                        }
-                      });
+                  // Add Spotify track link
+                  if (spotifyTrack.url) {
+                    var linksEl = document.getElementById('loved-links-' + index);
+                    if (linksEl) {
+                      linksEl.innerHTML = ' \\u2022 <a href="' + spotifyTrack.url + '" target="_blank" rel="noopener noreferrer">Listen \\u2197</a>';
+                    }
                   }
                 }
               })
               .catch(function(err) {
-                console.error('Error fetching Spotify data for album:', err);
+                console.error('Error fetching Spotify data for track:', err);
               });
           });
 

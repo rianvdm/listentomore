@@ -606,7 +606,7 @@ app.get('/api/internal/artist-sentence', async (c) => {
 
 app.get('/api/internal/search', async (c) => {
   const query = c.req.query('q');
-  const type = c.req.query('type') as 'album' | 'artist';
+  const type = c.req.query('type') as 'album' | 'artist' | 'track';
 
   if (!query || !type) {
     return c.json({ error: 'Missing q or type parameter' }, 400);
