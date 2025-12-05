@@ -288,7 +288,7 @@ app.get('/', async (c) => {
                     html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
                     html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + listen.artist + '</a></p>';
                     html += '<p id="listen-sentence-' + index + '" class="text-muted"><span class="loading-inline">Loading...</span></p>';
-                    html += '<p id="listen-links-' + index + '"><a href="/u/' + listen.username + '">View ' + listen.username + "'s page →</a></p>";
+                    html += '<p id="listen-links-' + index + '"><a href="/u/' + listen.username + '">' + listen.username + "'s page →</a></p>";
                     html += '</div></div>';
                   });
                   html += '</div>';
