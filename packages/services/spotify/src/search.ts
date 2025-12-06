@@ -112,6 +112,7 @@ export class SpotifySearch {
       return cached as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
     }
 
+    console.log(`[Spotify] Cache miss, searching API: ${type} "${query}"`);
     const accessToken = await this.auth.getAccessToken();
 
     const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
@@ -121,6 +122,10 @@ export class SpotifySearch {
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || 'unknown';
+        console.error(`[Spotify] 429 Rate Limited for search "${query}", Retry-After: ${retryAfter}s`);
+      }
       throw new Error(`Spotify search failed: ${response.status} ${response.statusText}`);
     }
 

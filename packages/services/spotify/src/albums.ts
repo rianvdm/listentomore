@@ -72,9 +72,11 @@ export class SpotifyAlbums {
     // Check cache
     const cached = await this.cache.get<AlbumDetails>(cacheKey, 'json');
     if (cached) {
+      console.log(`[Spotify] Cache hit for album ${albumId}`);
       return cached;
     }
 
+    console.log(`[Spotify] Cache miss, fetching album ${albumId} from API`);
     const accessToken = await this.auth.getAccessToken();
 
     const response = await fetchWithTimeout(`${SPOTIFY_API_BASE}/albums/${encodeURIComponent(albumId)}`, {
@@ -85,6 +87,11 @@ export class SpotifyAlbums {
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error(`Album not found: ${albumId}`);
+      }
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || 'unknown';
+        console.error(`[Spotify] 429 Rate Limited for album ${albumId}, Retry-After: ${retryAfter}s`);
+        throw new Error(`Failed to fetch album: ${response.status} ${response.statusText}`);
       }
       throw new Error(`Failed to fetch album: ${response.status} ${response.statusText}`);
     }

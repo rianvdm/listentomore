@@ -39,9 +39,11 @@ export class SpotifyArtists {
     // Check cache
     const cached = await this.cache.get<ArtistDetails>(cacheKey, 'json');
     if (cached) {
+      console.log(`[Spotify] Cache hit for artist ${artistId}`);
       return cached;
     }
 
+    console.log(`[Spotify] Cache miss, fetching artist ${artistId} from API`);
     const accessToken = await this.auth.getAccessToken();
 
     const response = await fetchWithTimeout(`${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}`, {
@@ -52,6 +54,11 @@ export class SpotifyArtists {
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error(`Artist not found: ${artistId}`);
+      }
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || 'unknown';
+        console.error(`[Spotify] 429 Rate Limited for artist ${artistId}, Retry-After: ${retryAfter}s`);
+        throw new Error(`Failed to fetch artist: ${response.status} ${response.statusText}`);
       }
       throw new Error(`Failed to fetch artist: ${response.status} ${response.statusText}`);
     }
