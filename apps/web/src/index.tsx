@@ -526,6 +526,24 @@ app.get('/api/internal/album-summary', async (c) => {
   }
 });
 
+app.get('/api/internal/album-recommendations', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getAlbumRecommendations(artist, album);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal album recommendations error:', error);
+    return c.json({ error: 'Failed to generate album recommendations' }, 500);
+  }
+});
+
 app.get('/api/internal/artist-summary', async (c) => {
   const name = c.req.query('name');
 

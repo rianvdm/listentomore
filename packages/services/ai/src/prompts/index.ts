@@ -29,3 +29,8 @@ export {
 } from './playlist-cover';
 
 export { generateListenAIResponse, type ListenAIResult } from './listen-ai';
+
+export {
+  generateAlbumRecommendations,
+  type AlbumRecommendationsResult,
+} from './album-recommendations';

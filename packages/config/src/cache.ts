@@ -7,6 +7,7 @@ export const CACHE_CONFIG = {
     albumDetail: { ttlDays: 120 },
     genreSummary: { ttlDays: 180 },
     artistSentence: { ttlDays: 180 },
+    albumRecommendations: { ttlDays: 30 },
   },
 
   // External API data (changes occasionally)

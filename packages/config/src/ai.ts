@@ -80,6 +80,14 @@ export const AI_TASKS = {
     temperature: 1, // gpt-5-mini only supports temperature=1
     cacheTtlDays: 0,
   },
+
+  albumRecommendations: {
+    provider: 'perplexity',
+    model: 'sonar',
+    maxTokens: 1000,
+    temperature: 0.5,
+    cacheTtlDays: 30,
+  },
 } as const satisfies Record<string, AITaskConfig>;
 
 export type AITask = keyof typeof AI_TASKS;

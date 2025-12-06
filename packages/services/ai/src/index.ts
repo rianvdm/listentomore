@@ -35,6 +35,7 @@ export {
   generatePlaylistCoverPrompt,
   generatePlaylistCoverImage,
   generateListenAIResponse,
+  generateAlbumRecommendations,
   type ArtistSummaryResult,
   type AlbumDetailResult,
   type GenreSummaryResult,
@@ -43,6 +44,7 @@ export {
   type PlaylistCoverPromptResult,
   type PlaylistCoverImageResult,
   type ListenAIResult,
+  type AlbumRecommendationsResult,
 } from './prompts';
 
 export interface AIServiceConfig {
@@ -139,5 +141,20 @@ export class AIService {
   async askListenAI(question: string) {
     const { generateListenAIResponse } = await import('./prompts/listen-ai');
     return generateListenAIResponse(question, this.openai);
+  }
+
+  /**
+   * Generate album recommendations (uses Perplexity)
+   */
+  async getAlbumRecommendations(artistName: string, albumName: string) {
+    const { generateAlbumRecommendations } = await import(
+      './prompts/album-recommendations'
+    );
+    return generateAlbumRecommendations(
+      artistName,
+      albumName,
+      this.perplexity,
+      this.cache
+    );
   }
 }
