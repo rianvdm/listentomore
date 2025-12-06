@@ -48,6 +48,10 @@ type Bindings = {
   SPOTIFY_CLIENT_ID: string;
   SPOTIFY_CLIENT_SECRET: string;
   SPOTIFY_REFRESH_TOKEN: string;
+  // Secondary Spotify app for streaming-links (rate limit isolation)
+  SPOTIFY_STREAMING_CLIENT_ID?: string;
+  SPOTIFY_STREAMING_CLIENT_SECRET?: string;
+  SPOTIFY_STREAMING_REFRESH_TOKEN?: string;
   LASTFM_API_KEY: string;
   LASTFM_USERNAME: string;
   OPENAI_API_KEY: string;
@@ -65,6 +69,7 @@ type Bindings = {
 type Variables = {
   db: Database;
   spotify: SpotifyService;
+  spotifyStreaming: SpotifyService; // Secondary app for streaming-links (rate limit isolation)
   lastfm: LastfmService;
   songlink: SonglinkService;
   streamingLinks: StreamingLinksService;
@@ -98,15 +103,26 @@ app.use('*', async (c, next) => {
   // Initialize database first (needed by auth middleware)
   c.set('db', new Database(c.env.DB));
 
-  c.set(
-    'spotify',
-    new SpotifyService({
-      clientId: c.env.SPOTIFY_CLIENT_ID,
-      clientSecret: c.env.SPOTIFY_CLIENT_SECRET,
-      refreshToken: c.env.SPOTIFY_REFRESH_TOKEN,
-      cache: c.env.CACHE,
-    })
-  );
+  // Primary Spotify service (album/artist pages, search)
+  const spotify = new SpotifyService({
+    clientId: c.env.SPOTIFY_CLIENT_ID,
+    clientSecret: c.env.SPOTIFY_CLIENT_SECRET,
+    refreshToken: c.env.SPOTIFY_REFRESH_TOKEN,
+    cache: c.env.CACHE,
+  });
+  c.set('spotify', spotify);
+
+  // Secondary Spotify service for streaming-links (rate limit isolation)
+  // Falls back to primary if secondary credentials not configured
+  const spotifyStreaming = c.env.SPOTIFY_STREAMING_CLIENT_ID
+    ? new SpotifyService({
+        clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID!,
+        clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
+        refreshToken: c.env.SPOTIFY_STREAMING_REFRESH_TOKEN!,
+        cache: c.env.CACHE,
+      })
+    : spotify;
+  c.set('spotifyStreaming', spotifyStreaming);
 
   c.set(
     'lastfm',
@@ -507,7 +523,8 @@ app.get('/api/internal/streaming-links', async (c) => {
   }
 
   try {
-    const spotify = c.get('spotify');
+    // Use secondary Spotify app for streaming-links (rate limit isolation)
+    const spotify = c.get('spotifyStreaming');
     const streamingLinks = c.get('streamingLinks');
 
     if (type === 'album') {

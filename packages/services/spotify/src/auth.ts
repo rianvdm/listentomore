@@ -5,7 +5,6 @@ import { CACHE_CONFIG } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
 
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
-const TOKEN_CACHE_KEY = 'spotify:token';
 
 export interface SpotifyTokenData {
   access_token: string;
@@ -19,14 +18,19 @@ export interface SpotifyAuthConfig {
 }
 
 export class SpotifyAuth {
+  private tokenCacheKey: string;
+
   constructor(
     private config: SpotifyAuthConfig,
     private cache: KVNamespace
-  ) {}
+  ) {
+    // Use client ID in cache key so each app has its own token
+    this.tokenCacheKey = `spotify:token:${config.clientId}`;
+  }
 
   async getAccessToken(): Promise<string> {
     // Check cache first
-    const cached = await this.cache.get<SpotifyTokenData>(TOKEN_CACHE_KEY, 'json');
+    const cached = await this.cache.get<SpotifyTokenData>(this.tokenCacheKey, 'json');
 
     if (cached && Date.now() < cached.expires_at) {
       return cached.access_token;
@@ -37,7 +41,16 @@ export class SpotifyAuth {
   }
 
   private async refreshAccessToken(): Promise<string> {
+    const clientIdPrefix = this.config.clientId.substring(0, 8);
+    console.log(`[Spotify] Refreshing token for app ${clientIdPrefix}...`);
+
     const credentials = btoa(`${this.config.clientId}:${this.config.clientSecret}`);
+
+    // URL-encode the refresh token to handle special characters
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: this.config.refreshToken,
+    });
 
     const response = await fetchWithTimeout(SPOTIFY_TOKEN_URL, {
       method: 'POST',
@@ -45,7 +58,7 @@ export class SpotifyAuth {
         'Content-Type': 'application/x-www-form-urlencoded',
         Authorization: `Basic ${credentials}`,
       },
-      body: `grant_type=refresh_token&refresh_token=${this.config.refreshToken}`,
+      body: body.toString(),
       timeout: 'fast',
     });
 
@@ -68,7 +81,7 @@ export class SpotifyAuth {
       expires_at: expiresAt,
     };
 
-    await this.cache.put(TOKEN_CACHE_KEY, JSON.stringify(tokenData), {
+    await this.cache.put(this.tokenCacheKey, JSON.stringify(tokenData), {
       expirationTtl: CACHE_CONFIG.spotify.token.ttlMinutes * 60,
     });
 

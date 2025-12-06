@@ -45,6 +45,9 @@ crons = ["*/5 * * * *"]  # Run every 5 minutes (random fact only at top of hour)
 # - SPOTIFY_CLIENT_ID
 # - SPOTIFY_CLIENT_SECRET
 # - SPOTIFY_REFRESH_TOKEN
+# - SPOTIFY_STREAMING_CLIENT_ID (secondary app for streaming-links rate limit isolation)
+# - SPOTIFY_STREAMING_CLIENT_SECRET
+# - SPOTIFY_STREAMING_REFRESH_TOKEN
 # - LASTFM_API_KEY
 # - OPENAI_API_KEY
 # - PERPLEXITY_API_KEY

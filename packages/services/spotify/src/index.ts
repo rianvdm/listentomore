@@ -29,6 +29,8 @@ export class SpotifyService {
   public readonly search: SpotifySearch;
   public readonly albums: SpotifyAlbums;
   public readonly artists: SpotifyArtists;
+  /** First 8 chars of client ID for logging/debugging */
+  public readonly clientIdPrefix: string;
 
   constructor(config: {
     clientId: string;
@@ -36,6 +38,8 @@ export class SpotifyService {
     refreshToken: string;
     cache: KVNamespace;
   }) {
+    this.clientIdPrefix = config.clientId.substring(0, 8);
+
     this.auth = new SpotifyAuth(
       {
         clientId: config.clientId,

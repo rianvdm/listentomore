@@ -953,6 +953,71 @@ app.get('/api/internal/streaming-links', async (c) => {
 - Doubles effective rate limit budget
 - Easy rollback - just remove secondary credentials to revert
 
+### Troubleshooting
+
+#### "Invalid refresh token" error
+
+**Symptom:** `{"error":"invalid_grant","error_description":"Invalid refresh token"}`
+
+**Common causes:**
+
+1. **Wrong token type** - You copied the `access_token` instead of `refresh_token`
+   - Access tokens start with `BQ` and expire in 1 hour
+   - Refresh tokens start with `AQ` and don't expire
+   - Always use the `refresh_token` field from the curl response
+
+2. **Token corrupted during secret upload** - Shell escaping issues can corrupt the token
+   - Use `printf '%s' 'TOKEN' | npx wrangler secret put SECRET_NAME` to avoid issues
+   - Verify token length in logs matches expected (~131 characters for Spotify refresh tokens)
+
+3. **Authorization code expired** - Codes expire within minutes
+   - Run the curl command immediately after getting the code
+   - If it fails, re-authorize and get a fresh code
+
+4. **Redirect URI mismatch** - Must match exactly what's registered in Spotify app
+   - Check for http vs https, trailing slashes, typos
+   - Must be exactly: `https://listentomore.com/auth/callback`
+
+**Debugging tips:**
+
+Add temporary logging to verify token is being passed correctly:
+```typescript
+console.log(`[Spotify] Token len: ${c.env.SPOTIFY_STREAMING_REFRESH_TOKEN?.length}`);
+```
+
+Working primary token should be ~131 characters. If secondary token length differs significantly, the secret was corrupted.
+
+#### Verifying the setup works
+
+After setup, check that both apps have separate cached tokens:
+```bash
+npx wrangler kv key list --namespace-id=YOUR_KV_ID --remote --prefix="spotify:token"
+```
+
+Should show two entries with different client IDs:
+```json
+[
+  { "name": "spotify:token:PRIMARY_CLIENT_ID", ... },
+  { "name": "spotify:token:SECONDARY_CLIENT_ID", ... }
+]
+```
+
+#### Token cache key format
+
+Each Spotify app caches its access token separately using the client ID:
+- Primary: `spotify:token:{PRIMARY_CLIENT_ID}`
+- Secondary: `spotify:token:{SECONDARY_CLIENT_ID}`
+
+This ensures each app maintains its own token and rate limit budget.
+
+#### Implementation notes
+
+The `SpotifyAuth` class in `packages/services/spotify/src/auth.ts` handles token refresh:
+
+1. **Token cache key includes client ID** - Each app has its own cached token
+2. **URL encoding** - The refresh token is URL-encoded using `URLSearchParams` to handle special characters
+3. **Logging** - Token refresh logs include client ID prefix (first 8 chars) for debugging
+
 ---
 
 ## References
