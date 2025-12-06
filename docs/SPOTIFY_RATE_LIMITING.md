@@ -34,6 +34,20 @@ These help but don't protect against:
 
 Application-level rate limiting is the safety net that protects regardless of traffic source. It ensures we never exceed Spotify's limits, even if all other mitigations fail.
 
+### Alternative: Multiple Spotify Apps
+
+Another immediate mitigation is using **separate Spotify developer apps** for different services. Each app has its own rate limit budget, effectively multiplying available quota.
+
+**Recommended split:**
+| App | Used For | Why |
+|-----|----------|-----|
+| Primary app | Album/artist detail pages, search | User-facing, needs to be responsive |
+| Secondary app | Streaming-links service | High parallelism from home page (40+ requests) |
+
+This isolates the streaming-links cascade from affecting the main user experience.
+
+See **Appendix: Setting Up a Secondary Spotify App** for implementation details.
+
 ---
 
 ## Spotify API Rate Limits
@@ -771,6 +785,173 @@ Watch for these log patterns:
 ```
 
 If Retry-After exceeds 3600 seconds (1 hour), consider switching to backup Spotify app credentials.
+
+---
+
+## Appendix: Setting Up a Secondary Spotify App
+
+This appendix covers creating a separate Spotify app for the streaming-links service to isolate its rate limit budget.
+
+### Step 1: Create the Spotify App
+
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Click **Create App**
+3. Fill in:
+   - **App name:** `ListenToMore-StreamingLinks` (or similar)
+   - **App description:** Secondary app for streaming links service
+   - **Redirect URI:** `https://listentomore.com/auth/callback`
+   - **APIs used:** Check "Web API"
+4. Click **Create**
+5. Go to **Settings** and note:
+   - **Client ID**
+   - **Client Secret** (click "View client secret")
+
+### Step 2: Add Temporary OAuth Callback Route
+
+Add this route to `apps/web/src/index.tsx` temporarily to get the refresh token:
+
+```typescript
+// Temporary OAuth callback for Spotify token generation (remove after use)
+app.get('/auth/callback', (c) => {
+  const code = c.req.query('code');
+  const error = c.req.query('error');
+  if (error) {
+    return c.text(`Error: ${error}`, 400);
+  }
+  if (!code) {
+    return c.text('No code received', 400);
+  }
+  return c.html(
+    <html>
+      <body style={{ fontFamily: 'monospace', padding: '2rem' }}>
+        <h1>Spotify Auth Code</h1>
+        <p>Copy this code:</p>
+        <textarea readonly style={{ width: '100%', height: '100px', fontSize: '14px' }}>{code}</textarea>
+        <p style={{ color: '#666', marginTop: '1rem' }}>Use this in the curl command to get your refresh token.</p>
+      </body>
+    </html>
+  );
+});
+```
+
+Deploy, then remove this route after getting the token.
+
+### Step 3: Get the Refresh Token
+
+1. **Authorize the app** - Visit this URL (replace `YOUR_CLIENT_ID`):
+   ```
+   https://accounts.spotify.com/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=https://listentomore.com/auth/callback&scope=user-read-private%20user-read-email
+   ```
+
+2. **Copy the code** from the callback page
+
+3. **Exchange for tokens:**
+   ```bash
+   curl -X POST https://accounts.spotify.com/api/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "grant_type=authorization_code" \
+     -d "code=YOUR_CODE_HERE" \
+     -d "redirect_uri=https://listentomore.com/auth/callback" \
+     -d "client_id=YOUR_CLIENT_ID" \
+     -d "client_secret=YOUR_CLIENT_SECRET"
+   ```
+
+4. **Save the `refresh_token`** from the response
+
+### Step 4: Add Cloudflare Secrets
+
+```bash
+cd apps/web
+
+# Secondary app credentials (for streaming-links)
+npx wrangler secret put SPOTIFY_STREAMING_CLIENT_ID
+# paste client ID
+
+npx wrangler secret put SPOTIFY_STREAMING_CLIENT_SECRET
+# paste client secret
+
+npx wrangler secret put SPOTIFY_STREAMING_REFRESH_TOKEN
+# paste refresh token
+```
+
+### Step 5: Update Environment Bindings
+
+Add to `apps/web/wrangler.toml` under `[vars]` or as secrets:
+
+```toml
+# These are set via `wrangler secret put`:
+# SPOTIFY_STREAMING_CLIENT_ID
+# SPOTIFY_STREAMING_CLIENT_SECRET
+# SPOTIFY_STREAMING_REFRESH_TOKEN
+```
+
+Update the `Bindings` type in `apps/web/src/index.tsx`:
+
+```typescript
+type Bindings = {
+  // ... existing bindings ...
+
+  // Secondary Spotify app for streaming-links
+  SPOTIFY_STREAMING_CLIENT_ID?: string;
+  SPOTIFY_STREAMING_CLIENT_SECRET?: string;
+  SPOTIFY_STREAMING_REFRESH_TOKEN?: string;
+};
+```
+
+### Step 6: Create Secondary SpotifyService
+
+In the middleware that initializes services, create a second SpotifyService for streaming-links:
+
+```typescript
+// In apps/web/src/index.tsx middleware
+
+// Primary Spotify service (album/artist pages, search)
+const spotify = new SpotifyService({
+  clientId: c.env.SPOTIFY_CLIENT_ID,
+  clientSecret: c.env.SPOTIFY_CLIENT_SECRET,
+  refreshToken: c.env.SPOTIFY_REFRESH_TOKEN,
+  cache: c.env.CACHE,
+});
+
+// Secondary Spotify service for streaming-links (if configured)
+const spotifyStreaming = c.env.SPOTIFY_STREAMING_CLIENT_ID
+  ? new SpotifyService({
+      clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID,
+      clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
+      refreshToken: c.env.SPOTIFY_STREAMING_REFRESH_TOKEN!,
+      cache: c.env.CACHE,
+    })
+  : spotify; // Fall back to primary if not configured
+
+c.set('spotify', spotify);
+c.set('spotifyStreaming', spotifyStreaming);
+```
+
+### Step 7: Update StreamingLinksService
+
+Update the streaming-links service to use the secondary Spotify service:
+
+```typescript
+// In the streaming-links internal API endpoint
+app.get('/api/internal/streaming-links', async (c) => {
+  // Use secondary Spotify service if available
+  const spotify = c.get('spotifyStreaming') as SpotifyService;
+  // ... rest of handler
+});
+```
+
+### Step 8: Clean Up
+
+1. Remove the `/auth/callback` route from `index.tsx`
+2. Deploy the changes
+3. **Rotate the credentials** - generate new client secret in Spotify dashboard since the original was exposed during setup
+
+### Benefits
+
+- Streaming-links can make 40+ parallel requests without affecting main app
+- If streaming-links gets rate limited, album/artist pages still work
+- Doubles effective rate limit budget
+- Easy rollback - just remove secondary credentials to revert
 
 ---
 
