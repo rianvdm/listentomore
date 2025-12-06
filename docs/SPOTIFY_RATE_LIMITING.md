@@ -48,6 +48,26 @@ Spotify doesn't publish exact rate limits. From documentation and community expe
 | Retry-After | Seconds until rate limit resets (typically 1-30s) |
 | Token scope | Rate limits apply per access token |
 
+### Official Guidance from Spotify
+
+From [Spotify's Rate Limits documentation](https://developer.spotify.com/documentation/web-api/concepts/rate-limits):
+
+> **Develop a backoff-retry strategy:** When your app has been rate limited it will receive a 429 error response from Spotify. Your app can use this information as a cue to slow down the number of API requests that it makes to the Web API. The header of the 429 response will normally include a Retry-After header with a value in seconds. Consider waiting for the number of seconds specified in Retry-After before your app calls the Web API again.
+
+> **Use batch APIs to your advantage:** Spotify has some APIs — like the Get Multiple Albums endpoint — that allow you to fetch a batch of data in one API request. You can reduce your API requests by calling the batch APIs when you know that you will need data from a set of objects.
+
+### Batch API Endpoints
+
+Spotify provides batch endpoints that significantly reduce API calls:
+
+| Endpoint | Path | Max Items | Current Usage |
+|----------|------|-----------|---------------|
+| Get Multiple Albums | `GET /albums?ids={ids}` | 20 | Not used - we fetch individually |
+| Get Multiple Artists | `GET /artists?ids={ids}` | 50 | Not used - we fetch individually |
+| Get Several Tracks | `GET /tracks?ids={ids}` | 50 | Not used |
+
+**Optimization opportunity:** The cron job fetches Spotify album images for ~14 users individually. Using the batch endpoint would reduce 14 API calls to 1.
+
 ### Observed Behavior
 
 From production logs, Spotify typically rate limits when we exceed approximately:
@@ -354,7 +374,14 @@ async function checkCircuit(cache: KVNamespace): Promise<boolean> {
 2. **Integrate into SpotifyService** as a shared rate limiter
 3. **Log rate limit events** for monitoring
 
-### Phase 3: Future (Higher Effort)
+### Phase 3: Batch API Optimization (Medium Effort)
+
+1. **Add batch album fetching** - `getAlbums(ids: string[])` using `/albums?ids=`
+2. **Add batch artist fetching** - `getArtists(ids: string[])` using `/artists?ids=`
+3. **Update cron job** to use batch endpoints for Spotify image enrichment
+4. **Update internal APIs** that fetch multiple items to batch requests
+
+### Phase 4: Future (Higher Effort)
 
 1. **Circuit breaker** for complete Spotify outages
 2. **Metrics/alerting** on rate limit frequency
@@ -644,7 +671,8 @@ After deployment, monitor:
 1. **Week 1:** Implement Phase 1 (retry with backoff)
 2. **Week 2:** Implement Phase 2 (KV-based rate limiting)
 3. **Week 3:** Monitor and tune limits
-4. **Future:** Implement Phase 3 if needed
+4. **Week 4:** Implement Phase 3 (batch APIs) - biggest impact on reducing API calls
+5. **Future:** Implement Phase 4 (circuit breaker) if needed
 
 ---
 
