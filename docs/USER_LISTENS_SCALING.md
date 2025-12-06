@@ -180,22 +180,36 @@ const activeUsers = users.filter(u => {
 
 ## Current Implementation (as of Dec 2025)
 
-Batch processing is now active with the following configuration:
+Two-phase processing separates Last.fm (rate-limited) from Spotify (parallel):
+
+### Phase 1: Last.fm Data (Batched)
 - **Batch size:** 4 users per batch (~4 req/sec to stay under Last.fm's ~5/sec limit)
 - **Delay between batches:** 1 second
-- **Max users before 30s timeout:** ~100 users (25 batches × 1s delay + processing time)
+- Fetches track info with Last.fm images as initial fallback
+
+### Phase 2: Spotify Images (Parallel)
+- All Spotify album searches run in parallel (higher rate limits ~180 req/min)
+- Enriches tracks with higher-quality Spotify images
+- Falls back to Last.fm image if Spotify search fails
+
+### Performance
+- **Before (interleaved):** ~12s for 14 users
+- **After (two-phase):** ~6-7s for 14 users (estimated 40-50% faster)
+- **Max users before 30s timeout:** ~150+ users
 
 ### Logging Output
 
-The cron job now logs detailed progress:
+The cron job logs detailed progress for each phase:
 ```
-[CRON] Found 20 users with Last.fm usernames
-[CRON] Processing 20 users in 5 batches (batch size: 4, delay: 1000ms)
-[CRON] Batch 1/5 complete (523ms)
-[CRON] Batch 2/5 complete (412ms)
+[CRON] Found 14 users with Last.fm usernames
+[CRON] Phase 1: Fetching Last.fm data for 14 users in 4 batches
+[CRON] Last.fm batch 1/4 complete (312ms)
+[CRON] Last.fm batch 2/4 complete (287ms)
 ...
-[CRON] All batches complete: 18 successes, 2 errors in 6234ms
-[CRON] API results: 18 tracks, 2 failures
+[CRON] Phase 1 complete: 14 tracks, 0 errors in 4521ms
+[CRON] Phase 2: Fetching Spotify images for 14 tracks (parallel)
+[CRON] Phase 2 complete: 12 enriched, 2 kept Last.fm image in 1823ms
+[CRON] Total processing time: 6344ms
 ```
 
 ## Monitoring
