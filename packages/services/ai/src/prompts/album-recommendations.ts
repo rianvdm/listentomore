@@ -80,7 +80,7 @@ export async function generateAlbumRecommendations(
 
   const config = AI_TASKS.albumRecommendations;
 
-  const prompt = `I enjoyed the album "${albumName}" by ${artistName}. What are 2-3 albums by other artists I should listen to that are similar in genre and style? If possible, try to avoid albums that are very popular and mainstream.
+  const prompt = `I enjoyed the album "${albumName}" by ${artistName}. Recommend 3 albums by other artists that are similar in genre and style.
 
 Use Markdown for formatting.
 
@@ -90,11 +90,12 @@ Enclose artist names in double square brackets like [[Artist Name]] and album na
 
 Include inline citation numbers like [1], [2], etc. to reference your sources when making factual claims.
 
-Do NOT start with a preamble (like "Here are some recommendations..." or "Great choice!") or end with follow-up suggestions. Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
+Do NOT start with a preamble (like "Here are some recommendations..." or "Great choice!"). Do NOT end with follow-up suggestions, summary statements (like "All these albums are available on Spotify..."), or any concluding remarks. Do NOT include a "References" or "Sources" section - citations are extracted separately. Just provide the bullet-point recommendations and nothing else.
 
 IMPORTANT:
 * You MUST provide ALBUM recommendations, not songs.
-* You MUST verify via web search that each album exists and is not made up (but don't mention that in your response).
+* ONLY recommend albums that are available on Spotify. If you cannot confirm an album is on Spotify, do not recommend it.
+* ONLY recommend albums you can find reviews or articles about via web search. Do not recommend obscure albums that lack online documentation.
 * If you cannot find sufficient verifiable information about the album "${albumName}" by ${artistName} to provide meaningful recommendations, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
 
   const response = await client.chatCompletion({
@@ -103,7 +104,7 @@ IMPORTANT:
       {
         role: 'system',
         content:
-          'You are a music expert who recommends lesser-known albums. You focus on hidden gems rather than mainstream choices. You use succinct, plain language focused on accuracy and professionalism.',
+          'You are a music expert who recommends albums. You prioritize accuracy over obscurity - only recommend albums you can verify exist and are available on streaming platforms. You use succinct, plain language.',
       },
       { role: 'user', content: prompt },
     ],
