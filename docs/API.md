@@ -454,8 +454,7 @@ All errors return JSON with an `error` field and appropriate HTTP status code.
 API keys are currently issued manually. To request access:
 
 1. **Open an issue** on the [GitHub repository](https://github.com/rianvdm/listentomore)
-2. **Email:** rian@elezea.com
-3. **Mastodon:** [@rian@hachyderm.io](https://hachyderm.io/@rian)
+2. **Email:** elezea.com/contact
 
 Include a brief description of how you plan to use the API.
 
