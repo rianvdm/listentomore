@@ -502,6 +502,59 @@ export function MyPage({ data, internalToken }: Props) {
 
 ---
 
+## Admin Operations
+
+### Creating API Keys
+
+API keys are created via a protected admin endpoint:
+
+```bash
+curl -X POST https://listentomore.com/api/auth/keys \
+  -H "X-Admin-Secret: YOUR_ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "User Name or App Name",
+    "tier": "standard",
+    "scopes": ["read", "ai"]
+  }'
+```
+
+**Parameters:**
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | optional | Identifier for the key (e.g., user name) |
+| `tier` | `"standard"` \| `"premium"` | `"standard"` | Rate limit tier (60 vs 300 req/min) |
+| `scopes` | array | `["read"]` | Permissions: `read`, `write`, `ai` |
+
+**Response:**
+```json
+{
+  "message": "API key created successfully",
+  "key": "ltm_abc123...",
+  "keyPrefix": "ltm_abc",
+  "tier": "standard",
+  "scopes": ["read", "ai"],
+  "warning": "Save this key - it will not be shown again!"
+}
+```
+
+**Important:** The full key is only returned once. Store it immediately.
+
+**Environment variable required:** `ADMIN_SECRET` (set in wrangler.toml secrets)
+
+### Clearing Cache (Premium)
+
+Premium API key holders can clear cached data:
+
+```bash
+curl -X DELETE "https://listentomore.com/api/cache?type=albumDetail&artist=radiohead&album=ok%20computer" \
+  -H "X-API-Key: YOUR_PREMIUM_KEY"
+```
+
+Supported cache types: `albumDetail`, `artistSummary`, `genreSummary`, `spotify:album`, `spotify:artist`
+
+---
+
 ## Commands
 
 ```bash
