@@ -480,7 +480,7 @@ Cached responses are indistinguishable from fresh responses. If you need to forc
 
 ## Changelog
 
-### v1.0.0 (December 2024)
+### v1.0.0 (December 2025)
 
 Initial public API release with:
 - Album details with AI summaries and streaming links
