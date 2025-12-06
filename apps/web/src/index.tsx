@@ -187,6 +187,48 @@ app.get('/health', (c) => {
   });
 });
 
+// robots.txt - throttle crawlers to prevent Spotify API rate limits
+app.get('/robots.txt', (c) => {
+  const robotsTxt = `# ListenToMore robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /api/internal/
+
+# Crawl delay to prevent overwhelming external APIs
+Crawl-delay: 10
+
+# Specific bot configurations
+User-agent: Googlebot
+Crawl-delay: 5
+
+User-agent: Bingbot
+Crawl-delay: 5
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+# Sitemap
+Sitemap: https://listentomore.com/sitemap.xml
+`;
+  return c.text(robotsTxt, 200, {
+    'Content-Type': 'text/plain',
+    'Cache-Control': 'public, max-age=86400',
+  });
+});
+
 // Home page - matches original my-music-next structure
 app.get('/', async (c) => {
   const ai = c.get('ai');
