@@ -34,12 +34,18 @@ A music discovery platform that combines real-time listening data with AI-powere
 - `/ask question:X` - Chat with the Rick Rubin AI personality
 
 ### REST API
-Full programmatic access to all features. See [API Documentation](docs/API.md) for details.
-- Spotify search and catalog data
-- Last.fm listening history and stats
-- AI-powered summaries (artist, album, genre)
-- Cross-platform streaming links
-- Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min)
+Full programmatic access to music discovery features. See [API Documentation](docs/API.md) for details.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/album` | Album details with AI summary and streaming links |
+| `GET /api/v1/album/recommendations` | AI-generated album recommendations |
+| `GET /api/v1/links` | Cross-platform streaming links (Spotify, Apple Music, YouTube) |
+| `GET /api/v1/artist` | Artist info with AI summary and top albums |
+| `GET /api/v1/genre` | AI-generated genre description |
+| `POST /api/v1/ask` | Chat with the music AI |
+
+Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min).
 
 ## Tech Stack
 
@@ -84,7 +90,9 @@ listentomore/
 
 ## API
 
-The platform exposes a REST API for programmatic access to music discovery features. See the **[API Documentation](docs/API.md)** for full details including authentication, rate limits, and endpoint reference.
+The platform exposes a REST API (`/api/v1/`) focused on AI-powered insights and cross-platform streaming links. All endpoints require an API key via the `X-API-Key` header.
+
+See the **[API Documentation](docs/API.md)** for full details including authentication, rate limits, response examples, and endpoint reference.
 
 ## Getting Started
 
