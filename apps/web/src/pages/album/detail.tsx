@@ -159,7 +159,6 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
               if (data.error) throw new Error(data.error);
               var summary = data.data;
               var html = '<div>' + transformCitations(marked.parse(summary.content), summary.citations) + '</div>';
-              html += renderCitations(summary.citations);
               document.getElementById('ai-summary').innerHTML = html;
             })
             .catch(function(e) {
@@ -183,7 +182,6 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
               }
               var html = '<h3>Album Recommendations</h3>';
               html += '<div>' + transformCitations(marked.parse(recommendations.content), recommendations.citations) + '</div>';
-              html += renderCitations(recommendations.citations);
               document.getElementById('album-recommendations').innerHTML = html;
               // Enrich links: search links -> direct Spotify ID links
               enrichLinks('album-recommendations');
