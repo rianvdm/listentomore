@@ -80,7 +80,7 @@ export async function generateAlbumRecommendations(
 
   const config = AI_TASKS.albumRecommendations;
 
-  const prompt = `I enjoyed the album "${albumName}" by ${artistName}. What are 2-3 albums by other artists I should listen to that are similar in genre and style? Avoid albums that are very popular and mainstream. Instead, recommend what could be considered "hidden gems".
+  const prompt = `I enjoyed the album "${albumName}" by ${artistName}. What are 2-3 albums by other artists I should listen to that are similar in genre and style? Avoid albums that are very popular and mainstream. Instead, recommend what could be considered "hidden gems". You MUST verify that each album actually exists (but don't mention that in your response).
 
 Use Markdown for formatting.
 
