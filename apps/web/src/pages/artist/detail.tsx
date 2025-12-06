@@ -3,6 +3,7 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
+import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
 
@@ -272,6 +273,13 @@ export async function handleArtistDetail(c: Context) {
     return c.html(<ArtistDetailPage artist={artist} internalToken={internalToken} />);
   } catch (error) {
     console.error('Artist detail error:', error);
+
+    // Check for rate limiting (429)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('429')) {
+      return c.html(<RateLimitedPage type="artist" />, 503);
+    }
+
     return c.html(
       <ArtistDetailPage artist={null} error="Failed to load artist" internalToken={internalToken} />
     );

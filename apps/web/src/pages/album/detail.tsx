@@ -3,6 +3,7 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
+import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
 
@@ -224,6 +225,13 @@ export async function handleAlbumDetail(c: Context) {
     return c.html(<AlbumDetailPage album={album} internalToken={internalToken} />);
   } catch (error) {
     console.error('Album detail error:', error);
+
+    // Check for rate limiting (429)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('429')) {
+      return c.html(<RateLimitedPage type="album" />, 503);
+    }
+
     return c.html(<AlbumDetailPage album={null} error="Failed to load album" internalToken={internalToken} />);
   }
 }
