@@ -80,7 +80,7 @@ export async function generateAlbumRecommendations(
 
   const config = AI_TASKS.albumRecommendations;
 
-  const prompt = `I enjoyed the album "${albumName}" by ${artistName}. What are 2-3 albums by other artists I should listen to that are similar in genre and style? Avoid albums that are very popular and mainstream. Instead, recommend what could be considered "hidden gems". You MUST verify that each album actually exists (but don't mention that in your response).
+  const prompt = `I enjoyed the album "${albumName}" by ${artistName}. What are 2-3 albums by other artists I should listen to that are similar in genre and style? If possible, try to avoid albums that are very popular and mainstream.
 
 Use Markdown for formatting.
 
@@ -92,7 +92,10 @@ Include inline citation numbers like [1], [2], etc. to reference your sources wh
 
 Do NOT start with a preamble (like "Here are some recommendations..." or "Great choice!") or end with follow-up suggestions. Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
 
-IMPORTANT: If you cannot find sufficient verifiable information about the album "${albumName}" by ${artistName} to provide meaningful recommendations, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
+IMPORTANT:
+* You MUST provide ALBUM recommendations, not songs.
+* You MUST verify via web search that each album exists and is not made up (but don't mention that in your response).
+* If you cannot find sufficient verifiable information about the album "${albumName}" by ${artistName} to provide meaningful recommendations, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
 
   const response = await client.chatCompletion({
     model: config.model,
