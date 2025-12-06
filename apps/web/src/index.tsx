@@ -947,44 +947,53 @@ app.get('/api', (c) => {
   const apiKey = c.get('apiKey');
   return c.json({
     message: 'Listen To More API',
-    version: '0.0.1',
+    version: '1.0.0',
+    documentation: 'https://github.com/rianvdm/listentomore/blob/main/docs/API.md',
     auth: {
       authenticated: !!apiKey,
       tier: apiKey?.tier ?? 'public',
-      hint: 'Include X-API-Key header for authenticated access with higher rate limits',
+      hint: 'Include X-API-Key header for authenticated access',
     },
     rateLimits: {
-      public: '10 req/min',
       standard: '60 req/min',
       premium: '300 req/min',
     },
     endpoints: {
-      health: '/health',
-      auth: {
-        createKey: 'POST /api/auth/keys (requires admin)',
-      },
-      spotify: {
-        search: '/api/spotify/search?q=:query&type=:type',
-        album: '/api/spotify/album/:id',
-        artist: '/api/spotify/artist/:id',
-      },
-      lastfm: {
-        recentTracks: '/api/lastfm/recent',
-        topAlbums: '/api/lastfm/top-albums',
-        topArtists: '/api/lastfm/top-artists',
-        lovedTracks: '/api/lastfm/loved',
-      },
-      ai: {
-        artistSummary: '/api/ai/artist-summary?name=:artistName',
-        albumDetail: '/api/ai/album-detail?artist=:artistName&album=:albumName',
-        genreSummary: '/api/ai/genre-summary?genre=:genreName',
-        artistSentence: '/api/ai/artist-sentence?name=:artistName',
-        randomFact: '/api/ai/random-fact',
-        listenAI: 'POST /api/ai/ask',
-        playlistCover: {
-          generatePrompt: 'POST /api/ai/playlist-cover/prompt',
-          generateImage: 'POST /api/ai/playlist-cover/image',
+      v1: {
+        album: {
+          description: 'Get album details with AI summary and streaming links',
+          endpoint: 'GET /api/v1/album?artist=:artist&album=:album',
+          optional: 'include=summary,links,tracks (default: all)',
         },
+        albumRecommendations: {
+          description: 'Get AI-generated album recommendations',
+          endpoint: 'GET /api/v1/album/recommendations?artist=:artist&album=:album',
+        },
+        links: {
+          description: 'Get cross-platform streaming links',
+          endpoint: 'GET /api/v1/links?artist=:artist&album=:album',
+        },
+        artist: {
+          description: 'Get artist details with AI summary',
+          endpoint: 'GET /api/v1/artist?q=:artistName',
+          optional: 'include=summary,albums (default: all)',
+        },
+        genre: {
+          description: 'Get AI-generated genre summary',
+          endpoint: 'GET /api/v1/genre?q=:genreName',
+        },
+        ask: {
+          description: 'Chat with the music AI',
+          endpoint: 'POST /api/v1/ask',
+          body: '{ "question": "your question" }',
+        },
+      },
+      admin: {
+        createKey: 'POST /api/auth/keys (requires X-Admin-Secret header)',
+        cache: 'GET/DELETE /api/cache (premium tier only)',
+      },
+      other: {
+        health: '/health',
       },
     },
   });
@@ -1146,162 +1155,297 @@ app.get('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
   }
 });
 
-// Spotify API routes
-app.get('/api/spotify/search', async (c) => {
-  const query = c.req.query('q');
-  const type = c.req.query('type') as 'track' | 'album' | 'artist';
+// =============================================================================
+// Public API v1 Routes
+// All routes require API key auth (via X-API-Key header)
+// Auth and rate limiting applied globally via /api/* middleware
+// =============================================================================
 
-  if (!query || !type) {
-    return c.json({ error: 'Missing q or type parameter' }, 400);
+// GET /api/v1/album - Get album details with AI summary and streaming links
+app.get('/api/v1/album', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+  const include = c.req.query('include')?.split(',') || ['summary', 'links', 'tracks'];
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing required parameters: artist and album' }, 400);
   }
 
   try {
     const spotify = c.get('spotify');
-    const results = await spotify.search.search(query, type, 5);
-    return c.json({ data: results });
-  } catch (error) {
-    console.error('Spotify search error:', error);
-    return c.json({ error: 'Search failed' }, 500);
-  }
-});
-
-app.get('/api/spotify/album/:id', async (c) => {
-  const id = c.req.param('id');
-
-  try {
-    const spotify = c.get('spotify');
-    const album = await spotify.getAlbum(id);
-    return c.json({ data: album });
-  } catch (error) {
-    console.error('Spotify album error:', error);
-    return c.json({ error: 'Album lookup failed' }, 500);
-  }
-});
-
-app.get('/api/spotify/artist/:id', async (c) => {
-  const id = c.req.param('id');
-
-  try {
-    const spotify = c.get('spotify');
-    const artist = await spotify.getArtist(id);
-    return c.json({ data: artist });
-  } catch (error) {
-    console.error('Spotify artist error:', error);
-    return c.json({ error: 'Artist lookup failed' }, 500);
-  }
-});
-
-// Last.fm API routes
-app.get('/api/lastfm/recent', async (c) => {
-  const username = c.req.query('username');
-  if (!username) {
-    return c.json({ error: 'Missing required parameter: username' }, 400);
-  }
-  try {
-    const lastfm = new LastfmService({
-      apiKey: c.env.LASTFM_API_KEY,
-      username,
-      cache: c.env.CACHE,
-    });
-    const tracks = await lastfm.recentTracks.getRecentTracks(10);
-    return c.json({ data: tracks });
-  } catch (error) {
-    console.error('Last.fm recent tracks error:', error);
-    return c.json({ error: 'Failed to fetch recent tracks' }, 500);
-  }
-});
-
-app.get('/api/lastfm/top-albums', async (c) => {
-  const username = c.req.query('username');
-  if (!username) {
-    return c.json({ error: 'Missing required parameter: username' }, 400);
-  }
-  try {
-    const lastfm = new LastfmService({
-      apiKey: c.env.LASTFM_API_KEY,
-      username,
-      cache: c.env.CACHE,
-    });
-    const period = (c.req.query('period') as '7day' | '1month' | '3month' | '6month' | '12month' | 'overall') || '1month';
-    const albums = await lastfm.getTopAlbums(period, 6);
-    return c.json({ data: albums });
-  } catch (error) {
-    console.error('Last.fm top albums error:', error);
-    return c.json({ error: 'Failed to fetch top albums' }, 500);
-  }
-});
-
-app.get('/api/lastfm/top-artists', async (c) => {
-  const username = c.req.query('username');
-  if (!username) {
-    return c.json({ error: 'Missing required parameter: username' }, 400);
-  }
-  try {
-    const lastfm = new LastfmService({
-      apiKey: c.env.LASTFM_API_KEY,
-      username,
-      cache: c.env.CACHE,
-    });
-    const period = (c.req.query('period') as '7day' | '1month' | '3month' | '6month' | '12month' | 'overall') || '7day';
-    const artists = await lastfm.getTopArtists(period, 6);
-    return c.json({ data: artists });
-  } catch (error) {
-    console.error('Last.fm top artists error:', error);
-    return c.json({ error: 'Failed to fetch top artists' }, 500);
-  }
-});
-
-app.get('/api/lastfm/loved', async (c) => {
-  const username = c.req.query('username');
-  if (!username) {
-    return c.json({ error: 'Missing required parameter: username' }, 400);
-  }
-  try {
-    const lastfm = new LastfmService({
-      apiKey: c.env.LASTFM_API_KEY,
-      username,
-      cache: c.env.CACHE,
-    });
-    const tracks = await lastfm.getLovedTracks(10);
-    return c.json({ data: tracks });
-  } catch (error) {
-    console.error('Last.fm loved tracks error:', error);
-    return c.json({ error: 'Failed to fetch loved tracks' }, 500);
-  }
-});
-
-// Streaming Links API routes
-
-// Get streaming links for an album (Apple Music, YouTube)
-app.get('/api/streaming-links/album/:id', requireAuth(), async (c) => {
-  const spotifyId = c.req.param('id');
-
-  try {
-    const spotify = c.get('spotify');
+    const spotifyStreaming = c.get('spotifyStreaming');
+    const ai = c.get('ai');
     const streamingLinks = c.get('streamingLinks');
 
-    const album = await spotify.getAlbum(spotifyId);
+    // Step 1: Search for the album using precise search
+    const searchResult = await spotify.searchAlbumByArtist(artist, album);
+    if (!searchResult) {
+      return c.json({ error: 'Album not found', artist, album }, 404);
+    }
+
+    // Step 2: Fetch full album details
+    const albumData = await spotify.getAlbum(searchResult.id);
+
+    // Step 3: Fetch AI summary and streaming links in parallel (if requested)
+    const [summaryResult, linksResult] = await Promise.all([
+      include.includes('summary')
+        ? ai.getAlbumDetail(albumData.artist, albumData.name).catch((err) => {
+            console.error('AI album summary error:', err);
+            return null;
+          })
+        : Promise.resolve(null),
+      include.includes('links')
+        ? (async () => {
+            try {
+              const albumForLinks = await spotifyStreaming.getAlbum(searchResult.id);
+              const metadata = StreamingLinksService.albumMetadataFromSpotify({
+                id: albumForLinks.id,
+                name: albumForLinks.name,
+                artists: albumForLinks.artistIds.map((_, i) => ({
+                  name: albumForLinks.artist.split(', ')[i] || albumForLinks.artist,
+                })),
+                total_tracks: albumForLinks.tracks,
+                release_date: albumForLinks.releaseDate,
+                external_ids: albumForLinks.upc ? { upc: albumForLinks.upc } : undefined,
+              });
+              return await streamingLinks.getAlbumLinks(metadata);
+            } catch (err) {
+              console.error('Streaming links error:', err);
+              return null;
+            }
+          })()
+        : Promise.resolve(null),
+    ]);
+
+    // Build response
+    const response: Record<string, unknown> = {
+      id: albumData.id,
+      name: albumData.name,
+      artist: albumData.artist,
+      artistId: albumData.artistIds[0] || null,
+      releaseDate: albumData.releaseDate,
+      genres: albumData.genres,
+      image: albumData.image,
+      url: albumData.url,
+    };
+
+    if (include.includes('tracks')) {
+      response.tracks = albumData.trackList;
+    }
+
+    if (summaryResult) {
+      response.summary = {
+        content: summaryResult.content,
+        citations: summaryResult.citations,
+      };
+    }
+
+    if (linksResult) {
+      response.links = {
+        listentomore: `https://listentomore.com/album/${albumData.id}`,
+        spotify: albumData.url,
+        appleMusic: linksResult.appleMusic?.url || null,
+        youtube: linksResult.youtube?.url || null,
+      };
+      response.confidence = {
+        appleMusic: linksResult.appleMusic?.confidence || null,
+        youtube: linksResult.youtube?.confidence || null,
+      };
+    } else {
+      // Always include listentomore link even if streaming links not requested
+      response.links = {
+        listentomore: `https://listentomore.com/album/${albumData.id}`,
+        spotify: albumData.url,
+      };
+    }
+
+    return c.json({ data: response });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('v1 album error:', errorMessage, error);
+    return c.json({ error: 'Failed to fetch album', details: errorMessage }, 500);
+  }
+});
+
+// GET /api/v1/genre - Get AI-generated genre summary
+app.get('/api/v1/genre', async (c) => {
+  const query = c.req.query('q');
+
+  if (!query) {
+    return c.json({ error: 'Missing required parameter: q' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+
+    // Normalize genre name to slug format
+    const slug = query.toLowerCase().trim().replace(/\s+/g, '-');
+
+    const result = await ai.getGenreSummary(query);
+
+    return c.json({
+      data: {
+        name: query,
+        slug,
+        url: `https://listentomore.com/genre/${slug}`,
+        summary: {
+          content: result.content,
+          citations: result.citations,
+        },
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('v1 genre error:', errorMessage, error);
+    return c.json({ error: 'Failed to fetch genre summary', details: errorMessage }, 500);
+  }
+});
+
+// POST /api/v1/ask - Chat with the music AI
+app.post('/api/v1/ask', async (c) => {
+  try {
+    const body = await c.req.json();
+    const question = body.question;
+
+    if (!question || typeof question !== 'string') {
+      return c.json({ error: 'Missing required field: question' }, 400);
+    }
+
+    const ai = c.get('ai');
+    const response = await ai.askListenAI(question);
+
+    return c.json({
+      data: {
+        question,
+        answer: response,
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('v1 ask error:', errorMessage, error);
+    return c.json({ error: 'Failed to generate response', details: errorMessage }, 500);
+  }
+});
+
+// GET /api/v1/artist - Get artist details with AI summary
+app.get('/api/v1/artist', async (c) => {
+  const query = c.req.query('q');
+  const include = c.req.query('include')?.split(',') || ['summary', 'albums'];
+
+  if (!query) {
+    return c.json({ error: 'Missing required parameter: q' }, 400);
+  }
+
+  try {
+    const spotify = c.get('spotify');
+    const ai = c.get('ai');
+    const lastfm = c.get('lastfm');
+
+    // Step 1: Search for artist
+    const searchResults = await spotify.search.search(query, 'artist', 1);
+    if (!searchResults || searchResults.length === 0) {
+      return c.json({ error: 'Artist not found', query }, 404);
+    }
+
+    const artistResult = searchResults[0];
+
+    // Step 2: Get full artist details
+    const artistData = await spotify.getArtist(artistResult.id);
+
+    // Step 3: Fetch AI summary and top albums in parallel
+    const [summaryResult, topAlbumsResult] = await Promise.all([
+      include.includes('summary')
+        ? ai.getArtistSummary(artistData.name).catch((err) => {
+            console.error('AI artist summary error:', err);
+            return null;
+          })
+        : Promise.resolve(null),
+      include.includes('albums')
+        ? lastfm.getArtistTopAlbums(artistData.name, 5).catch((err) => {
+            console.error('Last.fm top albums error:', err);
+            return [];
+          })
+        : Promise.resolve([]),
+    ]);
+
+    // Build response
+    const response: Record<string, unknown> = {
+      id: artistData.id,
+      name: artistData.name,
+      genres: artistData.genres,
+      image: artistData.image,
+      url: `https://listentomore.com/artist/${artistData.id}`,
+      spotifyUrl: artistData.url,
+    };
+
+    if (summaryResult && summaryResult.summary) {
+      response.summary = {
+        content: summaryResult.summary,
+        citations: summaryResult.citations,
+      };
+    }
+
+    if (topAlbumsResult && topAlbumsResult.length > 0) {
+      response.topAlbums = topAlbumsResult.map((album) => ({
+        name: album.name,
+        playcount: album.playcount,
+      }));
+    }
+
+    return c.json({ data: response });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('v1 artist error:', errorMessage, error);
+    return c.json({ error: 'Failed to fetch artist', details: errorMessage }, 500);
+  }
+});
+
+// GET /api/v1/links - Get cross-platform streaming links for an album
+app.get('/api/v1/links', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing required parameters: artist and album' }, 400);
+  }
+
+  try {
+    const spotify = c.get('spotify');
+    const spotifyStreaming = c.get('spotifyStreaming');
+    const streamingLinks = c.get('streamingLinks');
+
+    // Step 1: Search for the album
+    const searchResult = await spotify.searchAlbumByArtist(artist, album);
+    if (!searchResult) {
+      return c.json({ error: 'Album not found', artist, album }, 404);
+    }
+
+    // Step 2: Get full album details for UPC
+    const albumData = await spotifyStreaming.getAlbum(searchResult.id);
     const metadata = StreamingLinksService.albumMetadataFromSpotify({
-      id: album.id,
-      name: album.name,
-      artists: album.artistIds.map((_, i) => ({ name: album.artist.split(', ')[i] || album.artist })),
-      total_tracks: album.tracks,
-      release_date: album.releaseDate || '',
-      external_ids: album.upc ? { upc: album.upc } : undefined,
+      id: albumData.id,
+      name: albumData.name,
+      artists: albumData.artistIds.map((_, i) => ({
+        name: albumData.artist.split(', ')[i] || albumData.artist,
+      })),
+      total_tracks: albumData.tracks,
+      release_date: albumData.releaseDate,
+      external_ids: albumData.upc ? { upc: albumData.upc } : undefined,
     });
 
+    // Step 3: Get streaming links
     const links = await streamingLinks.getAlbumLinks(metadata);
 
     return c.json({
       data: {
-        album: {
-          id: album.id,
-          name: album.name,
-          artist: album.artist,
-          upc: album.upc,
+        source: {
+          id: albumData.id,
+          name: albumData.name,
+          artist: albumData.artist,
         },
         links: {
-          spotify: album.url,
+          listentomore: `https://listentomore.com/album/${albumData.id}`,
+          spotify: albumData.url,
           appleMusic: links.appleMusic?.url || null,
           youtube: links.youtube?.url || null,
         },
@@ -1309,160 +1453,55 @@ app.get('/api/streaming-links/album/:id', requireAuth(), async (c) => {
           appleMusic: links.appleMusic?.confidence || null,
           youtube: links.youtube?.confidence || null,
         },
-        matched: {
-          appleMusic: links.appleMusic?.matched || null,
-          youtube: links.youtube?.matched || null,
-        },
-        cached: links.cached,
       },
     });
   } catch (error) {
-    console.error('Streaming links error:', error);
-    return c.json({ error: 'Failed to fetch streaming links' }, 500);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('v1 links error:', errorMessage, error);
+    return c.json({ error: 'Failed to fetch streaming links', details: errorMessage }, 500);
   }
 });
 
-// AI API routes
-
-// Artist summary (uses Perplexity)
-app.get('/api/ai/artist-summary', async (c) => {
-  const name = c.req.query('name');
-
-  if (!name) {
-    return c.json({ error: 'Missing name parameter' }, 400);
-  }
-
-  try {
-    const ai = c.get('ai');
-    const result = await ai.getArtistSummary(name);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI artist summary error:', error);
-    return c.json({ error: 'Failed to generate artist summary' }, 500);
-  }
-});
-
-// Album detail (uses Perplexity with citations)
-app.get('/api/ai/album-detail', async (c) => {
+// GET /api/v1/album/recommendations - Get AI-generated album recommendations
+app.get('/api/v1/album/recommendations', async (c) => {
   const artist = c.req.query('artist');
   const album = c.req.query('album');
 
   if (!artist || !album) {
-    return c.json({ error: 'Missing artist or album parameter' }, 400);
+    return c.json({ error: 'Missing required parameters: artist and album' }, 400);
   }
 
   try {
+    const spotify = c.get('spotify');
     const ai = c.get('ai');
-    const result = await ai.getAlbumDetail(artist, album);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI album detail error:', error);
-    return c.json({ error: 'Failed to generate album detail' }, 500);
-  }
-});
 
-// Genre summary (uses Perplexity with citations)
-app.get('/api/ai/genre-summary', async (c) => {
-  const genre = c.req.query('genre');
-
-  if (!genre) {
-    return c.json({ error: 'Missing genre parameter' }, 400);
-  }
-
-  try {
-    const ai = c.get('ai');
-    const result = await ai.getGenreSummary(genre);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI genre summary error:', error);
-    return c.json({ error: 'Failed to generate genre summary' }, 500);
-  }
-});
-
-// Artist sentence (short description, uses Perplexity)
-app.get('/api/ai/artist-sentence', async (c) => {
-  const name = c.req.query('name');
-
-  if (!name) {
-    return c.json({ error: 'Missing name parameter' }, 400);
-  }
-
-  try {
-    const ai = c.get('ai');
-    const result = await ai.getArtistSentence(name);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI artist sentence error:', error);
-    return c.json({ error: 'Failed to generate artist sentence' }, 500);
-  }
-});
-
-// Random music fact (uses OpenAI)
-app.get('/api/ai/random-fact', async (c) => {
-  try {
-    const ai = c.get('ai');
-    const result = await ai.getRandomFact();
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI random fact error:', error);
-    return c.json({ error: 'Failed to generate random fact' }, 500);
-  }
-});
-
-// Rick Rubin AI chatbot (uses OpenAI)
-app.post('/api/ai/ask', async (c) => {
-  try {
-    const body = await c.req.json<{ question: string }>();
-
-    if (!body.question) {
-      return c.json({ error: 'Missing question in request body' }, 400);
+    // Step 1: Search for the album to validate it exists and get correct names
+    const searchResult = await spotify.searchAlbumByArtist(artist, album);
+    if (!searchResult) {
+      return c.json({ error: 'Album not found', artist, album }, 404);
     }
 
-    const ai = c.get('ai');
-    const result = await ai.askListenAI(body.question);
-    return c.json({ data: result });
+    // Step 2: Get AI recommendations
+    const recommendations = await ai.getAlbumRecommendations(searchResult.artist, searchResult.name);
+
+    return c.json({
+      data: {
+        source: {
+          id: searchResult.id,
+          name: searchResult.name,
+          artist: searchResult.artist,
+          url: `https://listentomore.com/album/${searchResult.id}`,
+        },
+        recommendations: {
+          content: recommendations.content,
+          citations: recommendations.citations,
+        },
+      },
+    });
   } catch (error) {
-    console.error('AI ask error:', error);
-    return c.json({ error: 'Failed to get AI response' }, 500);
-  }
-});
-
-// Playlist cover prompt generator (uses OpenAI)
-app.post('/api/ai/playlist-cover/prompt', async (c) => {
-  try {
-    const body = await c.req.json<{ name: string; description: string }>();
-
-    if (!body.name || !body.description) {
-      return c.json(
-        { error: 'Missing name or description in request body' },
-        400
-      );
-    }
-
-    const ai = c.get('ai');
-    const result = await ai.getPlaylistCoverPrompt(body.name, body.description);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI playlist cover prompt error:', error);
-    return c.json({ error: 'Failed to generate playlist cover prompt' }, 500);
-  }
-});
-
-// Playlist cover image generator (uses DALL-E)
-app.post('/api/ai/playlist-cover/image', async (c) => {
-  try {
-    const body = await c.req.json<{ prompt: string }>();
-
-    if (!body.prompt) {
-      return c.json({ error: 'Missing prompt in request body' }, 400);
-    }
-
-    const ai = c.get('ai');
-    const result = await ai.getPlaylistCoverImage(body.prompt);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('AI playlist cover image error:', error);
-    return c.json({ error: 'Failed to generate playlist cover image' }, 500);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('v1 album recommendations error:', errorMessage, error);
+    return c.json({ error: 'Failed to generate recommendations', details: errorMessage }, 500);
   }
 });
 

@@ -1,407 +1,397 @@
-# Listen To More API Documentation
+# Listen To More API
 
-The Listen To More API provides programmatic access to music discovery features including Spotify catalog search, Last.fm listening data, and AI-powered music summaries.
+A REST API for music discovery, combining Spotify catalog data with AI-powered insights and cross-platform streaming links.
 
 **Base URL:** `https://listentomore.com`
 
+---
+
+## Table of Contents
+
+- [Authentication](#authentication)
+- [Rate Limits](#rate-limits)
+- [Endpoints](#endpoints)
+  - [Album](#album)
+  - [Album Recommendations](#album-recommendations)
+  - [Streaming Links](#streaming-links)
+  - [Artist](#artist)
+  - [Genre](#genre)
+  - [Ask (Chat)](#ask-chat)
+- [Error Handling](#error-handling)
+- [Getting an API Key](#getting-an-api-key)
+
+---
+
 ## Authentication
 
-All API requests require authentication via the `X-API-Key` header.
+All API requests require the `X-API-Key` header.
 
 ```bash
-curl -H "X-API-Key: your_api_key" https://listentomore.com/api/spotify/search?q=radiohead&type=artist
+curl -H "X-API-Key: your_api_key" \
+  "https://listentomore.com/api/v1/album?artist=radiohead&album=ok%20computer"
 ```
 
-### Rate Limits
+---
 
-| Tier | Rate Limit | Description |
-|------|------------|-------------|
-| Standard | 60 req/min | Default tier for new API keys |
-| Premium | 300 req/min | Higher limits, access to admin endpoints |
+## Rate Limits
+
+| Tier | Requests/Minute | Description |
+|------|-----------------|-------------|
+| Standard | 60 | Default tier for new API keys |
+| Premium | 300 | Higher limits for approved applications |
 
 Rate limit headers are included in all responses:
-- `X-RateLimit-Limit` - Maximum requests per minute
-- `X-RateLimit-Remaining` - Requests remaining in current window
-- `X-RateLimit-Reset` - Unix timestamp when the limit resets
-- `X-RateLimit-Tier` - Your API key tier
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests per minute |
+| `X-RateLimit-Remaining` | Requests remaining in current window |
+| `X-RateLimit-Reset` | Unix timestamp when the limit resets |
 
 ---
 
 ## Endpoints
 
-### Spotify
+### Album
 
-#### Search
-Search the Spotify catalog for tracks, albums, or artists.
+Get comprehensive album information including metadata, AI-generated summary, and cross-platform streaming links in a single request.
 
 ```
-GET /api/spotify/search?q=:query&type=:type
+GET /api/v1/album
 ```
 
-**Parameters:**
+#### Parameters
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `q` | string | Yes | Search query |
-| `type` | string | Yes | One of: `track`, `album`, `artist` |
+| `artist` | string | Yes | Artist name |
+| `album` | string | Yes | Album name |
+| `include` | string | No | Comma-separated list: `summary`, `links`, `tracks`. Default: all |
 
-**Example:**
+#### Example Request
+
 ```bash
 curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/spotify/search?q=ok%20computer&type=album"
+  "https://listentomore.com/api/v1/album?artist=radiohead&album=the%20bends"
 ```
 
-**Response:**
-```json
-{
-  "data": [
-    {
-      "id": "6dVIqQ8qmQ5GBnJ9shOYGE",
-      "name": "OK Computer",
-      "artist": "Radiohead",
-      "image": "https://i.scdn.co/image/...",
-      "url": "https://open.spotify.com/album/6dVIqQ8qmQ5GBnJ9shOYGE"
-    }
-  ]
-}
-```
+#### Example Response
 
-#### Get Album
-Get detailed information about a specific album.
-
-```
-GET /api/spotify/album/:id
-```
-
-**Example:**
-```bash
-curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/spotify/album/6dVIqQ8qmQ5GBnJ9shOYGE"
-```
-
-**Response:**
 ```json
 {
   "data": {
-    "id": "6dVIqQ8qmQ5GBnJ9shOYGE",
-    "name": "OK Computer",
+    "id": "35UJLpClj5EDrhpNIi4DFg",
+    "name": "The Bends",
     "artist": "Radiohead",
-    "artistIds": ["4Z8W4fKeB5YxbusRsdQVPb"],
-    "releaseDate": "1997-05-28",
-    "tracks": 12,
+    "artistId": "4Z8W4fKeB5YxbusRsdQVPb",
+    "releaseDate": "1995-03-13",
     "genres": [],
-    "image": "https://i.scdn.co/image/...",
-    "url": "https://open.spotify.com/album/6dVIqQ8qmQ5GBnJ9shOYGE",
-    "label": "XL Recordings",
-    "popularity": 87,
-    "copyrights": ["1997 XL Recordings Ltd"],
-    "upc": "634904078164",
-    "ean": null,
-    "trackList": [
-      { "number": 1, "name": "Airbag", "duration": 287880, "preview": null, "artists": ["Radiohead"] }
-    ]
+    "image": "https://i.scdn.co/image/ab67616d0000b2739293c743fa542094336c5e12",
+    "url": "https://open.spotify.com/album/35UJLpClj5EDrhpNIi4DFg",
+    "tracks": [
+      {
+        "number": 1,
+        "name": "Planet Telex",
+        "duration": 259200,
+        "preview": null,
+        "artists": ["Radiohead"]
+      },
+      {
+        "number": 2,
+        "name": "The Bends",
+        "duration": 246200,
+        "preview": null,
+        "artists": ["Radiohead"]
+      }
+    ],
+    "summary": {
+      "content": "### History and Genres/Styles of *The Bends*\n\n*The Bends* is Radiohead's second studio album, released on March 13, 1995...",
+      "citations": [
+        "https://www.thecurrent.org/feature/2025/03/13/march-13-in-music-history-radiohead-released-the-bends",
+        "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2025/2/8/feature-radioheads-the-bends-at-thirty"
+      ]
+    },
+    "links": {
+      "listentomore": "https://listentomore.com/album/35UJLpClj5EDrhpNIi4DFg",
+      "spotify": "https://open.spotify.com/album/35UJLpClj5EDrhpNIi4DFg",
+      "appleMusic": "https://music.apple.com/album/the-bends/1097862703",
+      "youtube": "https://www.youtube.com/results?search_query=Radiohead%20The%20Bends%20album"
+    },
+    "confidence": {
+      "appleMusic": 0.98,
+      "youtube": null
+    }
   }
 }
 ```
 
-#### Get Artist
-Get detailed information about a specific artist.
+#### Response Fields
 
-```
-GET /api/spotify/artist/:id
-```
-
-**Example:**
-```bash
-curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/spotify/artist/4Z8W4fKeB5YxbusRsdQVPb"
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Spotify album ID |
+| `name` | string | Album name |
+| `artist` | string | Primary artist name |
+| `artistId` | string | Spotify artist ID |
+| `releaseDate` | string | Release date (YYYY-MM-DD) |
+| `genres` | string[] | Album genres (from Spotify) |
+| `image` | string | Album artwork URL |
+| `url` | string | Spotify album URL |
+| `tracks` | object[] | Track listing (if `include=tracks`) |
+| `summary.content` | string | AI-generated album summary (Markdown with citations) |
+| `summary.citations` | string[] | Source URLs for the summary |
+| `links.listentomore` | string | Listen To More album page |
+| `links.spotify` | string | Spotify album URL |
+| `links.appleMusic` | string \| null | Apple Music URL (if found) |
+| `links.youtube` | string \| null | YouTube URL (if found) |
+| `confidence.appleMusic` | number \| null | Match confidence (0.98 = UPC match, 0.8+ = text match) |
+| `confidence.youtube` | number \| null | Match confidence |
 
 ---
 
-### Last.fm
+### Album Recommendations
 
-All Last.fm endpoints require a `username` parameter.
-
-#### Recent Tracks
-Get a user's recently played tracks.
+Get AI-generated album recommendations based on a source album.
 
 ```
-GET /api/lastfm/recent?username=:username
+GET /api/v1/album/recommendations
 ```
 
-**Parameters:**
+#### Parameters
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `username` | string | Yes | Last.fm username |
-| `limit` | number | No | Number of tracks (default: 50) |
+| `artist` | string | Yes | Artist name |
+| `album` | string | Yes | Album name |
 
-**Example:**
+#### Example Request
+
 ```bash
 curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/lastfm/recent?username=rj"
+  "https://listentomore.com/api/v1/album/recommendations?artist=radiohead&album=ok%20computer"
 ```
 
-#### Top Albums
-Get a user's most played albums.
+#### Example Response
 
-```
-GET /api/lastfm/top-albums?username=:username&period=:period
-```
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `username` | string | Yes | Last.fm username |
-| `period` | string | No | Time period: `7day`, `1month`, `3month`, `6month`, `12month`, `overall` |
-| `limit` | number | No | Number of albums (default: 50) |
-
-#### Top Artists
-Get a user's most played artists.
-
-```
-GET /api/lastfm/top-artists?username=:username&period=:period
-```
-
-**Parameters:** Same as Top Albums.
-
-#### Loved Tracks
-Get a user's loved/favorited tracks.
-
-```
-GET /api/lastfm/loved?username=:username
+```json
+{
+  "data": {
+    "source": {
+      "id": "6dVIqQ8qmQ5GBnJ9shOYGE",
+      "name": "OK Computer",
+      "artist": "Radiohead",
+      "url": "https://listentomore.com/album/6dVIqQ8qmQ5GBnJ9shOYGE"
+    },
+    "recommendations": {
+      "content": "Based on *OK Computer*, here are albums you might enjoy:\n\n- **Kid A** by Radiohead - The follow-up that pushed even further into electronic experimentation...\n- **Homogenic** by Björk - Shares OK Computer's blend of orchestral elements with electronic production...",
+      "citations": [
+        "https://www.albumoftheyear.org/ratings/user-highest-rated/all/",
+        "https://rateyourmusic.com/list/TheScientist/..."
+      ]
+    }
+  }
+}
 ```
 
 ---
 
 ### Streaming Links
 
-Get cross-platform streaming links for albums. Uses Apple Music's MusicKit API with UPC matching for high accuracy.
-
-#### Get Album Links
-Get streaming links for a Spotify album across Apple Music and YouTube.
+Get cross-platform streaming links for an album without the full metadata or AI summary.
 
 ```
-GET /api/streaming-links/album/:spotifyId
+GET /api/v1/links
 ```
 
-**Example:**
+#### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `artist` | string | Yes | Artist name |
+| `album` | string | Yes | Album name |
+
+#### Example Request
+
 ```bash
 curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/streaming-links/album/6dVIqQ8qmQ5GBnJ9shOYGE"
+  "https://listentomore.com/api/v1/links?artist=portishead&album=dummy"
 ```
 
-**Response:**
+#### Example Response
+
 ```json
 {
   "data": {
-    "album": {
-      "id": "6dVIqQ8qmQ5GBnJ9shOYGE",
-      "name": "OK Computer",
-      "artist": "Radiohead",
-      "upc": "634904078164"
+    "source": {
+      "id": "3539EbNgIdEDGBKkUf4wno",
+      "name": "Dummy",
+      "artist": "Portishead"
     },
     "links": {
-      "spotify": "https://open.spotify.com/album/6dVIqQ8qmQ5GBnJ9shOYGE",
-      "appleMusic": "https://music.apple.com/us/album/ok-computer/1097861387",
-      "youtube": "https://www.youtube.com/playlist?list=..."
+      "listentomore": "https://listentomore.com/album/3539EbNgIdEDGBKkUf4wno",
+      "spotify": "https://open.spotify.com/album/3539EbNgIdEDGBKkUf4wno",
+      "appleMusic": "https://music.apple.com/album/dummy/1440649507",
+      "youtube": "https://www.youtube.com/playlist?list=OLAK5uy_..."
     },
     "confidence": {
       "appleMusic": 0.98,
       "youtube": 0.85
-    },
-    "matched": {
-      "appleMusic": { "artist": "Radiohead", "album": "OK Computer", "upc": "634904078164" },
-      "youtube": { "artist": "Radiohead", "album": "OK Computer" }
-    },
-    "cached": false
+    }
   }
 }
 ```
 
-**Confidence Scores:**
-- `0.98` - UPC/ISRC match (most reliable)
-- `0.8+` - Text search match with metadata validation
-- `null` - No match found, link may be a search URL fallback
+#### Confidence Scores
+
+| Score | Meaning |
+|-------|---------|
+| `0.98` | UPC/barcode match (most reliable) |
+| `0.80-0.95` | Text search match with metadata validation |
+| `null` | No confident match; URL may be a search fallback |
 
 ---
 
-### AI
+### Artist
 
-AI endpoints use Perplexity and OpenAI to generate music insights. Responses are cached for efficiency.
-
-#### Artist Summary
-Get an AI-generated summary of an artist including history, genres, and similar artists.
+Get artist information with AI-generated summary and top albums.
 
 ```
-GET /api/ai/artist-summary?name=:artistName
+GET /api/v1/artist
 ```
 
-**Example:**
+#### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `q` | string | Yes | Artist name to search |
+| `include` | string | No | Comma-separated: `summary`, `albums`. Default: all |
+
+#### Example Request
+
 ```bash
 curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/ai/artist-summary?name=Radiohead"
+  "https://listentomore.com/api/v1/artist?q=radiohead"
 ```
 
-**Response:**
+#### Example Response
+
 ```json
 {
   "data": {
-    "summary": "Radiohead is a British rock band formed in 1985...[1] They are known for...[2]",
-    "citations": [
-      "https://en.wikipedia.org/wiki/Radiohead",
-      "https://www.allmusic.com/artist/radiohead"
+    "id": "4Z8W4fKeB5YxbusRsdQVPb",
+    "name": "Radiohead",
+    "genres": ["Art Rock", "Alternative Rock"],
+    "image": "https://i.scdn.co/image/ab6761610000e5eb4104fbd80f1f795728abbd59",
+    "url": "https://listentomore.com/artist/4Z8W4fKeB5YxbusRsdQVPb",
+    "spotifyUrl": "https://open.spotify.com/artist/4Z8W4fKeB5YxbusRsdQVPb",
+    "summary": {
+      "content": "**Radiohead** is an English rock band formed in Abingdon, Oxfordshire, in 1985...[1] The band consists of Thom Yorke (vocals, guitar, piano), brothers Jonny Greenwood (lead guitar, keyboards) and Colin Greenwood (bass), Ed O'Brien (guitar, backing vocals), and Philip Selway (drums)...",
+      "citations": [
+        "https://en.wikipedia.org/wiki/Radiohead",
+        "https://www.allmusic.com/artist/radiohead"
+      ]
+    },
+    "topAlbums": [
+      { "name": "OK Computer", "playcount": 235835672 },
+      { "name": "In Rainbows", "playcount": 230324611 },
+      { "name": "The Bends", "playcount": 163130748 },
+      { "name": "Kid A", "playcount": 111207700 },
+      { "name": "Pablo Honey", "playcount": 85040849 }
     ]
   }
 }
 ```
 
-#### Album Detail
-Get an AI-generated analysis of an album including history, genres, and critical reception.
+#### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Spotify artist ID |
+| `name` | string | Artist name |
+| `genres` | string[] | Artist genres |
+| `image` | string | Artist image URL |
+| `url` | string | Listen To More artist page |
+| `spotifyUrl` | string | Spotify artist URL |
+| `summary.content` | string | AI-generated artist summary (Markdown) |
+| `summary.citations` | string[] | Source URLs |
+| `topAlbums` | object[] | Top albums by play count (from Last.fm) |
+
+---
+
+### Genre
+
+Get AI-generated information about a music genre.
 
 ```
-GET /api/ai/album-detail?artist=:artistName&album=:albumName
+GET /api/v1/genre
 ```
 
-**Example:**
+#### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `q` | string | Yes | Genre name (e.g., "shoegaze", "trip hop") |
+
+#### Example Request
+
 ```bash
 curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/ai/album-detail?artist=Radiohead&album=OK%20Computer"
+  "https://listentomore.com/api/v1/genre?q=shoegaze"
 ```
 
-#### Genre Summary
-Get an AI-generated overview of a music genre including history, characteristics, and key artists.
+#### Example Response
 
-```
-GET /api/ai/genre-summary?genre=:genreName
-```
-
-**Example:**
-```bash
-curl -H "X-API-Key: your_key" \
-  "https://listentomore.com/api/ai/genre-summary?genre=shoegaze"
-```
-
-#### Artist Sentence
-Get a brief one-sentence description of an artist.
-
-```
-GET /api/ai/artist-sentence?name=:artistName
-```
-
-#### Random Fact
-Get a random AI-generated music fact.
-
-```
-GET /api/ai/random-fact
-```
-
-#### Ask (Chat)
-Ask the music AI chatbot a question.
-
-```
-POST /api/ai/ask
-Content-Type: application/json
-
+```json
 {
-  "question": "What albums should I listen to if I like OK Computer?"
-}
-```
-
-#### Playlist Cover
-Generate AI artwork for a playlist.
-
-```
-POST /api/ai/playlist-cover/prompt
-Content-Type: application/json
-
-{
-  "playlistName": "Late Night Coding",
-  "tracks": ["Radiohead - Everything In Its Right Place", "Boards of Canada - Roygbiv"]
-}
-```
-
-```
-POST /api/ai/playlist-cover/image
-Content-Type: application/json
-
-{
-  "prompt": "A dreamy, abstract visualization..."
+  "data": {
+    "name": "shoegaze",
+    "slug": "shoegaze",
+    "url": "https://listentomore.com/genre/shoegaze",
+    "summary": {
+      "content": "**Shoegaze** is a subgenre of alternative rock that emerged in the United Kingdom during the late 1980s...[1] The name comes from the tendency of musicians to stare at their effects pedals during performances. Key characteristics include heavily distorted guitars, obscured vocals, and a wall of sound production style...",
+      "citations": [
+        "https://en.wikipedia.org/wiki/Shoegaze",
+        "https://www.allmusic.com/style/shoegaze"
+      ]
+    }
+  }
 }
 ```
 
 ---
 
-### Cache Management
+### Ask (Chat)
 
-These endpoints require a **premium-tier** API key.
-
-#### List Cache Keys
-List cached entries by prefix.
+Chat with the music AI assistant. Powered by OpenAI GPT-4.
 
 ```
-GET /api/cache?prefix=:prefix&limit=:limit
+POST /api/v1/ask
 ```
 
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `prefix` | string | No | Key prefix to filter (default: `ai:`) |
-| `limit` | number | No | Max keys to return (default: 50, max: 100) |
+#### Request Body
 
-**Available prefixes:**
-- `ai:albumDetail` - Album AI summaries
-- `ai:artistSummary` - Artist AI summaries
-- `ai:genreSummary` - Genre AI summaries
-- `spotify:album` - Spotify album data
-- `spotify:artist` - Spotify artist data
-- `songlink:` - Streaming link data
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `question` | string | Yes | Your question about music |
 
-**Example:**
+#### Example Request
+
 ```bash
-curl -H "X-API-Key: your_premium_key" \
-  "https://listentomore.com/api/cache?prefix=ai:albumDetail&limit=10"
+curl -X POST \
+  -H "X-API-Key: your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What albums should I listen to if I like OK Computer?"}' \
+  "https://listentomore.com/api/v1/ask"
 ```
 
-**Response:**
+#### Example Response
+
 ```json
 {
-  "keys": [
-    { "name": "ai:albumDetail:radiohead:ok computer", "expiration": "2025-06-15T00:00:00.000Z" }
-  ],
-  "count": 1,
-  "complete": true
-}
-```
-
-#### Delete Cache Entry
-Clear a specific cache entry to force regeneration.
-
-```
-DELETE /api/cache?type=:type&...params
-```
-
-**Types and parameters:**
-
-| Type | Parameters | Example |
-|------|------------|---------|
-| `albumDetail` | `artist`, `album` | `?type=albumDetail&artist=radiohead&album=ok%20computer` |
-| `artistSummary` | `artist` | `?type=artistSummary&artist=radiohead` |
-| `genreSummary` | `genre` | `?type=genreSummary&genre=shoegaze` |
-| `spotify:album` | `id` | `?type=spotify:album&id=6dVIqQ8qmQ5GBnJ9shOYGE` |
-| `spotify:artist` | `id` | `?type=spotify:artist&id=4Z8W4fKeB5YxbusRsdQVPb` |
-
-**Example:**
-```bash
-curl -X DELETE -H "X-API-Key: your_premium_key" \
-  "https://listentomore.com/api/cache?type=albumDetail&artist=radiohead&album=ok%20computer"
-```
-
-**Response:**
-```json
-{
-  "message": "Cache entry deleted",
-  "key": "ai:albumDetail:radiohead:ok computer",
-  "deleted": true
+  "data": {
+    "question": "What albums should I listen to if I like OK Computer?",
+    "answer": "If you enjoy OK Computer, I'd recommend exploring these albums:\n\n1. **Kid A** by Radiohead - The natural next step, where the band pushed further into electronic territory.\n\n2. **Homogenic** by Björk - Shares OK Computer's blend of organic and electronic sounds with an operatic edge.\n\n3. **The Moon & Antarctica** by Modest Mouse - Expansive, existential rock with similar thematic depth.\n\n4. **Lift Your Skinny Fists Like Antennas to Heaven** by Godspeed You! Black Emperor - Epic post-rock that captures the same sense of technological unease.\n\n5. **69 Love Songs** by The Magnetic Fields - Different sonically, but shares the ambitious scope and clever songwriting."
+  }
 }
 ```
 
@@ -409,29 +399,93 @@ curl -X DELETE -H "X-API-Key: your_premium_key" \
 
 ## Error Handling
 
-All errors return JSON with an `error` field:
+All errors return JSON with an `error` field and appropriate HTTP status code.
+
+### Error Response Format
 
 ```json
 {
   "error": "Error type",
-  "message": "Detailed error message"
+  "message": "Detailed error message",
+  "details": "Additional context (development only)"
 }
 ```
 
-**Common HTTP Status Codes:**
+### HTTP Status Codes
 
 | Code | Description |
 |------|-------------|
-| 400 | Bad Request - Missing or invalid parameters |
-| 401 | Unauthorized - Invalid or missing API key |
-| 403 | Forbidden - Insufficient permissions (wrong tier/scope) |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error - Something went wrong |
+| `400` | Bad Request - Missing or invalid parameters |
+| `401` | Unauthorized - Invalid or missing API key |
+| `404` | Not Found - Album/artist not found |
+| `429` | Too Many Requests - Rate limit exceeded |
+| `500` | Internal Server Error - Something went wrong |
+
+### Example Error Responses
+
+**Missing parameters:**
+```json
+{
+  "error": "Missing required parameters: artist and album"
+}
+```
+
+**Album not found:**
+```json
+{
+  "error": "Album not found",
+  "artist": "radiohead",
+  "album": "nonexistent album"
+}
+```
+
+**Rate limited:**
+```json
+{
+  "error": "Rate limit exceeded",
+  "message": "Too many requests. Please wait before making more requests."
+}
+```
 
 ---
 
 ## Getting an API Key
 
-API keys are currently issued manually. Contact the site administrator to request access.
+API keys are currently issued manually. To request access:
 
-Once issued, keep your API key secure and never expose it in client-side code.
+1. **Open an issue** on the [GitHub repository](https://github.com/rianvdm/listentomore)
+2. **Email:** rian@elezea.com
+3. **Mastodon:** [@rian@hachyderm.io](https://hachyderm.io/@rian)
+
+Include a brief description of how you plan to use the API.
+
+**Important:** Keep your API key secure and never expose it in client-side code.
+
+---
+
+## Caching
+
+Responses are cached to improve performance and reduce load on upstream services:
+
+| Data Type | Cache Duration |
+|-----------|---------------|
+| Album metadata | 30 days |
+| Artist metadata | 30 days |
+| AI summaries | 120-180 days |
+| Streaming links | 30 days |
+
+Cached responses are indistinguishable from fresh responses. If you need to force a refresh of cached data, contact the administrator.
+
+---
+
+## Changelog
+
+### v1.0.0 (December 2024)
+
+Initial public API release with:
+- Album details with AI summaries and streaming links
+- Album recommendations
+- Cross-platform streaming links
+- Artist details with AI summaries
+- Genre information
+- Chat endpoint
