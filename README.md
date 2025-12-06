@@ -45,7 +45,7 @@ Full programmatic access to music discovery features. See [API Documentation](do
 | `GET /api/v1/genre` | AI-generated genre description |
 | `POST /api/v1/ask` | Chat with the music AI |
 
-Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min).
+Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min). [Contact me](https://elezea.com/contact) to request an API key.
 
 ## Tech Stack
 
