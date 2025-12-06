@@ -107,7 +107,208 @@ import { handleExample } from './pages/example';
 app.get('/example', handleExample);
 ```
 
-### 5. Caching Strategy
+### 5. Adding New AI Calls (Perplexity/OpenAI)
+
+AI calls are expensive and slow, so they use progressive loading (fetch client-side after initial render) with long cache TTLs.
+
+**Complete flow for a new AI task (e.g., album recommendations):**
+
+#### Step 1: Add Task Config (`packages/config/src/ai.ts`)
+
+```typescript
+export const AI_TASKS = {
+  // ... existing tasks
+  
+  albumRecommendations: {
+    provider: 'perplexity',  // or 'openai'
+    model: 'sonar',          // Perplexity model with web search
+    maxTokens: 1000,
+    temperature: 0.5,
+    cacheTtlDays: 30,        // How long to cache results
+  },
+} as const satisfies Record<string, AITaskConfig>;
+```
+
+**Provider choice:**
+- **Perplexity** (`sonar` model): For tasks needing web search/citations (artist info, album details, genres)
+- **OpenAI** (`gpt-5-mini`): For creative tasks without web grounding (random facts, playlist covers)
+
+#### Step 2: Add Cache Config (`packages/config/src/cache.ts`)
+
+```typescript
+export const CACHE_CONFIG = {
+  ai: {
+    // ... existing
+    albumRecommendations: { ttlDays: 30 },
+  },
+  // ...
+};
+```
+
+#### Step 3: Create Prompt File (`packages/services/ai/src/prompts/album-recommendations.ts`)
+
+```typescript
+import { AI_TASKS } from '@listentomore/config';
+import type { PerplexityClient } from '../perplexity';
+import type { AICache } from '../cache';
+
+export interface AlbumRecommendationsResult {
+  content: string;
+  citations: string[];
+}
+
+export async function generateAlbumRecommendations(
+  artistName: string,
+  albumName: string,
+  client: PerplexityClient,
+  cache: AICache
+): Promise<AlbumRecommendationsResult> {
+  // Normalize for cache key consistency
+  const normalizedArtist = artistName.toLowerCase().trim();
+  const normalizedAlbum = albumName.toLowerCase().trim();
+
+  // Check cache first
+  const cached = await cache.get<AlbumRecommendationsResult>(
+    'albumRecommendations',
+    normalizedArtist,
+    normalizedAlbum
+  );
+  if (cached) return cached;
+
+  const config = AI_TASKS.albumRecommendations;
+
+  const prompt = `Based on the album "${albumName}" by ${artistName}, recommend 5 similar albums...
+  
+Include inline citation numbers like [1], [2] to reference sources.
+Do NOT start with a preamble or end with follow-up suggestions.`;
+
+  const response = await client.chatCompletion({
+    model: config.model,
+    messages: [
+      { role: 'system', content: 'You are a music expert...' },
+      { role: 'user', content: prompt },
+    ],
+    maxTokens: config.maxTokens,
+    temperature: config.temperature,
+    returnCitations: true,  // Perplexity will return source URLs
+  });
+
+  const result: AlbumRecommendationsResult = {
+    content: response.content,
+    citations: response.citations,
+  };
+
+  // Cache the result
+  await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], result);
+
+  return result;
+}
+```
+
+#### Step 4: Export from Prompts Index (`packages/services/ai/src/prompts/index.ts`)
+
+```typescript
+export {
+  generateAlbumRecommendations,
+  type AlbumRecommendationsResult,
+} from './album-recommendations';
+```
+
+#### Step 5: Add Convenience Method to AIService (`packages/services/ai/src/index.ts`)
+
+```typescript
+export class AIService {
+  // ... existing methods
+
+  async getAlbumRecommendations(artistName: string, albumName: string) {
+    const { generateAlbumRecommendations } = await import('./prompts/album-recommendations');
+    return generateAlbumRecommendations(artistName, albumName, this.perplexity, this.cache);
+  }
+}
+```
+
+Also add to exports at top of file:
+```typescript
+export {
+  // ... existing exports
+  generateAlbumRecommendations,
+  type AlbumRecommendationsResult,
+} from './prompts';
+```
+
+#### Step 6: Create Internal API Endpoint (`apps/web/src/index.tsx`)
+
+```typescript
+app.get('/api/internal/album-recommendations', async (c) => {
+  const artist = c.req.query('artist');
+  const album = c.req.query('album');
+
+  if (!artist || !album) {
+    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  }
+
+  try {
+    const ai = c.get('ai');
+    const result = await ai.getAlbumRecommendations(artist, album);
+    return c.json({ data: result });
+  } catch (error) {
+    console.error('Internal album recommendations error:', error);
+    return c.json({ error: 'Failed to generate recommendations' }, 500);
+  }
+});
+```
+
+#### Step 7: Use in Component with Progressive Loading
+
+```typescript
+// In page component
+<div id="album-recommendations">
+  <p class="text-muted">Loading recommendations...</p>
+</div>
+<script dangerouslySetInnerHTML={{ __html: `
+  internalFetch('/api/internal/album-recommendations?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}')
+    .then(r => r.json())
+    .then(result => {
+      if (result.error) {
+        document.getElementById('album-recommendations').innerHTML = 
+          '<p class="text-muted">Recommendations unavailable.</p>';
+        return;
+      }
+      // Format with markdown and citations
+      var html = marked.parse(result.data.content);
+      // Add citation links as superscripts
+      result.data.citations.forEach((url, i) => {
+        html = html.replace(
+          new RegExp('\\\\[' + (i+1) + '\\\\]', 'g'),
+          '<sup><a href="' + url + '" target="_blank">[' + (i+1) + ']</a></sup>'
+        );
+      });
+      document.getElementById('album-recommendations').innerHTML = html;
+    })
+    .catch(() => {
+      document.getElementById('album-recommendations').innerHTML = 
+        '<p class="text-muted">Failed to load recommendations.</p>';
+    });
+` }} />
+```
+
+**Key points:**
+- Always pass `internalToken` to Layout for pages using internal APIs
+- Use `internalFetch()` (not `fetch()`) for `/api/internal/*` calls
+- Internal endpoints are protected with 5-minute signed HMAC tokens
+- AI results use markdown; use `marked.parse()` client-side
+- Perplexity citations come as array of URLs; transform `[1]` markers to links
+
+### 6. Environment Variables for AI
+
+Required in `apps/web/wrangler.toml` (secrets):
+- `OPENAI_API_KEY` - For GPT models (random facts, playlist covers, ListenAI)
+- `PERPLEXITY_API_KEY` - For web-grounded responses (artist/album/genre summaries)
+- `INTERNAL_API_SECRET` - For signing internal API tokens (any random string)
+
+These are accessed via `c.env.OPENAI_API_KEY`, etc. The AIService is initialized in middleware and available via `c.get('ai')`.
+
+### 7. Caching Strategy
 
 All cache TTLs defined in `packages/config/src/cache.ts`:
 
@@ -168,7 +369,7 @@ export class MyService {
 - **Important:** Verify `cache: c.env.CACHE` is passed when instantiating services in middleware (`apps/web/src/index.tsx`). Missing this means caching silently fails.
 - Don't cache user-specific data that changes frequently (e.g., playcount)
 
-### 6. URL Strategy
+### 8. URL Strategy
 
 - Albums: `/album/{spotifyId}`
 - Artists: `/artist/{spotifyId}`
@@ -182,15 +383,67 @@ artistUrl(spotifyId) // → /artist/0k17h0D3J5VfsdmQ1iZtE9
 genreUrl(slug)       // → /genre/indie-rock
 ```
 
-### 7. Internal API Security
+### 9. Error Handling
+
+Log details server-side, return user-friendly messages to clients:
+
+```typescript
+try {
+  const result = await someService.getData();
+  return c.json({ data: result });
+} catch (error) {
+  // Log full error for debugging
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.error('Context about what failed:', errorMessage, error);
+  
+  // Return generic message to user (don't leak internals)
+  return c.json({ error: 'Failed to fetch data' }, 500);
+}
+```
+
+For internal APIs, include brief `details` for debugging in dev:
+```typescript
+return c.json({ error: 'Failed to generate summary', details: errorMessage }, 500);
+```
+
+### 10. Database (D1)
+
+D1 SQLite database accessed via `c.get('db')`:
+
+```typescript
+const db = c.get('db') as Database;
+const user = await db.getUserByUsername(username);
+```
+
+**Key files:**
+- `packages/db/src/schema.ts` - Table definitions and types
+- `packages/db/src/migrations/` - SQL migration files
+- `packages/db/src/index.ts` - Database class with query methods
+
+**Adding migrations:**
+1. Create new file: `packages/db/src/migrations/00X_description.sql`
+2. Run locally: `pnpm --filter @listentomore/web exec wrangler d1 migrations apply DB --local`
+3. Deploy: migrations auto-apply on `pnpm run deploy`
+
+### 11. Internal API Security
 
 Internal APIs (`/api/internal/*`) are protected with short-lived signed tokens to prevent abuse (especially costly AI endpoints).
 
-**How it works:**
-1. Server generates a 5-minute HMAC-SHA256 token on each page render
+**Security architecture:**
+1. Server generates a 5-minute HMAC-SHA256 token using `INTERNAL_API_SECRET` on each page render
 2. Token is embedded in HTML via `window.__INTERNAL_TOKEN__`
-3. Client JS uses `internalFetch()` which adds the token header automatically
-4. Middleware validates the token before allowing access
+3. Client JS uses `internalFetch()` which adds `X-Internal-Token` header automatically
+4. `internalAuthMiddleware` validates the token before allowing access
+5. Internal endpoints also have `Cache-Control: no-store` to prevent browser caching
+
+**Environment variable required:** `INTERNAL_API_SECRET` (set in wrangler.toml secrets)
+
+**Token flow:**
+```
+Page Request → Middleware generates token → Token embedded in HTML
+                                              ↓
+Client-side JS → internalFetch() adds X-Internal-Token header → Internal endpoint validates
+```
 
 **For pages using internal APIs:**
 
@@ -219,9 +472,11 @@ export function MyPage({ data, internalToken }: Props) {
 ```
 
 **Key files:**
-- `src/utils/internal-token.ts` - Token generation/validation
-- `src/middleware/internal-auth.ts` - Auth middleware
-- `src/components/layout/Layout.tsx` - Embeds token and `internalFetch()` helper
+- `apps/web/src/utils/internal-token.ts` - Token generation/validation (5-min expiry)
+- `apps/web/src/middleware/internal-auth.ts` - Auth middleware
+- `apps/web/src/components/layout/Layout.tsx` - Embeds token and `internalFetch()` helper
+
+**Rate limits:** Internal endpoints skip the API key rate limiting (they're for page progressive loading, not external API access). The token expiry (5 min) and cost of AI calls provide natural protection.
 
 ---
 
@@ -253,12 +508,10 @@ export function MyPage({ data, internalToken }: Props) {
 pnpm install          # Install dependencies
 pnpm dev              # Start local dev server
 pnpm build            # Build all packages
+pnpm test             # Run tests
 pnpm run deploy       # Deploy to Cloudflare
 pnpm typecheck        # Type check all packages
 ```
 
 ---
 
-## Current Status
-
-See `IMPLEMENTATION_PLAN.md` for phase details. Currently in Phase 6 (User Pages).
