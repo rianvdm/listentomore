@@ -1448,45 +1448,77 @@ async function scheduled(
       cache: env.CACHE,
     });
 
-    const userTracks = await Promise.all(
-      users.map(async (user) => {
-        if (!user.lastfm_username) return null;
-        try {
-          const userLastfm = new LastfmService({
-            apiKey: env.LASTFM_API_KEY,
-            username: user.lastfm_username,
-          });
-          const track = await userLastfm.getMostRecentTrack();
-          if (track) {
-            // Try to get Spotify image for better quality/reliability
-            let image = track.image;
-            if (track.album && track.artist) {
-              try {
-                const spotifyAlbum = await spotify.searchAlbumByArtist(track.artist, track.album);
-                if (spotifyAlbum?.image) {
-                  image = spotifyAlbum.image;
-                }
-              } catch (err) {
-                // Silently fall back to Last.fm image
-              }
-            }
+    // Batch processing to avoid Last.fm rate limits (~5 req/sec)
+    const BATCH_SIZE = 4;
+    const BATCH_DELAY_MS = 1000;
+    const userTracks: ({ username: string; artist: string; album: string; track: string; image: string | null; playedAt: string | null; nowPlaying: boolean } | null)[] = [];
+    const totalBatches = Math.ceil(users.length / BATCH_SIZE);
+    const startTime = Date.now();
+    let successCount = 0;
+    let errorCount = 0;
 
-            return {
-              username: user.username || user.lastfm_username,
-              artist: track.artist,
-              album: track.album,
-              track: track.name,
-              image,
-              playedAt: track.playedAt,
-              nowPlaying: track.nowPlaying,
-            };
+    console.log(`[CRON] Processing ${users.length} users in ${totalBatches} batches (batch size: ${BATCH_SIZE}, delay: ${BATCH_DELAY_MS}ms)`);
+
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const batchStart = batchIndex * BATCH_SIZE;
+      const batch = users.slice(batchStart, batchStart + BATCH_SIZE);
+      const batchStartTime = Date.now();
+
+      const batchResults = await Promise.all(
+        batch.map(async (user) => {
+          if (!user.lastfm_username) return null;
+          try {
+            const userLastfm = new LastfmService({
+              apiKey: env.LASTFM_API_KEY,
+              username: user.lastfm_username,
+            });
+            const track = await userLastfm.getMostRecentTrack();
+            if (track) {
+              // Try to get Spotify image for better quality/reliability
+              let image = track.image;
+              if (track.album && track.artist) {
+                try {
+                  const spotifyAlbum = await spotify.searchAlbumByArtist(track.artist, track.album);
+                  if (spotifyAlbum?.image) {
+                    image = spotifyAlbum.image;
+                  }
+                } catch (err) {
+                  // Silently fall back to Last.fm image
+                }
+              }
+
+              successCount++;
+              return {
+                username: user.username || user.lastfm_username,
+                artist: track.artist,
+                album: track.album,
+                track: track.name,
+                image,
+                playedAt: track.playedAt,
+                nowPlaying: track.nowPlaying,
+              };
+            }
+          } catch (error) {
+            errorCount++;
+            console.error(`[CRON] Failed to fetch recent track for ${user.lastfm_username}:`, error);
           }
-        } catch (error) {
-          console.error(`[CRON] Failed to fetch recent track for ${user.lastfm_username}:`, error);
-        }
-        return null;
-      })
-    );
+          return null;
+        })
+      );
+
+      userTracks.push(...batchResults);
+
+      const batchDuration = Date.now() - batchStartTime;
+      console.log(`[CRON] Batch ${batchIndex + 1}/${totalBatches} complete (${batchDuration}ms)`);
+
+      // Delay before next batch (except for the last one)
+      if (batchIndex < totalBatches - 1) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    const totalDuration = Date.now() - startTime;
+    console.log(`[CRON] All batches complete: ${successCount} successes, ${errorCount} errors in ${totalDuration}ms`);
 
     // Filter and sort
     const nullCount = userTracks.filter(t => t === null).length;

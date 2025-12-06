@@ -174,9 +174,29 @@ const activeUsers = users.filter(u => {
 ## Recommended Path
 
 1. **Now (< 50 users):** Current implementation is fine
-2. **50-100 users:** Implement Option 1 (batch processing)
+2. **50-100 users:** Implement Option 1 (batch processing) ✅ **IMPLEMENTED**
 3. **100-500 users:** Implement Option 2 + Option 4 (per-user caching + active users)
 4. **500+ users:** Implement Option 3 (Cloudflare Queues)
+
+## Current Implementation (as of Dec 2025)
+
+Batch processing is now active with the following configuration:
+- **Batch size:** 4 users per batch (~4 req/sec to stay under Last.fm's ~5/sec limit)
+- **Delay between batches:** 1 second
+- **Max users before 30s timeout:** ~100 users (25 batches × 1s delay + processing time)
+
+### Logging Output
+
+The cron job now logs detailed progress:
+```
+[CRON] Found 20 users with Last.fm usernames
+[CRON] Processing 20 users in 5 batches (batch size: 4, delay: 1000ms)
+[CRON] Batch 1/5 complete (523ms)
+[CRON] Batch 2/5 complete (412ms)
+...
+[CRON] All batches complete: 18 successes, 2 errors in 6234ms
+[CRON] API results: 18 tracks, 2 failures
+```
 
 ## Monitoring
 
