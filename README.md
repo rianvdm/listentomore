@@ -8,19 +8,38 @@ A music discovery platform that combines real-time listening data with AI-powere
 
 ### Music Discovery
 - **Album & Artist Search** - Search the Spotify catalog with instant results
-- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by Perplexity AI
-- **Genre Exploration** - Discover music by genre with AI-generated descriptions and key artists
+- **Album Detail Pages** - Rich album pages with release info, track listings, genres, and AI-generated summaries with citations
+- **Artist Detail Pages** - Artist profiles with biography, top albums, similar artists, and genre connections
+- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by Perplexity AI (with source citations)
+- **Genre Exploration** - Discover music by genre with AI-generated descriptions, history, and key artists
 - **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and YouTube via UPC matching
+- **Album Recommendations** - AI-generated "if you like this, try these" recommendations on album pages
 
 ### Personal Stats
 - **Real-time Listening Stats** - Connect your Last.fm account to see your recent listening activity
-- **Top Artists & Albums** - View your most-played music over different time periods
-- **Personalized Recommendations** - Discover new artists based on your listening habits
+- **Top Artists & Albums** - View your most-played music over different time periods (7 days, 30 days, etc.)
+- **Personalized Recommendations** - Discover new artists based on your listening habits and similar artist connections
 - **Loved Tracks** - See your favorite tracks with AI-generated artist insights
 
 ### Home Feed
-- **Community Listening** - See what registered users are listening to in real-time
+- **Community Listening** - See what registered users are listening to in real-time (updates every 5 minutes)
 - **Daily Music Facts** - A new AI-generated music fact every hour
+
+### Discord Bot
+- `/listento artist:X album:Y` - Get album details with streaming links and AI summary
+- `/listenlast lastfm_user:X` - See what someone is listening to on Last.fm
+- `/listenurl url:X` - Get cross-platform links from a Spotify URL
+- `/whois artist:X` - Quick AI summary of any artist
+- `/whatis genre:X` - AI explanation of a music genre
+- `/ask question:X` - Chat with the Rick Rubin AI personality
+
+### REST API
+Full programmatic access to all features. See [API Documentation](docs/API.md) for details.
+- Spotify search and catalog data
+- Last.fm listening history and stats
+- AI-powered summaries (artist, album, genre)
+- Cross-platform streaming links
+- Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min)
 
 ## Tech Stack
 
@@ -141,6 +160,19 @@ pnpm deploy
 - **[Perplexity API](https://docs.perplexity.ai)** - Sonar model for grounded, cited summaries
 - **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
 - **[YouTube Data API](https://developers.google.com/youtube/v3)** - YouTube album/playlist links
+
+## Want Your Own Stats Page?
+
+The community listening feed and personal stats pages (`/u/username`) require being added to the database. If you'd like your Last.fm listening data to appear on the site:
+
+1. **Create a Last.fm account** at [last.fm](https://www.last.fm) if you don't have one
+2. **Connect a scrobbler** to track your listening (Spotify, Apple Music, etc. all have scrobbling options)
+3. **Contact me** to request being added:
+   - Open an issue on this repo
+   - Email: rian@elezea.com
+   - Mastodon: [@rian@hachyderm.io](https://hachyderm.io/@rian)
+
+Once added, your listening activity will appear on the home page feed and you'll have your own stats page at `listentomore.com/u/your-lastfm-username`.
 
 ## License
 
