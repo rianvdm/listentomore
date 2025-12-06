@@ -20,8 +20,10 @@ Googlebot aggressively crawled `/album/*` and `/artist/*` pages, causing:
 | Mitigation | Status | Effect |
 |------------|--------|--------|
 | `robots.txt` with Crawl-delay | Deployed | Polite bots slow down |
-| Cloudflare rate limiting for verified bots | Deployed | Googlebot throttled to 2 req/10s |
+| Cloudflare rate limiting for verified bots | Deployed | Googlebot throttled to 2 req/10s on `/album/*` and `/artist/*` |
+| Cloudflare aggressive bot rate limit | Deployed | All verified bots rate limited site-wide |
 | Graceful 429 error page (503 response) | Deployed | Better UX during rate limits |
+| Detailed Spotify logging | Deployed | Cache hit/miss and 429 with Retry-After logged |
 
 These help but don't protect against:
 - Malicious bots ignoring robots.txt
@@ -74,6 +76,40 @@ From production logs, Spotify typically rate limits when we exceed approximately
 - **Search endpoint:** ~100-150 requests/minute
 - **Album/Artist detail:** ~150-180 requests/minute
 - **Combined:** The shared token means all endpoints share a budget
+
+### Escalating Rate Limits (Critical Learning)
+
+**Spotify escalates `Retry-After` dramatically when you repeatedly hit 429s.** During the December 2025 incident:
+
+| Stage | Retry-After Value | Duration |
+|-------|-------------------|----------|
+| Initial 429s | 5-30 seconds | Normal |
+| Continued abuse | 37,000+ seconds | **10+ hours** |
+
+This means if you continue making requests after receiving 429s, Spotify will effectively **ban your token for hours**. The only recovery options are:
+1. Wait 10+ hours for the ban to lift
+2. Create a new Spotify app with fresh credentials (new rate limit budget)
+
+**Implication:** Implementing proper rate limiting isn't just about avoiding 429s—it's about avoiding the escalation that leads to hours-long bans.
+
+### Recovery Procedure
+
+If the Spotify token gets banned (Retry-After > 1 hour):
+
+1. **Create new Spotify app** at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+2. **Get new refresh token** via OAuth flow (use `https://listentomore.com/auth/callback` as redirect - add route temporarily if needed)
+3. **Update Cloudflare secrets:**
+   ```bash
+   cd apps/web
+   echo "NEW_CLIENT_ID" | npx wrangler secret put SPOTIFY_CLIENT_ID
+   echo "NEW_CLIENT_SECRET" | npx wrangler secret put SPOTIFY_CLIENT_SECRET
+   echo "NEW_REFRESH_TOKEN" | npx wrangler secret put SPOTIFY_REFRESH_TOKEN
+   ```
+4. **Clear cached token:**
+   ```bash
+   npx wrangler kv key delete --namespace-id=a6011a8b5bac4be9a472ff86f8d5fd91 --remote "spotify:token"
+   ```
+5. **Rotate credentials** afterward since they were exposed during the process
 
 ### Key Insight: Single Token
 
@@ -673,6 +709,68 @@ After deployment, monitor:
 3. **Week 3:** Monitor and tune limits
 4. **Week 4:** Implement Phase 3 (batch APIs) - biggest impact on reducing API calls
 5. **Future:** Implement Phase 4 (circuit breaker) if needed
+
+---
+
+## User Experience During Rate Limiting
+
+### Current State (Without Application-Level Rate Limiting)
+
+When Spotify rate limits occur, users experience:
+
+| Page/Feature | Cached Data | Uncached Data |
+|--------------|-------------|---------------|
+| **Album detail page** | Works normally | Shows "Temporarily Unavailable" (503) |
+| **Artist detail page** | Works normally | Shows "Temporarily Unavailable" (503) |
+| **Home page** | Partial - cached listens show | Some streaming links may fail silently |
+| **Search** | Cached searches work | New searches fail with error |
+| **AI summaries** | Work (separate service) | Work (separate service) |
+| **Streaming links** | Cached links show | Fail silently (Spotify link only) |
+
+**Key insight:** The site degrades gracefully—cached content continues to work. Only uncached Spotify requests fail.
+
+### During Viral Traffic (Hypothetical)
+
+If ListenToMore goes viral and 1000 users simultaneously visit unique album pages:
+
+**Without rate limiting (current):**
+1. First ~150 requests succeed and get cached
+2. Spotify returns 429 for remaining ~850 requests
+3. If requests continue, Retry-After escalates to hours
+4. All uncached requests show "Temporarily Unavailable"
+5. Site appears broken for new album/artist pages
+6. Manual intervention required (new Spotify app)
+
+**With rate limiting (after implementation):**
+1. First ~120 requests/minute proceed normally
+2. Excess requests queue/wait (adds latency but succeeds)
+3. Users experience slower load times (seconds, not failures)
+4. No 429s from Spotify = no escalation risk
+5. Site remains functional, just slower under load
+6. Caching naturally reduces load as popular items get cached
+
+### Graceful Degradation Strategy
+
+The "Temporarily Unavailable" page (`RateLimitedPage` component) provides:
+- Clear message: "We're experiencing high traffic"
+- Retry suggestion: "Please try again in a minute or two"
+- Navigation: Link to search page
+- HTTP 503 status: Tells crawlers the issue is temporary
+
+**File:** `apps/web/src/components/ui/ErrorPage.tsx`
+
+### Monitoring During High Traffic
+
+Watch for these log patterns:
+
+```
+[Spotify] Cache hit for album X          ← Good: serving from cache
+[Spotify] Cache miss, fetching album X   ← Neutral: hitting API
+[Spotify] 429 Rate Limited, Retry-After: 30s  ← Warning: rate limited
+[Spotify] 429 Rate Limited, Retry-After: 37000s  ← Critical: token banned
+```
+
+If Retry-After exceeds 3600 seconds (1 hour), consider switching to backup Spotify app credentials.
 
 ---
 
