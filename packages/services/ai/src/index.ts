@@ -4,14 +4,25 @@ import { OpenAIClient } from './openai';
 import { PerplexityClient } from './perplexity';
 import { AICache } from './cache';
 
+// Re-export common types from types.ts
+export type {
+  ChatClient,
+  ChatMessage,
+  ChatCompletionOptions as CommonChatOptions,
+  ChatCompletionResponse as CommonChatResponse,
+  ReasoningEffort,
+  Verbosity,
+} from './types';
+
 // Re-export clients and cache for direct use
 export { OpenAIClient } from './openai';
 export type {
-  ChatMessage,
   ChatCompletionOptions,
   ChatCompletionResponse,
   ImageGenerationOptions,
   ImageGenerationResponse,
+  ResponsesOptions,
+  ResponsesResult,
 } from './openai';
 
 export { PerplexityClient } from './perplexity';

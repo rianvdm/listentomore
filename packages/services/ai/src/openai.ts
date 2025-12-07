@@ -1,25 +1,60 @@
 // ABOUTME: OpenAI API client for text and image generation.
+// ABOUTME: Supports both Chat Completions API and Responses API (for GPT-5.x).
 // ABOUTME: Includes rate limiting and citation handling for web search models.
 
 import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
+import type {
+  ChatClient,
+  ChatMessage,
+  ReasoningEffort,
+  Verbosity,
+} from './types';
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+// Re-export for backwards compatibility
+export type { ChatMessage } from './types';
 
 export interface ChatCompletionOptions {
   model: string;
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
+  // GPT-5.1 specific options (Responses API)
+  reasoning?: ReasoningEffort;
+  verbosity?: Verbosity;
+  webSearch?: boolean;
 }
 
 export interface ChatCompletionResponse {
   content: string;
-  /** URL citations from web search-enabled models */
-  citations?: string[];
+  /** URL citations from web search-enabled models - empty array if none */
+  citations: string[];
+}
+
+/**
+ * Options for the Responses API (GPT-5.x models)
+ */
+export interface ResponsesOptions {
+  model: string;
+  /** User input - can be string or messages array */
+  input: string | Array<{ role: string; content: string }>;
+  /** System-level instructions (replaces system message) */
+  instructions?: string;
+  reasoning?: { effort: ReasoningEffort };
+  text?: { verbosity: Verbosity };
+  tools?: Array<{ type: 'web_search' }>;
+  maxOutputTokens?: number;
+  temperature?: number;
+  /** Disable storage for ZDR compliance - defaults to false for privacy */
+  store?: boolean;
+}
+
+/**
+ * Result from the Responses API
+ */
+export interface ResponsesResult {
+  content: string;
+  citations: string[];
 }
 
 export interface ImageGenerationOptions {
@@ -42,7 +77,7 @@ interface RateLimitWindow {
   windowStart: number;
 }
 
-export class OpenAIClient {
+export class OpenAIClient implements ChatClient {
   private apiKey: string;
   private baseUrl: string;
   private rateLimitWindow: RateLimitWindow = {
@@ -53,6 +88,50 @@ export class OpenAIClient {
   constructor(apiKey: string) {
     this.apiKey = apiKey;
     this.baseUrl = AI_PROVIDERS.openai.baseUrl;
+  }
+
+  /**
+   * Determine if the Responses API should be used for this request.
+   * Use Responses API for:
+   * 1. GPT-5.x models (better performance, CoT support)
+   * 2. Requests with Responses-specific features (webSearch, reasoning, verbosity)
+   */
+  private shouldUseResponsesApi(
+    model: string,
+    options: ChatCompletionOptions
+  ): boolean {
+    const isGpt5 = model.startsWith('gpt-5');
+    const hasResponsesFeatures = Boolean(
+      options.webSearch || options.reasoning || options.verbosity
+    );
+
+    return isGpt5 || hasResponsesFeatures;
+  }
+
+  /**
+   * Convert messages array to Responses API format.
+   * Separates system prompt (instructions) from other messages (input).
+   */
+  private convertMessagesToResponsesFormat(messages: ChatMessage[]): {
+    instructions?: string;
+    input: string | Array<{ role: string; content: string }>;
+  } {
+    const systemMsg = messages.find((m) => m.role === 'system');
+    const otherMessages = messages.filter((m) => m.role !== 'system');
+
+    // If only one user message, use simple string input for cleaner API
+    if (otherMessages.length === 1 && otherMessages[0].role === 'user') {
+      return {
+        instructions: systemMsg?.content,
+        input: otherMessages[0].content,
+      };
+    }
+
+    // For multi-turn, pass messages array (Responses API accepts both)
+    return {
+      instructions: systemMsg?.content,
+      input: otherMessages,
+    };
   }
 
   /**
@@ -81,9 +160,53 @@ export class OpenAIClient {
   }
 
   /**
-   * Send a chat completion request
+   * Send a chat completion request.
+   * Automatically routes to Responses API for GPT-5.x models or when
+   * Responses-specific features (webSearch, reasoning, verbosity) are requested.
    */
   async chatCompletion(
+    options: ChatCompletionOptions
+  ): Promise<ChatCompletionResponse> {
+    // Route to appropriate API based on model and options
+    if (this.shouldUseResponsesApi(options.model, options)) {
+      return this.chatCompletionViaResponses(options);
+    }
+    return this.chatCompletionViaChatCompletions(options);
+  }
+
+  /**
+   * Send a request via the Responses API (GPT-5.x)
+   * Provides better performance, CoT support, and web search capabilities.
+   */
+  private async chatCompletionViaResponses(
+    options: ChatCompletionOptions
+  ): Promise<ChatCompletionResponse> {
+    const { instructions, input } = this.convertMessagesToResponsesFormat(
+      options.messages
+    );
+
+    const result = await this.responses({
+      model: options.model,
+      input,
+      instructions,
+      reasoning: options.reasoning ? { effort: options.reasoning } : undefined,
+      text: options.verbosity ? { verbosity: options.verbosity } : undefined,
+      tools: options.webSearch ? [{ type: 'web_search' }] : undefined,
+      maxOutputTokens: options.maxTokens,
+      temperature: options.temperature,
+    });
+
+    return {
+      content: result.content,
+      citations: result.citations,
+    };
+  }
+
+  /**
+   * Send a request via the Chat Completions API (legacy)
+   * Used for non-GPT-5.x models or when Responses features aren't needed.
+   */
+  private async chatCompletionViaChatCompletions(
     options: ChatCompletionOptions
   ): Promise<ChatCompletionResponse> {
     await this.checkRateLimit();
@@ -131,7 +254,7 @@ export class OpenAIClient {
 
     const message = data.choices[0].message;
     let content = message.content;
-    let citations: string[] | undefined;
+    const citations: string[] = [];
 
     // Handle annotations/citations from web search models
     if (message.annotations) {
@@ -141,7 +264,6 @@ export class OpenAIClient {
 
       if (urlAnnotations.length > 0) {
         const citationMap = new Map<string, number>();
-        const citationsArray: string[] = [];
         let counter = 1;
 
         // Build citation map
@@ -149,7 +271,7 @@ export class OpenAIClient {
           const url = annotation.url_citation!.url;
           if (!citationMap.has(url)) {
             citationMap.set(url, counter++);
-            citationsArray.push(url);
+            citations.push(url);
           }
         }
 
@@ -161,12 +283,159 @@ export class OpenAIClient {
             return num ? `[${num}]` : match;
           }
         );
-
-        citations = citationsArray;
       }
     }
 
     return { content, citations };
+  }
+
+  /**
+   * Send a request to the Responses API (POST /v1/responses)
+   * The newer API recommended for GPT-5.x models with:
+   * - Web search support
+   * - Reasoning effort control
+   * - Verbosity control
+   * - Better caching and performance
+   */
+  async responses(options: ResponsesOptions): Promise<ResponsesResult> {
+    await this.checkRateLimit();
+
+    const body: Record<string, unknown> = {
+      model: options.model,
+      input: options.input,
+      store: options.store ?? false, // Default to not storing for privacy
+    };
+
+    // System instructions (cleaner than system message in array)
+    if (options.instructions) {
+      body.instructions = options.instructions;
+    }
+
+    // Add reasoning if specified (GPT-5.1 feature)
+    if (options.reasoning) {
+      body.reasoning = options.reasoning;
+    }
+
+    // Add verbosity if specified (GPT-5.1 feature)
+    if (options.text) {
+      body.text = options.text;
+    }
+
+    // Add tools (web_search, etc.)
+    if (options.tools?.length) {
+      body.tools = options.tools;
+    }
+
+    // Temperature only works with reasoning.effort: 'none'
+    // For other reasoning levels, the model controls temperature internally
+    if (
+      options.temperature !== undefined &&
+      (!options.reasoning || options.reasoning.effort === 'none')
+    ) {
+      body.temperature = options.temperature;
+    }
+
+    if (options.maxOutputTokens) {
+      body.max_output_tokens = options.maxOutputTokens;
+    }
+
+    const response = await fetchWithTimeout(`${this.baseUrl}/responses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      timeout: 'slow', // 30 seconds for AI
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(
+        `[OpenAI Responses] API error: ${response.status} - ${errorBody}`
+      );
+      throw new Error(`OpenAI Responses API error: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as {
+      output_text?: string;
+      output?: Array<{
+        type: string;
+        content?: Array<{
+          type: string;
+          text?: string;
+          annotations?: Array<{
+            type: string;
+            url?: string;
+            title?: string;
+          }>;
+        }>;
+      }>;
+    };
+
+    return this.parseResponsesResult(data);
+  }
+
+  /**
+   * Parse the Responses API result into our common format.
+   * Extracts content from output_text helper or output[].content[].text,
+   * and citations from annotations.
+   */
+  private parseResponsesResult(data: {
+    output_text?: string | null;
+    output?: Array<{
+      type: string;
+      content?: Array<{
+        type: string;
+        text?: string;
+        annotations?: Array<{
+          type: string;
+          url?: string;
+          title?: string;
+        }>;
+      }>;
+    }>;
+  }): ResponsesResult {
+    const result: ResponsesResult = {
+      content: '',
+      citations: [],
+    };
+
+    // Try to get content from output_text helper first
+    if (data.output_text) {
+      result.content = data.output_text;
+    }
+
+    // Extract content and citations from output array
+    if (data.output) {
+      const seenUrls = new Set<string>();
+
+      for (const item of data.output) {
+        if (item.type === 'message' && item.content) {
+          for (const block of item.content) {
+            // Extract text content if output_text wasn't available
+            if (!result.content && block.type === 'output_text' && block.text) {
+              result.content = block.text;
+            }
+
+            // Extract citations from annotations
+            if (block.annotations) {
+              for (const annotation of block.annotations) {
+                if (annotation.type === 'url_citation' && annotation.url) {
+                  // Deduplicate citations
+                  if (!seenUrls.has(annotation.url)) {
+                    seenUrls.add(annotation.url);
+                    result.citations.push(annotation.url);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

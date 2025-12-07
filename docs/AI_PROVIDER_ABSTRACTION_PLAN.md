@@ -1,6 +1,6 @@
 # AI Provider Abstraction Plan
 
-> **Status**: Planning complete, implementation not started
+> **Status**: Phases 1-2 COMPLETE (Responses API + ChatClient interface) - Deployed 2025-12-07
 >
 > **Goal**: Enable switching AI providers (Perplexity ↔ OpenAI) for any task with a one-line config change in `packages/config/src/ai.ts`.
 >
@@ -9,12 +9,66 @@
 > - `docs/gpt-reasoning-migration.md` - OpenAI Responses API migration guide
 > - `docs/how-to/ai-models.md` - User-facing guide for AI configuration
 >
-> **Key files to modify**:
+> **Files modified (Phases 1-2)**:
+> - `packages/services/ai/src/types.ts` - NEW: Common `ChatClient` interface
+> - `packages/services/ai/src/openai.ts` - Added Responses API support, implements `ChatClient`
+> - `packages/services/ai/src/perplexity.ts` - Implements `ChatClient`
+> - `packages/services/ai/src/index.ts` - Exports new types
+>
+> **Remaining files to modify (Phases 3-5)**:
 > - `packages/config/src/ai.ts` - Add `reasoning`, `verbosity`, `webSearch` fields to `AITaskConfig`
-> - `packages/services/ai/src/openai.ts` - Add Responses API support
-> - `packages/services/ai/src/types.ts` - Create common `ChatClient` interface (new file)
 > - `packages/services/ai/src/index.ts` - Add `getClientForTask()` routing
 > - `packages/services/ai/src/prompts/*.ts` - Change from `PerplexityClient`/`OpenAIClient` to `ChatClient`
+
+---
+
+## Current Implementation Status
+
+### What's Live (as of 2025-12-07)
+
+**Responses API Migration Complete:**
+- All GPT-5.x model calls (`gpt-5-mini`, `gpt-5-nano`) automatically use the Responses API
+- Non-GPT-5 models continue using Chat Completions API (backwards compatible)
+- `OpenAIClient` and `PerplexityClient` both implement `ChatClient` interface
+
+**Affected endpoints (now using Responses API):**
+- `POST /api/v1/ask` (Listen AI) - uses `gpt-5-mini`
+- Random fact generation (CRON) - uses `gpt-5-mini`
+- Playlist cover prompt generation - uses `gpt-5-nano`
+
+**How to test:**
+```bash
+# Test Listen AI endpoint (use Postman or browser - curl may be blocked by Cloudflare)
+POST https://listentomore.com/api/v1/ask
+Headers: X-API-Key: <your-api-key>, Content-Type: application/json
+Body: {"question": "What is shoegaze?"}
+
+# Direct Responses API test (for debugging)
+python3 /tmp/test-responses-api-v2.py  # Script created during implementation
+```
+
+**What's NOT yet configurable:**
+- `reasoning` effort (defaults to `none`)
+- `verbosity` (defaults to `medium`)
+- `webSearch` (defaults to `false`)
+
+These options are supported by the `OpenAIClient` but not yet exposed in `AITaskConfig` or passed through prompt files.
+
+### Implementation Notes
+
+**Key discovery during implementation:**
+- The `output_text` helper in Responses API can be `null` even when content exists
+- Content must be extracted from `output[].content[].text` as fallback
+- The `parseResponsesResult()` method handles both cases
+
+**Routing logic in `OpenAIClient.shouldUseResponsesApi()`:**
+```typescript
+const isGpt5 = model.startsWith('gpt-5');
+const hasResponsesFeatures = Boolean(options.webSearch || options.reasoning || options.verbosity);
+return isGpt5 || hasResponsesFeatures;
+```
+
+---
 
 This document outlines the changes needed to:
 1. Migrate OpenAI from Chat Completions API to Responses API
@@ -594,34 +648,35 @@ export async function generateAlbumRecommendations(
 
 ## Implementation Order
 
-### Step 1: Create Types (Low Risk)
-- [ ] Create `packages/services/ai/src/types.ts`
-- [ ] Export from `packages/services/ai/src/index.ts`
-- [ ] Run typecheck
+### Step 1: Create Types (Low Risk) ✅ COMPLETE
+- [x] Create `packages/services/ai/src/types.ts`
+- [x] Export from `packages/services/ai/src/index.ts`
+- [x] Run typecheck
 
-### Step 2: Update OpenAIClient (Medium Risk)
-- [ ] Add `responses()` method for Responses API
-- [ ] Implement `shouldUseResponsesApi()` detection
-- [ ] Update `chatCompletion()` to route appropriately
-- [ ] Implement `ChatClient` interface
-- [ ] Test with existing tasks (should be no behavior change)
+### Step 2: Update OpenAIClient (Medium Risk) ✅ COMPLETE
+- [x] Add `responses()` method for Responses API
+- [x] Implement `shouldUseResponsesApi()` detection
+- [x] Update `chatCompletion()` to route appropriately
+- [x] Implement `ChatClient` interface
+- [x] Test with existing tasks (should be no behavior change)
 
-### Step 3: Update PerplexityClient (Low Risk)
-- [ ] Implement `ChatClient` interface
-- [ ] Ensure return type matches
-- [ ] Test with existing tasks
+### Step 3: Update PerplexityClient (Low Risk) ✅ COMPLETE
+- [x] Implement `ChatClient` interface
+- [x] Ensure return type matches
+- [x] Test with existing tasks
 
-### Step 4: Update AIService (Medium Risk)
+### Step 4: Update AIService (Medium Risk) - NOT STARTED
 - [ ] Add `getClientForTask()` method
 - [ ] Update all convenience methods to use it
 - [ ] Test all endpoints
 
-### Step 5: Update Prompt Files (Medium Risk)
+### Step 5: Update Config & Prompt Files (Medium Risk) - NOT STARTED
+- [ ] Add `reasoning`, `verbosity`, `webSearch` to `AITaskConfig` in `packages/config/src/ai.ts`
 - [ ] Update each prompt file to use `ChatClient`
 - [ ] Update to pass config options through
 - [ ] Test each endpoint
 
-### Step 6: Verify One-Line Switching (Validation)
+### Step 6: Verify One-Line Switching (Validation) - NOT STARTED
 - [ ] Change one task in `ai.ts` from Perplexity to OpenAI
 - [ ] Verify it works without other code changes
 - [ ] Change it back

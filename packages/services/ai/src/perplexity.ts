@@ -3,11 +3,10 @@
 
 import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
+import type { ChatClient, ChatMessage } from './types';
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+// Re-export for backwards compatibility
+export type { ChatMessage } from './types';
 
 export interface ChatCompletionOptions {
   model: string;
@@ -30,7 +29,7 @@ interface RateLimitWindow {
   windowStart: number;
 }
 
-export class PerplexityClient {
+export class PerplexityClient implements ChatClient {
   private apiKey: string;
   private baseUrl: string;
   private rateLimitWindow: RateLimitWindow = {
