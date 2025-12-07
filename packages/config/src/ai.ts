@@ -131,12 +131,10 @@ export const AI_TASKS = {
 
   randomFact: {
     provider: 'openai',
-    model: 'gpt-5.1',
-    maxTokens: 1000,
-    temperature: 1, 
+    model: 'gpt-5-mini',
+    maxTokens: 10000,
+    temperature: 1,
     cacheTtlDays: 0, // No caching - always fresh
-    webSearch: false,
-    verbosity: 'low',
   },
 
   playlistCoverPrompt: {
