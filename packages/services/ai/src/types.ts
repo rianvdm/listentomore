@@ -1,15 +1,10 @@
 // ABOUTME: Common types and interfaces for AI clients.
 // ABOUTME: Enables switching between providers with a common ChatClient interface.
 
-/**
- * Reasoning effort levels for GPT-5 models (Responses API only)
- */
-export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+import type { ReasoningEffort, Verbosity } from '@listentomore/config';
 
-/**
- * Verbosity levels for GPT-5 models (Responses API only)
- */
-export type Verbosity = 'low' | 'medium' | 'high';
+// Re-export types from config for consistency
+export type { ReasoningEffort, Verbosity } from '@listentomore/config';
 
 /**
  * Common message format for both providers

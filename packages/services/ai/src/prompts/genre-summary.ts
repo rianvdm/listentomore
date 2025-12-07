@@ -1,7 +1,7 @@
-// Genre summary prompt - generates genre descriptions with citations using Perplexity
+// Genre summary prompt - generates genre descriptions with citations
 
-import { AI_TASKS } from '@listentomore/config';
-import type { PerplexityClient } from '../perplexity';
+import { getTaskConfig } from '@listentomore/config';
+import type { ChatClient } from '../types';
 import type { AICache } from '../cache';
 
 export interface GenreSummaryResult {
@@ -58,11 +58,12 @@ function replacePlaceholders(content: string): string {
 }
 
 /**
- * Generate a genre summary using Perplexity
+ * Generate a genre summary
+ * Provider determined by AI_TASKS config (currently Perplexity)
  */
 export async function generateGenreSummary(
   genreName: string,
-  client: PerplexityClient,
+  client: ChatClient,
   cache: AICache
 ): Promise<GenreSummaryResult> {
   const normalizedGenre = genreName.toLowerCase().trim();
@@ -81,7 +82,7 @@ export async function generateGenreSummary(
     // Continue to API call
   }
 
-  const config = AI_TASKS.genreSummary;
+  const config = getTaskConfig('genreSummary');
 
   const prompt = `Write a 2-3 paragraph summary of the music genre "${genreName}" (be sure to add line breaks between paragraphs). Describe the history, musical elements that characterize the genre, the artists who pioneered it, and notable events. Follow this with a bullet list of 4-6 seminal albums that provide a good overview of the genre, with a one-sentence description of each album's significance. Format each album entry as: **{{Album Name by Artist Name}}**: Description.
 
@@ -110,6 +111,10 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
         maxTokens: config.maxTokens,
         temperature: config.temperature,
         returnCitations: true,
+        // Pass through GPT-5.1 options if configured
+        reasoning: config.reasoning,
+        verbosity: config.verbosity,
+        webSearch: config.webSearch,
       });
 
       // Process the response to replace placeholders with links

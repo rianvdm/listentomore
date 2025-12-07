@@ -1,7 +1,7 @@
 // Listen AI prompt - Rick Rubin personality chatbot
 
-import { AI_TASKS } from '@listentomore/config';
-import type { OpenAIClient } from '../openai';
+import { getTaskConfig } from '@listentomore/config';
+import type { ChatClient } from '../types';
 
 export interface ListenAIResult {
   response: string;
@@ -10,12 +10,13 @@ export interface ListenAIResult {
 /**
  * Generate a response from the Rick Rubin AI personality
  * Note: Not cached since each conversation should be unique
+ * Provider determined by AI_TASKS config (currently OpenAI)
  */
 export async function generateListenAIResponse(
   question: string,
-  client: OpenAIClient
+  client: ChatClient
 ): Promise<ListenAIResult> {
-  const config = AI_TASKS.listenAi;
+  const config = getTaskConfig('listenAi');
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -29,6 +30,10 @@ Keep responses to 4 sentences maximum. Be warm but wise.`,
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
+    // Pass through GPT-5.1 options if configured
+    reasoning: config.reasoning,
+    verbosity: config.verbosity,
+    webSearch: config.webSearch,
   });
 
   return {

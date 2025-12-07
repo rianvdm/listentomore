@@ -1,7 +1,7 @@
-// Album recommendations prompt - generates similar album suggestions using Perplexity
+// Album recommendations prompt - generates similar album suggestions
 
-import { AI_TASKS } from '@listentomore/config';
-import type { PerplexityClient } from '../perplexity';
+import { getTaskConfig } from '@listentomore/config';
+import type { ChatClient } from '../types';
 import type { AICache } from '../cache';
 
 export interface AlbumRecommendationsResult {
@@ -57,12 +57,13 @@ function replacePlaceholders(content: string): string {
 }
 
 /**
- * Generate album recommendations using Perplexity
+ * Generate album recommendations
+ * Provider determined by AI_TASKS config (currently Perplexity)
  */
 export async function generateAlbumRecommendations(
   artistName: string,
   albumName: string,
-  client: PerplexityClient,
+  client: ChatClient,
   cache: AICache
 ): Promise<AlbumRecommendationsResult> {
   const normalizedArtist = artistName.toLowerCase().trim();
@@ -78,7 +79,7 @@ export async function generateAlbumRecommendations(
     return cached;
   }
 
-  const config = AI_TASKS.albumRecommendations;
+  const config = getTaskConfig('albumRecommendations');
 
   const prompt = `I enjoyed the album "${albumName}" by ${artistName}. Recommend 3 albums by other artists that are similar in genre and style.
 
@@ -111,6 +112,10 @@ IMPORTANT:
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: true,
+    // Pass through GPT-5.1 options if configured
+    reasoning: config.reasoning,
+    verbosity: config.verbosity,
+    webSearch: config.webSearch,
   });
 
   // Process the response to replace placeholders with links

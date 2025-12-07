@@ -1,7 +1,7 @@
-// Album detail prompt - generates album summaries with citations using Perplexity
+// Album detail prompt - generates album summaries with citations
 
-import { AI_TASKS } from '@listentomore/config';
-import type { PerplexityClient } from '../perplexity';
+import { getTaskConfig } from '@listentomore/config';
+import type { ChatClient } from '../types';
 import type { AICache } from '../cache';
 
 export interface AlbumDetailResult {
@@ -10,12 +10,13 @@ export interface AlbumDetailResult {
 }
 
 /**
- * Generate an album detail summary using Perplexity
+ * Generate an album detail summary
+ * Provider determined by AI_TASKS config (currently Perplexity)
  */
 export async function generateAlbumDetail(
   artistName: string,
   albumName: string,
-  client: PerplexityClient,
+  client: ChatClient,
   cache: AICache
 ): Promise<AlbumDetailResult> {
   const normalizedArtist = artistName.toLowerCase().trim();
@@ -31,7 +32,7 @@ export async function generateAlbumDetail(
     return cached;
   }
 
-  const config = AI_TASKS.albumDetail;
+  const config = getTaskConfig('albumDetail');
 
   const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes.
 
@@ -56,6 +57,10 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: true,
+    // Pass through GPT-5.1 options if configured
+    reasoning: config.reasoning,
+    verbosity: config.verbosity,
+    webSearch: config.webSearch,
   });
 
   const result: AlbumDetailResult = {

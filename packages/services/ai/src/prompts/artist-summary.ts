@@ -1,7 +1,7 @@
 // Artist summary prompt - generates detailed artist summaries with linked references
 
-import { AI_TASKS } from '@listentomore/config';
-import type { PerplexityClient } from '../perplexity';
+import { getTaskConfig } from '@listentomore/config';
+import type { ChatClient } from '../types';
 import type { AICache } from '../cache';
 
 export interface ArtistSummaryResult {
@@ -46,11 +46,12 @@ function replacePlaceholders(summary: string, artistName: string): string {
 }
 
 /**
- * Generate an artist summary using Perplexity
+ * Generate an artist summary
+ * Provider determined by AI_TASKS config (currently Perplexity)
  */
 export async function generateArtistSummary(
   artistName: string,
-  client: PerplexityClient,
+  client: ChatClient,
   cache: AICache
 ): Promise<ArtistSummaryResult> {
   const normalizedName = artistName.toLowerCase().trim();
@@ -64,7 +65,7 @@ export async function generateArtistSummary(
     return cached;
   }
 
-  const config = AI_TASKS.artistSummary;
+  const config = getTaskConfig('artistSummary');
 
   const prompt = `Write a summary of the music artist/band ${artistName}. Include verifiable facts about the artist's history, genres, styles, and most popular albums. Include one or two interesting facts about them (without stating that it's an interesting fact). Also recommend similar artists to check out if one likes their music. Write no more than three paragraphs. Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name}}.
 
@@ -85,6 +86,10 @@ IMPORTANT: If you cannot find sufficient verifiable information about this artis
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: true,
+    // Pass through GPT-5.1 options if configured
+    reasoning: config.reasoning,
+    verbosity: config.verbosity,
+    webSearch: config.webSearch,
   });
 
   // Process the response to replace placeholders with links

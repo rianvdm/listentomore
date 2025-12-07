@@ -1,8 +1,10 @@
 // AI service - consolidated AI functionality for text and image generation
 
+import { AI_TASKS, type AITask } from '@listentomore/config';
 import { OpenAIClient } from './openai';
 import { PerplexityClient } from './perplexity';
 import { AICache } from './cache';
+import type { ChatClient } from './types';
 
 // Re-export common types from types.ts
 export type {
@@ -80,42 +82,56 @@ export class AIService {
     this.kv = config.cache;
   }
 
-  // Convenience methods that use the appropriate client
+  /**
+   * Get the appropriate client for a task based on config.
+   * Enables one-line provider switching via ai.ts config.
+   */
+  getClientForTask(task: AITask): ChatClient {
+    const config = AI_TASKS[task];
+    return config.provider === 'openai' ? this.openai : this.perplexity;
+  }
+
+  // Convenience methods that use the appropriate client based on config
 
   /**
-   * Generate an artist summary (uses Perplexity)
+   * Generate an artist summary (provider determined by config)
    */
   async getArtistSummary(artistName: string) {
     const { generateArtistSummary } = await import('./prompts/artist-summary');
-    return generateArtistSummary(artistName, this.perplexity, this.cache);
+    const client = this.getClientForTask('artistSummary');
+    return generateArtistSummary(artistName, client, this.cache);
   }
 
   /**
-   * Generate album details with citations (uses Perplexity)
+   * Generate album details with citations (provider determined by config)
    */
   async getAlbumDetail(artistName: string, albumName: string) {
     const { generateAlbumDetail } = await import('./prompts/album-detail');
-    return generateAlbumDetail(artistName, albumName, this.perplexity, this.cache);
+    const client = this.getClientForTask('albumDetail');
+    return generateAlbumDetail(artistName, albumName, client, this.cache);
   }
 
   /**
-   * Generate genre summary with citations (uses Perplexity)
+   * Generate genre summary with citations (provider determined by config)
    */
   async getGenreSummary(genreName: string) {
     const { generateGenreSummary } = await import('./prompts/genre-summary');
-    return generateGenreSummary(genreName, this.perplexity, this.cache);
+    const client = this.getClientForTask('genreSummary');
+    return generateGenreSummary(genreName, client, this.cache);
   }
 
   /**
-   * Generate a short artist sentence (uses Perplexity)
+   * Generate a short artist sentence (provider determined by config)
    */
   async getArtistSentence(artistName: string) {
     const { generateArtistSentence } = await import('./prompts/artist-sentence');
-    return generateArtistSentence(artistName, this.perplexity, this.cache);
+    const client = this.getClientForTask('artistSentence');
+    return generateArtistSentence(artistName, client, this.cache);
   }
 
   /**
    * Get a random music fact from the cached pool (fast - just KV read)
+   * Note: Always uses OpenAI as it needs KV storage for fact rotation
    */
   async getRandomFact() {
     const { generateRandomFact } = await import('./prompts/random-fact');
@@ -124,6 +140,7 @@ export class AIService {
 
   /**
    * Generate and store a new random fact (called by CRON job)
+   * Note: Always uses OpenAI as it needs KV storage for fact rotation
    */
   async generateAndStoreRandomFact() {
     const { generateAndStoreFact } = await import('./prompts/random-fact');
@@ -131,7 +148,8 @@ export class AIService {
   }
 
   /**
-   * Generate a DALL-E prompt for a playlist cover (uses OpenAI)
+   * Generate a DALL-E prompt for a playlist cover
+   * Note: Always uses OpenAI for image generation
    */
   async getPlaylistCoverPrompt(playlistName: string, description: string) {
     const { generatePlaylistCoverPrompt } = await import('./prompts/playlist-cover');
@@ -140,6 +158,7 @@ export class AIService {
 
   /**
    * Generate a playlist cover image (uses OpenAI DALL-E)
+   * Note: Always uses OpenAI for image generation
    */
   async getPlaylistCoverImage(dallePrompt: string) {
     const { generatePlaylistCoverImage } = await import('./prompts/playlist-cover');
@@ -147,25 +166,22 @@ export class AIService {
   }
 
   /**
-   * Get a response from the Rick Rubin AI (uses OpenAI, not cached)
+   * Get a response from the Rick Rubin AI (provider determined by config)
    */
   async askListenAI(question: string) {
     const { generateListenAIResponse } = await import('./prompts/listen-ai');
-    return generateListenAIResponse(question, this.openai);
+    const client = this.getClientForTask('listenAi');
+    return generateListenAIResponse(question, client);
   }
 
   /**
-   * Generate album recommendations (uses Perplexity)
+   * Generate album recommendations (provider determined by config)
    */
   async getAlbumRecommendations(artistName: string, albumName: string) {
     const { generateAlbumRecommendations } = await import(
       './prompts/album-recommendations'
     );
-    return generateAlbumRecommendations(
-      artistName,
-      albumName,
-      this.perplexity,
-      this.cache
-    );
+    const client = this.getClientForTask('albumRecommendations');
+    return generateAlbumRecommendations(artistName, albumName, client, this.cache);
   }
 }

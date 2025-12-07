@@ -1,7 +1,7 @@
 // Artist sentence prompt - generates short one-sentence artist descriptions
 
-import { AI_TASKS } from '@listentomore/config';
-import type { PerplexityClient } from '../perplexity';
+import { getTaskConfig } from '@listentomore/config';
+import type { ChatClient } from '../types';
 import type { AICache } from '../cache';
 
 export interface ArtistSentenceResult {
@@ -10,11 +10,12 @@ export interface ArtistSentenceResult {
 
 
 /**
- * Generate a short artist description using Perplexity
+ * Generate a short artist description
+ * Provider determined by AI_TASKS config (currently Perplexity)
  */
 export async function generateArtistSentence(
   artistName: string,
-  client: PerplexityClient,
+  client: ChatClient,
   cache: AICache
 ): Promise<ArtistSentenceResult> {
   const normalizedName = artistName.toLowerCase().trim();
@@ -28,7 +29,7 @@ export async function generateArtistSentence(
     return cached;
   }
 
-  const config = AI_TASKS.artistSentence;
+  const config = getTaskConfig('artistSentence');
 
   const prompt = `Write a short summary about the musical artist or band "${artistName}".
 
@@ -54,6 +55,10 @@ CRITICAL REQUIREMENTS:
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: false,
+    // Pass through GPT-5.1 options if configured
+    reasoning: config.reasoning,
+    verbosity: config.verbosity,
+    webSearch: config.webSearch,
   });
 
   const result: ArtistSentenceResult = {
