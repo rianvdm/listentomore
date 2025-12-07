@@ -107,197 +107,26 @@ import { handleExample } from './pages/example';
 app.get('/example', handleExample);
 ```
 
-### 5. Adding New AI Calls (Perplexity/OpenAI)
+### 5. Adding New AI Calls
 
 AI calls are expensive and slow, so they use progressive loading (fetch client-side after initial render) with long cache TTLs.
 
-**Complete flow for a new AI task (e.g., album recommendations):**
+**See [docs/how-to/ai-models.md](docs/how-to/ai-models.md) for the complete guide**, including:
+- Step-by-step instructions for adding new AI tasks
+- How to switch providers (Perplexity vs OpenAI) by editing `packages/config/src/ai.ts`
+- GPT-5.1 configuration (reasoning effort, verbosity, web search)
 
-#### Step 1: Add Task Config (`packages/config/src/ai.ts`)
-
-```typescript
-export const AI_TASKS = {
-  // ... existing tasks
-  
-  albumRecommendations: {
-    provider: 'perplexity',  // or 'openai'
-    model: 'sonar',          // Perplexity model with web search
-    maxTokens: 1000,
-    temperature: 0.5,
-    cacheTtlDays: 30,        // How long to cache results
-  },
-} as const satisfies Record<string, AITaskConfig>;
-```
-
-**Provider choice:**
-- **Perplexity** (`sonar` model): For tasks needing web search/citations (artist info, album details, genres)
-- **OpenAI** (`gpt-5-mini`): For creative tasks without web grounding (random facts, playlist covers)
-
-#### Step 2: Add Cache Config (`packages/config/src/cache.ts`)
-
-```typescript
-export const CACHE_CONFIG = {
-  ai: {
-    // ... existing
-    albumRecommendations: { ttlDays: 30 },
-  },
-  // ...
-};
-```
-
-#### Step 3: Create Prompt File (`packages/services/ai/src/prompts/album-recommendations.ts`)
-
-```typescript
-import { AI_TASKS } from '@listentomore/config';
-import type { PerplexityClient } from '../perplexity';
-import type { AICache } from '../cache';
-
-export interface AlbumRecommendationsResult {
-  content: string;
-  citations: string[];
-}
-
-export async function generateAlbumRecommendations(
-  artistName: string,
-  albumName: string,
-  client: PerplexityClient,
-  cache: AICache
-): Promise<AlbumRecommendationsResult> {
-  // Normalize for cache key consistency
-  const normalizedArtist = artistName.toLowerCase().trim();
-  const normalizedAlbum = albumName.toLowerCase().trim();
-
-  // Check cache first
-  const cached = await cache.get<AlbumRecommendationsResult>(
-    'albumRecommendations',
-    normalizedArtist,
-    normalizedAlbum
-  );
-  if (cached) return cached;
-
-  const config = AI_TASKS.albumRecommendations;
-
-  const prompt = `Based on the album "${albumName}" by ${artistName}, recommend 5 similar albums...
-  
-Include inline citation numbers like [1], [2] to reference sources.
-Do NOT start with a preamble or end with follow-up suggestions.`;
-
-  const response = await client.chatCompletion({
-    model: config.model,
-    messages: [
-      { role: 'system', content: 'You are a music expert...' },
-      { role: 'user', content: prompt },
-    ],
-    maxTokens: config.maxTokens,
-    temperature: config.temperature,
-    returnCitations: true,  // Perplexity will return source URLs
-  });
-
-  const result: AlbumRecommendationsResult = {
-    content: response.content,
-    citations: response.citations,
-  };
-
-  // Cache the result
-  await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], result);
-
-  return result;
-}
-```
-
-#### Step 4: Export from Prompts Index (`packages/services/ai/src/prompts/index.ts`)
-
-```typescript
-export {
-  generateAlbumRecommendations,
-  type AlbumRecommendationsResult,
-} from './album-recommendations';
-```
-
-#### Step 5: Add Convenience Method to AIService (`packages/services/ai/src/index.ts`)
-
-```typescript
-export class AIService {
-  // ... existing methods
-
-  async getAlbumRecommendations(artistName: string, albumName: string) {
-    const { generateAlbumRecommendations } = await import('./prompts/album-recommendations');
-    return generateAlbumRecommendations(artistName, albumName, this.perplexity, this.cache);
-  }
-}
-```
-
-Also add to exports at top of file:
-```typescript
-export {
-  // ... existing exports
-  generateAlbumRecommendations,
-  type AlbumRecommendationsResult,
-} from './prompts';
-```
-
-#### Step 6: Create Internal API Endpoint (`apps/web/src/index.tsx`)
-
-```typescript
-app.get('/api/internal/album-recommendations', async (c) => {
-  const artist = c.req.query('artist');
-  const album = c.req.query('album');
-
-  if (!artist || !album) {
-    return c.json({ error: 'Missing artist or album parameter' }, 400);
-  }
-
-  try {
-    const ai = c.get('ai');
-    const result = await ai.getAlbumRecommendations(artist, album);
-    return c.json({ data: result });
-  } catch (error) {
-    console.error('Internal album recommendations error:', error);
-    return c.json({ error: 'Failed to generate recommendations' }, 500);
-  }
-});
-```
-
-#### Step 7: Use in Component with Progressive Loading
-
-```typescript
-// In page component
-<div id="album-recommendations">
-  <p class="text-muted">Loading recommendations...</p>
-</div>
-<script dangerouslySetInnerHTML={{ __html: `
-  internalFetch('/api/internal/album-recommendations?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}')
-    .then(r => r.json())
-    .then(result => {
-      if (result.error) {
-        document.getElementById('album-recommendations').innerHTML = 
-          '<p class="text-muted">Recommendations unavailable.</p>';
-        return;
-      }
-      // Format with markdown and citations
-      var html = marked.parse(result.data.content);
-      // Add citation links as superscripts
-      result.data.citations.forEach((url, i) => {
-        html = html.replace(
-          new RegExp('\\\\[' + (i+1) + '\\\\]', 'g'),
-          '<sup><a href="' + url + '" target="_blank">[' + (i+1) + ']</a></sup>'
-        );
-      });
-      document.getElementById('album-recommendations').innerHTML = html;
-    })
-    .catch(() => {
-      document.getElementById('album-recommendations').innerHTML = 
-        '<p class="text-muted">Failed to load recommendations.</p>';
-    });
-` }} />
-```
+**Quick reference - provider choice:**
+| Provider | Models | Best For |
+|----------|--------|----------|
+| Perplexity | `sonar` | Web-grounded responses with citations |
+| OpenAI | `gpt-5.1`, `gpt-5-mini`, `gpt-5-nano` | Reasoning, creative tasks, coding |
 
 **Key points:**
 - Always pass `internalToken` to Layout for pages using internal APIs
 - Use `internalFetch()` (not `fetch()`) for `/api/internal/*` calls
 - Internal endpoints are protected with 5-minute signed HMAC tokens
 - AI results use markdown; use `marked.parse()` client-side
-- Perplexity citations come as array of URLs; transform `[1]` markers to links
 
 ### 6. Environment Variables for AI
 
