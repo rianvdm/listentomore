@@ -110,6 +110,17 @@ export const AI_TASKS = {
     cacheTtlDays: 180,
   },
 
+  //   genreSummary: {
+  //   provider: 'openai',
+  //   model: 'gpt-5-nano',
+  //   maxTokens: 2000,
+  //   temperature: 1,
+  //   webSearch: true,
+  //   reasoning: 'low',
+  //   verbosity: 'low',
+  //   cacheTtlDays: 180,
+  // },
+
   artistSentence: {
     provider: 'perplexity',
     model: 'sonar',
