@@ -264,7 +264,7 @@ GET /api/v1/artist
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `q` | string | Yes | Artist name to search |
-| `include` | string | No | Comma-separated: `summary`, `albums`. Default: all |
+| `include` | string | No | Comma-separated: `summary`, `sentence`, `albums`. Default: all |
 
 #### Example Request
 
@@ -291,6 +291,7 @@ curl -H "X-API-Key: your_key" \
         "https://www.allmusic.com/artist/radiohead"
       ]
     },
+    "sentence": "They are an English alternative rock band known for their experimental sound, blending electronic, art rock, and ambient influences. Similar artists include Portishead, Massive Attack, and Björk.",
     "topAlbums": [
       { "name": "OK Computer", "playcount": 235835672 },
       { "name": "In Rainbows", "playcount": 230324611 },
@@ -314,6 +315,7 @@ curl -H "X-API-Key: your_key" \
 | `spotifyUrl` | string | Spotify artist URL |
 | `summary.content` | string | AI-generated artist summary (Markdown) |
 | `summary.citations` | string[] | Source URLs |
+| `sentence` | string | Short one-sentence artist description (~38 words) |
 | `topAlbums` | object[] | Top albums by play count (from Last.fm) |
 
 ---

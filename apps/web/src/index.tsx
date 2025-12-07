@@ -976,7 +976,7 @@ app.get('/api', (c) => {
         artist: {
           description: 'Get artist details with AI summary',
           endpoint: 'GET /api/v1/artist?q=:artistName',
-          optional: 'include=summary,albums (default: all)',
+          optional: 'include=summary,sentence,albums (default: all)',
         },
         genre: {
           description: 'Get AI-generated genre summary',
@@ -1038,7 +1038,7 @@ app.post('/api/auth/keys', async (c) => {
 });
 
 // Admin endpoint to clear cache entries (requires premium API key)
-// Supports: albumDetail, artistSummary, genreSummary, spotify:album, spotify:artist
+// Supports: albumDetail, artistSummary, artistSentence, genreSummary, spotify:album, spotify:artist
 app.delete('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
 
   const type = c.req.query('type');
@@ -1047,10 +1047,11 @@ app.delete('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
   if (!type) {
     return c.json({
       error: 'Missing type parameter',
-      supportedTypes: ['albumDetail', 'artistSummary', 'genreSummary', 'spotify:album', 'spotify:artist'],
+      supportedTypes: ['albumDetail', 'artistSummary', 'artistSentence', 'genreSummary', 'spotify:album', 'spotify:artist'],
       examples: [
         '/api/cache?type=albumDetail&artist=radiohead&album=ok%20computer',
         '/api/cache?type=artistSummary&artist=radiohead',
+        '/api/cache?type=artistSentence&artist=beck',
         '/api/cache?type=genreSummary&genre=shoegaze',
         '/api/cache?type=spotify:album&id=abc123',
       ],
@@ -1077,6 +1078,14 @@ app.delete('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
           return c.json({ error: 'Missing artist parameter' }, 400);
         }
         key = `ai:artistSummary:${artist.toLowerCase().trim()}`;
+        break;
+      }
+      case 'artistSentence': {
+        const artist = c.req.query('artist');
+        if (!artist) {
+          return c.json({ error: 'Missing artist parameter' }, 400);
+        }
+        key = `ai:artistSentence:${artist.toLowerCase().trim()}`;
         break;
       }
       case 'genreSummary': {
@@ -1111,7 +1120,7 @@ app.delete('/api/cache', requireAuth({ minTier: 'premium' }), async (c) => {
       default:
         return c.json({
           error: 'Unknown cache type',
-          supportedTypes: ['albumDetail', 'artistSummary', 'genreSummary', 'spotify:album', 'spotify:artist'],
+          supportedTypes: ['albumDetail', 'artistSummary', 'artistSentence', 'genreSummary', 'spotify:album', 'spotify:artist'],
         }, 400);
     }
 
@@ -1334,7 +1343,7 @@ app.post('/api/v1/ask', async (c) => {
 // GET /api/v1/artist - Get artist details with AI summary
 app.get('/api/v1/artist', async (c) => {
   const query = c.req.query('q');
-  const include = c.req.query('include')?.split(',') || ['summary', 'albums'];
+  const include = c.req.query('include')?.split(',') || ['summary', 'sentence', 'albums'];
 
   if (!query) {
     return c.json({ error: 'Missing required parameter: q' }, 400);
@@ -1356,11 +1365,17 @@ app.get('/api/v1/artist', async (c) => {
     // Step 2: Get full artist details
     const artistData = await spotify.getArtist(artistResult.id);
 
-    // Step 3: Fetch AI summary and top albums in parallel
-    const [summaryResult, topAlbumsResult] = await Promise.all([
+    // Step 3: Fetch AI summary, sentence, and top albums in parallel
+    const [summaryResult, sentenceResult, topAlbumsResult] = await Promise.all([
       include.includes('summary')
         ? ai.getArtistSummary(artistData.name).catch((err) => {
             console.error('AI artist summary error:', err);
+            return null;
+          })
+        : Promise.resolve(null),
+      include.includes('sentence')
+        ? ai.getArtistSentence(artistData.name).catch((err) => {
+            console.error('AI artist sentence error:', err);
             return null;
           })
         : Promise.resolve(null),
@@ -1388,6 +1403,10 @@ app.get('/api/v1/artist', async (c) => {
         citations: summaryResult.citations,
         metadata: summaryResult.metadata,
       };
+    }
+
+    if (sentenceResult && sentenceResult.sentence) {
+      response.sentence = sentenceResult.sentence;
     }
 
     if (topAlbumsResult && topAlbumsResult.length > 0) {
