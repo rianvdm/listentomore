@@ -430,8 +430,22 @@ function calculateAlbumConfidence(source: AlbumMetadata, result: SearchResult): 
 ## Environment Variables
 
 ```bash
-# Required
+# Currently Required
 YOUTUBE_API_KEY=AIza...              # YouTube Data API v3 key
+APPLE_MUSIC_TEAM_ID=...              # Apple Developer Team ID
+APPLE_MUSIC_KEY_ID=...               # MusicKit Key ID
+APPLE_MUSIC_PRIVATE_KEY=...          # Contents of .p8 private key file
+
+# Phase 2: Deezer
+# None required! Deezer API is fully public.
+
+# Phase 2: Tidal
+TIDAL_CLIENT_ID=...                  # From TIDAL Developer Dashboard
+TIDAL_CLIENT_SECRET=...              # From TIDAL Developer Dashboard
+
+# Phase 2: Qobuz (if approved for partnership)
+QOBUZ_APP_ID=...                     # From Qobuz partnership (optional)
+QOBUZ_APP_SECRET=...                 # From Qobuz partnership (optional)
 
 # Optional (for monitoring)
 YOUTUBE_QUOTA_ALERT_THRESHOLD=8000   # Alert when quota usage exceeds this
@@ -487,12 +501,22 @@ YOUTUBE_QUOTA_ALERT_THRESHOLD=8000   # Alert when quota usage exceeds this
 
 ## Future Work
 
+### Phase 2: Additional Providers (Recommended Order)
+
+| Priority | Provider | Effort | Notes |
+|----------|----------|--------|-------|
+| 1 | **Deezer** | Low | Free API, ISRC lookup, no auth required |
+| 2 | **Tidal** | Medium | Official API, requires OAuth setup |
+| 3 | **Qobuz** | Low | Search URL fallback only (API requires partnership) |
+| 4 | **Bandcamp** | Low | Search URL fallback (see Appendix) |
+| 5 | **Amazon Music** | N/A | Closed beta, revisit when public |
+
+### Other Improvements
+
 1. **Add quota tracking** for YouTube API usage
-2. **Add Deezer provider** - Free public API, good coverage
-3. **Add Bandcamp provider** - Search URL fallback; show when available (see Appendix)
-4. **Add Amazon Music provider** - Requires closed beta API access (see Appendix)
-5. **Monitor match confidence** - Alert on degraded match rates
-6. **Test coverage** - Add unit tests for matching algorithms
+2. **Monitor match confidence** - Alert on degraded match rates
+3. **Test coverage** - Add unit tests for matching algorithms
+4. **Add retry logic** for rate-limited requests (Deezer error code 4)
 
 ---
 
@@ -508,73 +532,343 @@ interface StreamingProvider {
 }
 ```
 
-### Tidal
+### Tidal ⭐ RECOMMENDED
 
-**API Status**: No public API. Options:
+**API Status**: Official public API available (as of 2024)
 
-1. **Partnership Application**
-   - Apply at https://developer.tidal.com/
-   - Typically requires business justification
-   - If approved, provides full API access with ISRC search
+TIDAL now offers an official developer API that allows **catalog access without user subscription** using the OAuth 2.0 Client Credentials flow. This is ideal for our use case.
 
-2. **Unofficial API** (use at own risk)
-   ```typescript
-   // Requires authentication token
-   GET https://api.tidal.com/v1/search
-     ?query={artist}+{track}
-     &types=TRACKS
-     &countryCode=US
+**Authentication**: OAuth 2.0 Client Credentials
+- Register at https://developer.tidal.com/
+- Create an app to get Client ID and Client Secret
+- No user login required for catalog search
+
+**Setup Steps:**
+1. Sign up at [TIDAL Developer Portal](https://developer.tidal.com/)
+2. Create a new application in the Dashboard
+3. Note your Client ID and Client Secret
+4. Use client credentials flow to obtain access token
+
+**Token Exchange:**
+```bash
+# Get access token (expires in ~24 hours)
+curl -X POST https://auth.tidal.com/v1/oauth2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=${TIDAL_CLIENT_ID}" \
+  -d "client_secret=${TIDAL_CLIENT_SECRET}"
+
+# Response:
+{
+  "access_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 86400
+}
+```
+
+**Strategy:**
+1. **Text Search** - Primary method
    ```
-   - Tokens can be obtained via OAuth device flow
-   - May break without notice
+   GET https://openapi.tidal.com/v2/searchresults/{query}/relationships/tracks
+     ?countryCode=US
+     &limit=10
+   Headers:
+     Authorization: Bearer {access_token}
+     Content-Type: application/vnd.api+json
+   ```
 
-3. **Search URL Fallback**
+2. **Search URL Fallback** - When API unavailable
    ```typescript
    const tidalSearchUrl = `https://tidal.com/search?q=${encodeURIComponent(query)}`;
    ```
 
+**API Response Format** (JSON:API spec):
+```typescript
+interface TidalSearchResponse {
+  data: Array<{
+    id: string;
+    type: 'tracks';
+    attributes: {
+      title: string;
+      isrc: string;
+      duration: string;  // ISO 8601 duration, e.g., "PT3M45S"
+      explicit: boolean;
+    };
+    relationships: {
+      artists: { data: Array<{ id: string; type: 'artists' }> };
+      albums: { data: Array<{ id: string; type: 'albums' }> };
+    };
+  }>;
+  included: Array<{
+    id: string;
+    type: 'artists' | 'albums';
+    attributes: { name: string; /* ... */ };
+  }>;
+}
+```
+
+**Matching Strategy:**
+- Score results by artist similarity (0.35), track similarity (0.35), duration match (0.20), album match (0.10)
+- ISRC is returned in response - can use for verification
+- Accept matches with confidence > 0.8
+- Fallback to search URL if no high-confidence match
+
+**Rate Limits**: Not publicly documented, but reasonable for typical usage
+
+**Environment Variables:**
+```bash
+TIDAL_CLIENT_ID=...       # From TIDAL Developer Dashboard
+TIDAL_CLIENT_SECRET=...   # From TIDAL Developer Dashboard
+```
+
 **Implementation:**
 ```typescript
 // providers/tidal.ts
+export interface TidalConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
 export class TidalProvider implements StreamingProvider {
   name = 'tidal';
+  private config: TidalConfig | null;
+  private accessToken: string | null = null;
+  private tokenExpiresAt: number = 0;
+
+  constructor(config?: TidalConfig) {
+    this.config = config || null;
+  }
+
+  private async getAccessToken(): Promise<string | null> {
+    if (!this.config) return null;
+
+    // Return cached token if still valid (with 5 min buffer)
+    if (this.accessToken && Date.now() < this.tokenExpiresAt - 300000) {
+      return this.accessToken;
+    }
+
+    const response = await fetch('https://auth.tidal.com/v1/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret
+      })
+    });
+
+    if (!response.ok) {
+      console.error('TIDAL token error:', await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    this.accessToken = data.access_token;
+    this.tokenExpiresAt = Date.now() + (data.expires_in * 1000);
+    return this.accessToken;
+  }
 
   async searchTrack(metadata: TrackMetadata): Promise<ProviderResult | null> {
     const query = `${metadata.artists[0]} ${metadata.name}`;
-    // If you have API access, search via API here
-    return {
-      url: `https://tidal.com/search?q=${encodeURIComponent(query)}`,
-      confidence: 0,
-      fallback: true
-    };
+
+    const token = await this.getAccessToken();
+    if (!token) {
+      return this.getFallbackUrl(query);
+    }
+
+    try {
+      const response = await fetch(
+        `https://openapi.tidal.com/v2/searchresults/${encodeURIComponent(query)}/relationships/tracks?countryCode=US&limit=10`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/vnd.api+json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        console.error('TIDAL search error:', response.status);
+        return this.getFallbackUrl(query);
+      }
+
+      const data = await response.json();
+      const tracks = data.data || [];
+      const included = data.included || [];
+
+      if (tracks.length === 0) {
+        return this.getFallbackUrl(query);
+      }
+
+      // Find best match
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const track of tracks) {
+        const artistIds = track.relationships?.artists?.data?.map((a: any) => a.id) || [];
+        const artists = included
+          .filter((i: any) => i.type === 'artists' && artistIds.includes(i.id))
+          .map((a: any) => a.attributes.name);
+
+        const score = this.calculateConfidence(metadata, {
+          title: track.attributes.title,
+          artists,
+          duration: this.parseDuration(track.attributes.duration),
+          isrc: track.attributes.isrc
+        });
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = { track, artists };
+        }
+      }
+
+      if (bestMatch && bestScore >= 0.8) {
+        return {
+          url: `https://tidal.com/browse/track/${bestMatch.track.id}`,
+          confidence: bestScore,
+          matched: {
+            artist: bestMatch.artists[0],
+            track: bestMatch.track.attributes.title,
+            isrc: bestMatch.track.attributes.isrc
+          }
+        };
+      }
+
+      return this.getFallbackUrl(query);
+    } catch (error) {
+      console.error('TIDAL search error:', error);
+      return this.getFallbackUrl(query);
+    }
   }
 
   async searchAlbum(metadata: AlbumMetadata): Promise<ProviderResult | null> {
     const query = `${metadata.artists[0]} ${metadata.name}`;
+
+    const token = await this.getAccessToken();
+    if (!token) {
+      return this.getFallbackUrl(query);
+    }
+
+    try {
+      const response = await fetch(
+        `https://openapi.tidal.com/v2/searchresults/${encodeURIComponent(query)}/relationships/albums?countryCode=US&limit=10`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/vnd.api+json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        return this.getFallbackUrl(query);
+      }
+
+      const data = await response.json();
+      const albums = data.data || [];
+
+      if (albums.length === 0) {
+        return this.getFallbackUrl(query);
+      }
+
+      // Score and find best match
+      const bestAlbum = albums[0]; // Simplified - add scoring like searchTrack
+
+      return {
+        url: `https://tidal.com/browse/album/${bestAlbum.id}`,
+        confidence: 0.85, // Add proper scoring
+        matched: {
+          album: bestAlbum.attributes.title
+        }
+      };
+    } catch (error) {
+      console.error('TIDAL album search error:', error);
+      return this.getFallbackUrl(query);
+    }
+  }
+
+  private getFallbackUrl(query: string): ProviderResult {
     return {
       url: `https://tidal.com/search?q=${encodeURIComponent(query)}`,
       confidence: 0,
       fallback: true
     };
   }
+
+  private parseDuration(isoDuration: string): number {
+    // Parse ISO 8601 duration (e.g., "PT3M45S") to milliseconds
+    const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+    const hours = parseInt(match[1] || '0');
+    const minutes = parseInt(match[2] || '0');
+    const seconds = parseInt(match[3] || '0');
+    return (hours * 3600 + minutes * 60 + seconds) * 1000;
+  }
+
+  private calculateConfidence(source: TrackMetadata, result: any): number {
+    let score = 0;
+
+    // ISRC match is high confidence
+    if (source.isrc && result.isrc && source.isrc === result.isrc) {
+      return 0.98;
+    }
+
+    // Artist similarity (0.35)
+    const artistScore = similarity(source.artists[0], result.artists?.[0] || '');
+    score += 0.35 * artistScore;
+
+    // Track similarity (0.35)
+    const trackScore = similarity(source.name, result.title);
+    score += 0.35 * trackScore;
+
+    // Duration match (0.20)
+    if (result.duration) {
+      const durationDiff = Math.abs(source.durationMs - result.duration);
+      if (durationDiff < 5000) score += 0.20;
+      else if (durationDiff < 30000) score += 0.10;
+    }
+
+    // Album match (0.10) - would need album info from included
+
+    return score;
+  }
 }
 ```
 
-### Qobuz
+### Qobuz (Search URL Fallback Only)
 
-**API Status**: Private API, partnership required.
+**API Status**: Private API, partnership required
 
-1. **Partnership Application**
-   - Apply at https://www.qobuz.com/partners
-   - Often rejected for small projects
-   - If approved, full ISRC-based search available
+Qobuz API access requires direct approval from Qobuz. They typically only approve commercial partners and often reject small projects.
 
-2. **Search URL Fallback**
-   ```typescript
-   const qobuzSearchUrl = `https://www.qobuz.com/search?q=${encodeURIComponent(query)}`;
-   ```
+**How to Request Access:**
+1. Email api@qobuz.com with your project details
+2. Include: App description, expected usage, business justification
+3. Wait for approval (often takes weeks, frequently rejected)
 
-**Implementation:**
+**If Approved:**
+- Requires App ID and App Secret
+- Full catalog search with ISRC support
+- High-resolution audio metadata
+
+**Reality Check:**
+- Small/personal projects are usually rejected
+- No self-service signup available
+- Partnership agreements may have commercial terms
+
+**Recommendation**: Use search URL fallback unless you have a commercial use case.
+
+**Search URL Fallback:**
+```typescript
+// Track search
+https://www.qobuz.com/search?q={query}
+
+// Note: Qobuz doesn't support item_type filtering in search URLs
+// Results will include tracks, albums, and artists mixed
+```
+
+**Implementation (Fallback Only):**
 ```typescript
 // providers/qobuz.ts
 export class QobuzProvider implements StreamingProvider {
@@ -598,6 +892,12 @@ export class QobuzProvider implements StreamingProvider {
     };
   }
 }
+```
+
+**Environment Variables (if approved):**
+```bash
+QOBUZ_APP_ID=...       # From Qobuz partnership
+QOBUZ_APP_SECRET=...   # From Qobuz partnership
 ```
 
 ### Amazon Music
@@ -763,15 +1063,90 @@ export class BandcampProvider implements StreamingProvider {
 - `item_type=a` - Albums only
 - `item_type=b` - Artists/bands only
 
-### Deezer
+### Deezer ⭐ HIGHLY RECOMMENDED
 
-**API Status**: Public API, free, no auth required for search.
+**API Status**: Public API, free, **no authentication required**
 
+Deezer offers a fully public API with **direct ISRC lookup** - making it an excellent candidate for high-confidence matching, similar to Apple Music.
+
+**Key Advantages:**
+- No API key or authentication required
+- Direct ISRC lookup for tracks (highest confidence)
+- Text search fallback for albums
+- Free with generous rate limits (~50 req/5 sec per IP)
+- Response includes duration for validation
+
+**Strategy:**
+1. **ISRC Lookup (tracks)** - Highest confidence (0.98)
+   ```
+   GET https://api.deezer.com/track/isrc:{ISRC}
+   ```
+   Example: `https://api.deezer.com/track/isrc:USRC11700112`
+
+2. **Text Search Fallback (tracks)**
+   ```
+   GET https://api.deezer.com/search/track?q={artist} {track}
+   ```
+
+3. **Album Search**
+   ```
+   GET https://api.deezer.com/search/album?q={artist} {album}
+   ```
+
+**API Response Format (Track):**
+```typescript
+interface DeezerTrack {
+  id: number;
+  readable: boolean;
+  title: string;
+  title_short: string;
+  isrc: string;
+  link: string;           // Direct link to track page
+  duration: number;       // Duration in seconds
+  explicit_lyrics: boolean;
+  preview: string;        // 30-sec preview URL
+  artist: {
+    id: number;
+    name: string;
+  };
+  album: {
+    id: number;
+    title: string;
+    cover_medium: string;
+  };
+}
 ```
-GET https://api.deezer.com/search?q={artist}+{track}
+
+**API Response Format (Album):**
+```typescript
+interface DeezerAlbum {
+  id: number;
+  title: string;
+  link: string;
+  cover_medium: string;
+  nb_tracks: number;
+  release_date: string;   // "YYYY-MM-DD"
+  artist: {
+    id: number;
+    name: string;
+  };
+}
 ```
 
-**This is actually a great candidate for Phase 2** - free, documented, and reliable.
+**Rate Limits:**
+- ~50 requests per 5 seconds per IP address (10 req/sec)
+- No daily quota
+- Error code 4 = "Quota limit exceeded" (retry after brief delay)
+
+**Search URL Fallback:**
+```typescript
+const deezerSearchUrl = `https://www.deezer.com/search/${encodeURIComponent(query)}`;
+```
+
+**Environment Variables:**
+```bash
+# None required! Deezer API is fully public
+```
 
 **Implementation:**
 ```typescript
@@ -780,42 +1155,203 @@ export class DeezerProvider implements StreamingProvider {
   name = 'deezer';
 
   async searchTrack(metadata: TrackMetadata): Promise<ProviderResult | null> {
-    const query = `artist:"${metadata.artists[0]}" track:"${metadata.name}"`;
-    const response = await fetch(
-      `https://api.deezer.com/search?q=${encodeURIComponent(query)}`
-    );
-    const data = await response.json();
+    // Strategy 1: Direct ISRC lookup (highest confidence)
+    if (metadata.isrc) {
+      try {
+        const response = await fetch(
+          `https://api.deezer.com/track/isrc:${metadata.isrc}`
+        );
+        const data = await response.json();
 
-    if (data.data?.[0]) {
-      const track = data.data[0];
-      return {
-        url: track.link, // https://www.deezer.com/track/123
-        confidence: this.calculateConfidence(metadata, track),
-        matched: { artist: track.artist.name, track: track.title }
-      };
+        // ISRC lookup returns single track or error object
+        if (data.id && !data.error) {
+          return {
+            url: data.link,
+            confidence: 0.98,
+            matched: {
+              artist: data.artist.name,
+              track: data.title,
+              isrc: data.isrc
+            }
+          };
+        }
+      } catch (error) {
+        console.error('Deezer ISRC lookup failed:', error);
+        // Fall through to text search
+      }
     }
-    return null;
+
+    // Strategy 2: Text search fallback
+    const query = `artist:"${metadata.artists[0]}" track:"${metadata.name}"`;
+    try {
+      const response = await fetch(
+        `https://api.deezer.com/search/track?q=${encodeURIComponent(query)}&limit=10`
+      );
+      const data = await response.json();
+
+      if (data.error) {
+        console.error('Deezer search error:', data.error);
+        return this.getFallbackUrl(metadata.artists[0], metadata.name);
+      }
+
+      if (data.data?.length > 0) {
+        // Score and find best match
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const track of data.data) {
+          const score = this.calculateTrackConfidence(metadata, track);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = track;
+          }
+        }
+
+        if (bestMatch && bestScore >= 0.8) {
+          return {
+            url: bestMatch.link,
+            confidence: bestScore,
+            matched: {
+              artist: bestMatch.artist.name,
+              track: bestMatch.title
+            }
+          };
+        }
+      }
+
+      return this.getFallbackUrl(metadata.artists[0], metadata.name);
+    } catch (error) {
+      console.error('Deezer search error:', error);
+      return this.getFallbackUrl(metadata.artists[0], metadata.name);
+    }
   }
 
   async searchAlbum(metadata: AlbumMetadata): Promise<ProviderResult | null> {
     const query = `artist:"${metadata.artists[0]}" album:"${metadata.name}"`;
-    const response = await fetch(
-      `https://api.deezer.com/search/album?q=${encodeURIComponent(query)}`
-    );
-    const data = await response.json();
 
-    if (data.data?.[0]) {
-      const album = data.data[0];
-      return {
-        url: album.link, // https://www.deezer.com/album/123
-        confidence: this.calculateConfidence(metadata, album),
-        matched: { artist: album.artist.name, album: album.title }
-      };
+    try {
+      const response = await fetch(
+        `https://api.deezer.com/search/album?q=${encodeURIComponent(query)}&limit=10`
+      );
+      const data = await response.json();
+
+      if (data.error) {
+        console.error('Deezer album search error:', data.error);
+        return this.getAlbumFallbackUrl(metadata.artists[0], metadata.name);
+      }
+
+      if (data.data?.length > 0) {
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const album of data.data) {
+          const score = this.calculateAlbumConfidence(metadata, album);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = album;
+          }
+        }
+
+        if (bestMatch && bestScore >= 0.8) {
+          return {
+            url: bestMatch.link,
+            confidence: bestScore,
+            matched: {
+              artist: bestMatch.artist.name,
+              album: bestMatch.title
+            }
+          };
+        }
+      }
+
+      return this.getAlbumFallbackUrl(metadata.artists[0], metadata.name);
+    } catch (error) {
+      console.error('Deezer album search error:', error);
+      return this.getAlbumFallbackUrl(metadata.artists[0], metadata.name);
     }
-    return null;
+  }
+
+  private calculateTrackConfidence(source: TrackMetadata, track: any): number {
+    let score = 0;
+
+    // Artist similarity (0.35)
+    const artistScore = similarity(source.artists[0], track.artist.name);
+    score += 0.35 * artistScore;
+
+    // Track similarity (0.35)
+    const trackScore = similarity(source.name, track.title);
+    score += 0.35 * trackScore;
+
+    // Duration match (0.20) - Deezer duration is in seconds
+    const durationDiff = Math.abs(source.durationMs - (track.duration * 1000));
+    if (durationDiff < 5000) score += 0.20;
+    else if (durationDiff < 30000) score += 0.10;
+
+    // Album match (0.10)
+    if (source.album && track.album?.title) {
+      const albumScore = similarity(source.album, track.album.title);
+      score += 0.10 * albumScore;
+    }
+
+    return score;
+  }
+
+  private calculateAlbumConfidence(source: AlbumMetadata, album: any): number {
+    let score = 0;
+
+    // Artist similarity (0.40)
+    const artistScore = similarity(source.artists[0], album.artist.name);
+    score += 0.40 * artistScore;
+
+    // Album name similarity (0.40)
+    const albumScore = similarity(source.name, album.title);
+    score += 0.40 * albumScore;
+
+    // Track count match (0.10)
+    if (source.totalTracks && album.nb_tracks) {
+      const trackDiff = Math.abs(source.totalTracks - album.nb_tracks);
+      if (trackDiff <= 2) score += 0.10;
+      else if (trackDiff <= 5) score += 0.05;
+    }
+
+    // Release year match (0.10)
+    if (album.release_date) {
+      const albumYear = parseInt(album.release_date.split('-')[0]);
+      if (source.releaseYear === albumYear) {
+        score += 0.10;
+      }
+    }
+
+    return score;
+  }
+
+  private getFallbackUrl(artist: string, track: string): ProviderResult {
+    const query = `${artist} ${track}`;
+    return {
+      url: `https://www.deezer.com/search/${encodeURIComponent(query)}`,
+      confidence: 0,
+      fallback: true
+    };
+  }
+
+  private getAlbumFallbackUrl(artist: string, album: string): ProviderResult {
+    const query = `${artist} ${album}`;
+    return {
+      url: `https://www.deezer.com/search/${encodeURIComponent(query)}`,
+      confidence: 0,
+      fallback: true
+    };
   }
 }
 ```
+
+**Edge Cases:**
+| Scenario | Handling |
+|----------|----------|
+| ISRC returns multiple tracks | API returns only one; use text search for verification |
+| Rate limit exceeded (code 4) | Wait 1-2 seconds and retry, or return fallback URL |
+| Track not on Deezer | Return search URL fallback |
+| Regional availability | Deezer URLs work globally; track may show unavailable in some regions |
 
 ### SoundCloud
 
