@@ -116,6 +116,8 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
         reasoning: config.reasoning,
         verbosity: config.verbosity,
         webSearch: config.webSearch,
+        // Pass through Perplexity options if configured
+        searchContextSize: config.searchContextSize,
       });
 
       // Process the response to replace placeholders with links

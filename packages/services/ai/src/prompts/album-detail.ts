@@ -62,6 +62,8 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
+    // Pass through Perplexity options if configured
+    searchContextSize: config.searchContextSize,
   });
 
   const result: AlbumDetailResult = {

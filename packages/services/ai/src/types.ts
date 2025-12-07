@@ -1,10 +1,10 @@
 // ABOUTME: Common types and interfaces for AI clients.
 // ABOUTME: Enables switching between providers with a common ChatClient interface.
 
-import type { ReasoningEffort, Verbosity } from '@listentomore/config';
+import type { ReasoningEffort, Verbosity, SearchContextSize } from '@listentomore/config';
 
 // Re-export types from config for consistency
-export type { ReasoningEffort, Verbosity } from '@listentomore/config';
+export type { ReasoningEffort, Verbosity, SearchContextSize } from '@listentomore/config';
 
 /**
  * Common message format for both providers
@@ -32,6 +32,8 @@ export interface ChatCompletionOptions {
   verbosity?: Verbosity;
   /** Enable web search tool (Responses API) */
   webSearch?: boolean;
+  /** Search context size for Perplexity web search (Perplexity only) */
+  searchContextSize?: SearchContextSize;
 }
 
 /**

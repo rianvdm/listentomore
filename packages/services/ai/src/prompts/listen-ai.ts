@@ -36,6 +36,8 @@ Keep responses to 4 sentences maximum. Be warm but wise.`,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
+    // Pass through Perplexity options if configured
+    searchContextSize: config.searchContextSize,
   });
 
   return {

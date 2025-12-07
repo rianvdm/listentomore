@@ -26,6 +26,9 @@ export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high';
 /** Verbosity levels for GPT-5 models (Responses API only) */
 export type Verbosity = 'low' | 'medium' | 'high';
 
+/** Search context size for Perplexity web search (Perplexity only) */
+export type SearchContextSize = 'low' | 'medium' | 'high';
+
 export interface AITaskConfig {
   provider: AIProvider;
   model: string;
@@ -38,6 +41,8 @@ export interface AITaskConfig {
   reasoning?: ReasoningEffort;
   /** Output verbosity for GPT-5.1 models (Responses API only) */
   verbosity?: Verbosity;
+  /** Search context size for web search (Perplexity only, default: 'low') */
+  searchContextSize?: SearchContextSize;
 }
 
 /**
@@ -71,6 +76,11 @@ export interface AITaskConfig {
  * - webSearch requires reasoning: 'low' or higher (minimal/none don't support it)
  * - temperature is ignored when reasoning is set to any level
  * - GPT-5.x models only support temperature=1 regardless of what you set
+ *
+ * PERPLEXITY OPTIONS:
+ * - searchContextSize: 'low' (default) | 'medium' | 'high'
+ *   Controls how much search context is retrieved. Higher = more comprehensive but slower/costlier.
+ *   Only applies to Perplexity tasks (ignored by OpenAI).
  *
  * Example switching artistSummary to OpenAI with web search:
  * ```

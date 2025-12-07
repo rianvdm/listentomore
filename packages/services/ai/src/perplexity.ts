@@ -2,6 +2,7 @@
 // ABOUTME: Includes rate limiting and citation extraction from web search.
 
 import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
+import type { SearchContextSize } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
 import type { ChatClient, ChatMessage, AIResponseMetadata } from './types';
 
@@ -15,6 +16,8 @@ export interface ChatCompletionOptions {
   temperature?: number;
   /** Request citations from Perplexity */
   returnCitations?: boolean;
+  /** Search context size for web search (low, medium, high) */
+  searchContextSize?: SearchContextSize;
 }
 
 export interface ChatCompletionResponse {
@@ -90,6 +93,12 @@ export class PerplexityClient implements ChatClient {
         max_tokens: options.maxTokens ?? 1000,
         temperature: options.temperature ?? 0.5,
         return_citations: options.returnCitations ?? true,
+        // Only include web_search_options if searchContextSize is explicitly set
+        ...(options.searchContextSize && {
+          web_search_options: {
+            search_context_size: options.searchContextSize,
+          },
+        }),
       }),
       timeout: 'slow', // 30 seconds for AI
     });

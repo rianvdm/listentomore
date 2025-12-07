@@ -59,6 +59,8 @@ CRITICAL REQUIREMENTS:
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
+    // Pass through Perplexity options if configured
+    searchContextSize: config.searchContextSize,
   });
 
   const result: ArtistSentenceResult = {
