@@ -16,6 +16,7 @@ A REST API for music discovery, combining Spotify catalog data with AI-powered i
   - [Streaming Links](#streaming-links)
   - [Artist](#artist)
   - [Genre](#genre)
+  - [Random Fact](#random-fact)
   - [Ask (Chat)](#ask-chat)
 - [Error Handling](#error-handling)
 - [Getting an API Key](#getting-an-api-key)
@@ -359,6 +360,52 @@ curl -H "X-API-Key: your_key" \
   }
 }
 ```
+
+---
+
+### Random Fact
+
+Get a random music fact from the cached pool.
+
+```
+GET /api/v1/random-fact
+```
+
+#### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `exclude` | string | No | Comma-separated list of fact hashes to skip |
+
+#### Example Request
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://listentomore.com/api/v1/random-fact"
+```
+
+#### Example Response
+
+```json
+{
+  "data": {
+    "fact": "Did you know R.E.M.'s 1983 debut album \"Murmur\" was so acclaimed that Rolling Stone named it Album of the Year over Michael Jackson's \"Thriller,\" helping move American college rock into the musical mainstream?",
+    "hash": "e5dd5831",
+    "timestamp": "2025-12-07T15:00:18.377Z"
+  }
+}
+```
+
+#### Using the Exclude Parameter
+
+To avoid receiving the same fact, pass previously received hashes:
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://listentomore.com/api/v1/random-fact?exclude=e5dd5831,a1b2c3d4"
+```
+
+If all facts in the pool are excluded, the newest fact is returned with a `warning` field.
 
 ---
 
