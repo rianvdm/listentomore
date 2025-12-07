@@ -56,7 +56,7 @@ export const AI_TASKS = {
 ```
 
 **Now configurable per task:**
-- `reasoning?: 'none' | 'low' | 'medium' | 'high'` - GPT-5.1 reasoning effort
+- `reasoning?: 'minimal' | 'low' | 'medium' | 'high'` - GPT-5.1 reasoning effort
 - `verbosity?: 'low' | 'medium' | 'high'` - GPT-5.1 output verbosity
 - `webSearch?: boolean` - Enable OpenAI web search (Responses API)
 
@@ -196,11 +196,11 @@ export interface ResponsesOptions {
   input: string | Array<{ role: string; content: string }>;
   /** System-level instructions (replaces system message) */
   instructions?: string;
-  reasoning?: { effort: 'none' | 'low' | 'medium' | 'high' };
+  reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
   text?: { verbosity: 'low' | 'medium' | 'high' };
   tools?: Array<{ type: 'web_search' }>;
   maxOutputTokens?: number;
-  temperature?: number;  // Only works with reasoning.effort: 'none'
+  temperature?: number;  // Only works when reasoning is not enabled
   /** Disable storage for ZDR compliance */
   store?: boolean;
 }
@@ -244,8 +244,8 @@ export class OpenAIClient {
       body.tools = options.tools;
     }
 
-    // Temperature only works with reasoning.effort: 'none'
-    if (options.temperature !== undefined && options.reasoning?.effort === 'none') {
+    // Temperature only works when reasoning is not enabled
+    if (options.temperature !== undefined && !options.reasoning) {
       body.temperature = options.temperature;
     }
 

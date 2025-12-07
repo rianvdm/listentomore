@@ -354,12 +354,9 @@ export class OpenAIClient implements ChatClient {
       body.tools = options.tools;
     }
 
-    // Temperature only works with reasoning.effort: 'none'
-    // For other reasoning levels, the model controls temperature internally
-    if (
-      options.temperature !== undefined &&
-      (!options.reasoning || options.reasoning.effort === 'none')
-    ) {
+    // Temperature only works when reasoning is not enabled
+    // When reasoning is set to any level, the model controls temperature internally
+    if (options.temperature !== undefined && !options.reasoning) {
       body.temperature = options.temperature;
     }
 

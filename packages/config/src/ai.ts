@@ -16,8 +16,12 @@ export const AI_PROVIDERS = {
 
 export type AIProvider = keyof typeof AI_PROVIDERS;
 
-/** Reasoning effort levels for GPT-5 models (Responses API only) */
-export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+/**
+ * Reasoning effort levels for GPT-5 models (Responses API only)
+ * - GPT-5.1: 'none' (default) | 'low' | 'medium' | 'high'
+ * - GPT-5/gpt-5-mini: 'minimal' | 'low' | 'medium' (default) | 'high'
+ */
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high';
 
 /** Verbosity levels for GPT-5 models (Responses API only) */
 export type Verbosity = 'low' | 'medium' | 'high';
@@ -46,6 +50,28 @@ export interface AITaskConfig {
  *    - `reasoning: 'low' | 'medium' | 'high'` - Enable chain-of-thought reasoning
  *    - `verbosity: 'low' | 'medium' | 'high'` - Control output length
  *
+ * ┌─────────────────────────────────────────────────────────────────────────────┐
+ * │ MODEL CAPABILITIES & CONSTRAINTS                                            │
+ * ├─────────────────┬───────────────────────────────────────────────────────────┤
+ * │ Model           │ gpt-5.1              │ gpt-5-mini/nano      │ Perplexity  │
+ * ├─────────────────┼──────────────────────┼──────────────────────┼─────────────┤
+ * │ reasoning       │ none*, low,          │ minimal, low,        │ N/A         │
+ * │                 │ medium, high         │ medium*, high        │             │
+ * ├─────────────────┼──────────────────────┼──────────────────────┼─────────────┤
+ * │ verbosity       │ low, medium, high    │ low, medium, high    │ N/A         │
+ * ├─────────────────┼──────────────────────┼──────────────────────┼─────────────┤
+ * │ webSearch       │ Yes                  │ Yes                  │ Always on   │
+ * ├─────────────────┼──────────────────────┼──────────────────────┼─────────────┤
+ * │ temperature     │ Only without         │ Only without         │ Yes         │
+ * │                 │ reasoning            │ reasoning            │             │
+ * └─────────────────┴──────────────────────┴──────────────────────┴─────────────┘
+ * (* = default when not set)
+ *
+ * IMPORTANT CONSTRAINTS:
+ * - webSearch requires reasoning: 'low' or higher (minimal/none don't support it)
+ * - temperature is ignored when reasoning is set to any level
+ * - GPT-5.x models only support temperature=1 regardless of what you set
+ *
  * Example switching artistSummary to OpenAI with web search:
  * ```
  * artistSummary: {
@@ -54,11 +80,10 @@ export interface AITaskConfig {
  *   maxTokens: 1000,
  *   temperature: 0.5,
  *   cacheTtlDays: 180,
- *   webSearch: true,  // Get citations like Perplexity
+ *   webSearch: true,
+ *   reasoning: 'low',  // Required for webSearch (minimal doesn't work)
  * },
  * ```
- *
- * Note: GPT-5.x models use temperature=1 only. The temperature field is ignored.
  */
 export const AI_TASKS = {
   artistSummary: {
@@ -95,26 +120,30 @@ export const AI_TASKS = {
 
   randomFact: {
     provider: 'openai',
-    model: 'gpt-5-mini',
-    maxTokens: 10000,
-    temperature: 1, // gpt-5-mini only supports temperature=1
+    model: 'gpt-5.1',
+    maxTokens: 1000,
+    temperature: 1, 
     cacheTtlDays: 0, // No caching - always fresh
+    webSearch: false,
+    verbosity: 'low',
   },
 
   playlistCoverPrompt: {
     provider: 'openai',
     model: 'gpt-5-nano',
     maxTokens: 10000,
-    temperature: 1, // gpt-5-nano only supports temperature=1
+    temperature: 1, 
     cacheTtlDays: 0,
   },
 
   listenAi: {
     provider: 'openai',
-    model: 'gpt-5-mini',
-    maxTokens: 10000,
-    temperature: 1, // gpt-5-mini only supports temperature=1
+    model: 'gpt-5.1',
+    maxTokens: 500,
+    temperature: 1,
     cacheTtlDays: 0,
+    webSearch: false,
+    verbosity: 'low',
   },
 
   albumRecommendations: {

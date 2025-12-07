@@ -39,10 +39,10 @@ artistSummary: {
   provider: 'openai',
   model: 'gpt-5.1',
   maxTokens: 1000,
-  temperature: 0.5,        // Only works with reasoning: 'none'
+  temperature: 0.5,        // Only works when reasoning is not set
   cacheTtlDays: 180,
   // OpenAI-specific options (see GPT-5.1 section below)
-  reasoning: 'none',       // 'none' | 'low' | 'medium' | 'high'
+  reasoning: 'minimal',    // 'minimal' | 'low' | 'medium' | 'high'
   verbosity: 'medium',     // 'low' | 'medium' | 'high'
   webSearch: true,         // Enable web search (Responses API only)
 },
@@ -56,7 +56,7 @@ artistSummary: {
 | Citations | Built-in | Via annotations | Via annotations |
 | Reasoning control | N/A | N/A | `reasoning.effort` |
 | Verbosity control | N/A | N/A | `text.verbosity` |
-| Temperature | Yes | Yes (some models) | Only with `reasoning: 'none'` |
+| Temperature | Yes | Yes (some models) | Only when reasoning is not set |
 
 ---
 
@@ -68,7 +68,7 @@ GPT-5.1 is OpenAI's latest flagship model with configurable reasoning and web se
 
 | Model | Best For | Notes |
 |-------|----------|-------|
-| `gpt-5.1` | Complex reasoning, broad world knowledge | Default reasoning: `none` |
+| `gpt-5.1` | Complex reasoning, broad world knowledge | Can use reasoning: `minimal` to `high` |
 | `gpt-5.1-codex-max` | Agentic coding tasks | Supports `xhigh` reasoning |
 | `gpt-5-mini` | Cost-optimized reasoning and chat | Balanced speed/capability |
 | `gpt-5-nano` | High-throughput, simple tasks | Classification, extraction |
@@ -80,19 +80,20 @@ Controls how many reasoning tokens the model generates before responding:
 
 | Setting | Use Case | Latency |
 |---------|----------|---------|
-| `none` | Low-latency interactions (default for 5.1) | Fastest |
+| (not set) | No reasoning, temperature works | Fastest |
+| `minimal` | Minimal reasoning | Fast |
 | `low` | Light reasoning | Fast |
 | `medium` | Standard reasoning | Moderate |
 | `high` | Complex multi-step planning | Slowest |
 
-**Important:** `temperature`, `top_p`, and `logprobs` only work when `reasoning: 'none'`.
+**Important:** `temperature`, `top_p`, and `logprobs` only work when reasoning is NOT set.
 
 ```typescript
-// For latency-sensitive tasks
+// For latency-sensitive tasks (no reasoning)
 albumDetail: {
   provider: 'openai',
   model: 'gpt-5.1',
-  reasoning: 'none',      // Skip reasoning for speed
+  // reasoning not set - no reasoning overhead, temperature works
   verbosity: 'medium',
   maxTokens: 1000,
   cacheTtlDays: 120,
@@ -130,7 +131,7 @@ artistSummary: {
   provider: 'openai',
   model: 'gpt-5.1',
   webSearch: true,        // Enables web_search tool
-  reasoning: 'none',
+  reasoning: 'minimal',   // Minimal reasoning for speed
   maxTokens: 1000,
   cacheTtlDays: 180,
 },
@@ -351,7 +352,7 @@ Required in `apps/web/wrangler.toml` (secrets):
      provider: 'openai',      // was 'perplexity'
      model: 'gpt-5.1',        // was 'sonar'
      webSearch: true,         // replaces Perplexity's built-in search
-     reasoning: 'none',       // for speed
+     reasoning: 'minimal',    // for speed
      // ... rest unchanged
    },
    ```
@@ -361,13 +362,13 @@ Required in `apps/web/wrangler.toml` (secrets):
 
 ### From GPT-4.1 to GPT-5.1
 
-Per OpenAI's guidance: use `gpt-5.1` with `reasoning: 'none'` as a drop-in replacement with improved intelligence.
+Per OpenAI's guidance: use `gpt-5.1` without reasoning as a drop-in replacement with improved intelligence.
 
 ```typescript
 // Before
 model: 'gpt-4.1',
 
-// After
+// After (no reasoning = matches gpt-4.1 behavior)
 model: 'gpt-5.1',
-reasoning: 'none',  // Matches gpt-4.1 behavior
+// Don't set reasoning to keep temperature support
 ```
