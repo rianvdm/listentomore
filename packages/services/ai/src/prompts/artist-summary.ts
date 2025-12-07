@@ -1,12 +1,13 @@
 // Artist summary prompt - generates detailed artist summaries with linked references
 
 import { getTaskConfig } from '@listentomore/config';
-import type { ChatClient } from '../types';
+import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
 
 export interface ArtistSummaryResult {
   summary: string;
   citations: string[];
+  metadata?: AIResponseMetadata;
 }
 
 /**
@@ -98,10 +99,14 @@ IMPORTANT: If you cannot find sufficient verifiable information about this artis
   const result: ArtistSummaryResult = {
     summary: formattedSummary,
     citations: response.citations,
+    metadata: response.metadata,
   };
 
-  // Cache the result
-  await cache.set('artistSummary', [normalizedName], result);
+  // Cache the result (without metadata - it's only for fresh responses)
+  await cache.set('artistSummary', [normalizedName], {
+    summary: result.summary,
+    citations: result.citations,
+  });
 
   return result;
 }

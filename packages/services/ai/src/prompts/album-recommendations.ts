@@ -1,12 +1,13 @@
 // Album recommendations prompt - generates similar album suggestions
 
 import { getTaskConfig } from '@listentomore/config';
-import type { ChatClient } from '../types';
+import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
 
 export interface AlbumRecommendationsResult {
   content: string;
   citations: string[];
+  metadata?: AIResponseMetadata;
 }
 
 /**
@@ -124,10 +125,14 @@ IMPORTANT:
   const result: AlbumRecommendationsResult = {
     content: formattedContent,
     citations: response.citations,
+    metadata: response.metadata,
   };
 
-  // Cache the result
-  await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], result);
+  // Cache the result (without metadata - it's only for fresh responses)
+  await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], {
+    content: result.content,
+    citations: result.citations,
+  });
 
   return result;
 }

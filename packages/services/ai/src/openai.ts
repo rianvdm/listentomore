@@ -9,6 +9,7 @@ import type {
   ChatMessage,
   ReasoningEffort,
   Verbosity,
+  AIResponseMetadata,
 } from './types';
 
 // Re-export for backwards compatibility
@@ -29,6 +30,8 @@ export interface ChatCompletionResponse {
   content: string;
   /** URL citations from web search-enabled models - empty array if none */
   citations: string[];
+  /** Metadata about the API call (for debugging/testing) */
+  metadata?: AIResponseMetadata;
 }
 
 /**
@@ -55,6 +58,7 @@ export interface ResponsesOptions {
 export interface ResponsesResult {
   content: string;
   citations: string[];
+  metadata?: AIResponseMetadata;
 }
 
 export interface ImageGenerationOptions {
@@ -199,6 +203,7 @@ export class OpenAIClient implements ChatClient {
     return {
       content: result.content,
       citations: result.citations,
+      metadata: result.metadata,
     };
   }
 
@@ -241,6 +246,7 @@ export class OpenAIClient implements ChatClient {
     }
 
     const data = (await response.json()) as {
+      model: string;
       choices: Array<{
         message: {
           content: string;
@@ -250,6 +256,11 @@ export class OpenAIClient implements ChatClient {
           }>;
         };
       }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
     };
 
     const message = data.choices[0].message;
@@ -286,7 +297,24 @@ export class OpenAIClient implements ChatClient {
       }
     }
 
-    return { content, citations };
+    // Build metadata from actual API response
+    const metadata: AIResponseMetadata = {
+      provider: 'openai',
+      model: data.model,
+      api: 'chat_completions',
+      usage: data.usage
+        ? {
+            inputTokens: data.usage.prompt_tokens ?? null,
+            outputTokens: data.usage.completion_tokens ?? null,
+            totalTokens: data.usage.total_tokens ?? null,
+          }
+        : undefined,
+      features: {
+        citationsReturned: citations.length > 0,
+      },
+    };
+
+    return { content, citations, metadata };
   }
 
   /**
@@ -358,6 +386,7 @@ export class OpenAIClient implements ChatClient {
     }
 
     const data = (await response.json()) as {
+      model: string;
       output_text?: string;
       output?: Array<{
         type: string;
@@ -371,31 +400,45 @@ export class OpenAIClient implements ChatClient {
           }>;
         }>;
       }>;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        total_tokens?: number;
+      };
     };
 
-    return this.parseResponsesResult(data);
+    return this.parseResponsesResult(data, options);
   }
 
   /**
    * Parse the Responses API result into our common format.
    * Extracts content from output_text helper or output[].content[].text,
-   * and citations from annotations.
+   * and citations from annotations. Also extracts metadata from the response.
    */
-  private parseResponsesResult(data: {
-    output_text?: string | null;
-    output?: Array<{
-      type: string;
-      content?: Array<{
+  private parseResponsesResult(
+    data: {
+      model: string;
+      output_text?: string | null;
+      output?: Array<{
         type: string;
-        text?: string;
-        annotations?: Array<{
+        content?: Array<{
           type: string;
-          url?: string;
-          title?: string;
+          text?: string;
+          annotations?: Array<{
+            type: string;
+            url?: string;
+            title?: string;
+          }>;
         }>;
       }>;
-    }>;
-  }): ResponsesResult {
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        total_tokens?: number;
+      };
+    },
+    options: ResponsesOptions
+  ): ResponsesResult {
     const result: ResponsesResult = {
       content: '',
       citations: [],
@@ -406,11 +449,19 @@ export class OpenAIClient implements ChatClient {
       result.content = data.output_text;
     }
 
+    // Track if web search was actually performed
+    let webSearchUsed = false;
+
     // Extract content and citations from output array
     if (data.output) {
       const seenUrls = new Set<string>();
 
       for (const item of data.output) {
+        // Check if web search tool was called
+        if (item.type === 'web_search_call') {
+          webSearchUsed = true;
+        }
+
         if (item.type === 'message' && item.content) {
           for (const block of item.content) {
             // Extract text content if output_text wasn't available
@@ -434,6 +485,26 @@ export class OpenAIClient implements ChatClient {
         }
       }
     }
+
+    // Build metadata from actual API response
+    result.metadata = {
+      provider: 'openai',
+      model: data.model,
+      api: 'responses',
+      usage: data.usage
+        ? {
+            inputTokens: data.usage.input_tokens ?? null,
+            outputTokens: data.usage.output_tokens ?? null,
+            totalTokens: data.usage.total_tokens ?? null,
+          }
+        : undefined,
+      features: {
+        webSearchUsed,
+        reasoning: options.reasoning?.effort,
+        verbosity: options.text?.verbosity,
+        citationsReturned: result.citations.length > 0,
+      },
+    };
 
     return result;
   }

@@ -35,12 +35,44 @@ export interface ChatCompletionOptions {
 }
 
 /**
+ * Metadata about the AI API response (from actual API response, not config).
+ * Useful for debugging and verifying config changes actually take effect.
+ */
+export interface AIResponseMetadata {
+  /** Provider that handled the request */
+  provider: 'openai' | 'perplexity';
+  /** Actual model used (from API response) */
+  model: string;
+  /** Which API was used (OpenAI has multiple) */
+  api: 'responses' | 'chat_completions';
+  /** Token usage from API response */
+  usage?: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+  };
+  /** Features that were actually used in this request */
+  features?: {
+    /** Whether web search was performed (OpenAI Responses API) */
+    webSearchUsed?: boolean;
+    /** Reasoning effort level if reasoning was used */
+    reasoning?: ReasoningEffort;
+    /** Verbosity level if set */
+    verbosity?: Verbosity;
+    /** Whether citations were returned */
+    citationsReturned?: boolean;
+  };
+}
+
+/**
  * Common response format
  */
 export interface ChatCompletionResponse {
   content: string;
   /** Source URLs from web search - empty array if none */
   citations: string[];
+  /** Metadata about the API call (for debugging/testing) */
+  metadata?: AIResponseMetadata;
 }
 
 /**

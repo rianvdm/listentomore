@@ -1,12 +1,13 @@
 // Genre summary prompt - generates genre descriptions with citations
 
 import { getTaskConfig } from '@listentomore/config';
-import type { ChatClient } from '../types';
+import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
 
 export interface GenreSummaryResult {
   content: string;
   citations: string[];
+  metadata?: AIResponseMetadata;
 }
 
 /**
@@ -123,11 +124,15 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
       const result: GenreSummaryResult = {
         content: formattedContent,
         citations: response.citations,
+        metadata: response.metadata,
       };
 
-      // Cache the result - await to ensure write completes before worker terminates
+      // Cache the result (without metadata - it's only for fresh responses)
       try {
-        await cache.set('genreSummary', [normalizedGenre], result);
+        await cache.set('genreSummary', [normalizedGenre], {
+          content: result.content,
+          citations: result.citations,
+        });
       } catch (err) {
         console.error(`[Genre Summary] Cache write failed for "${genreName}":`, err);
       }

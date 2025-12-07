@@ -3,7 +3,7 @@
 
 import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
-import type { ChatClient, ChatMessage } from './types';
+import type { ChatClient, ChatMessage, AIResponseMetadata } from './types';
 
 // Re-export for backwards compatibility
 export type { ChatMessage } from './types';
@@ -21,6 +21,8 @@ export interface ChatCompletionResponse {
   content: string;
   /** Source URLs from Perplexity's web search */
   citations: string[];
+  /** Metadata about the API call (for debugging/testing) */
+  metadata?: AIResponseMetadata;
 }
 
 /** Rate limit window tracking */
@@ -102,11 +104,18 @@ export class PerplexityClient implements ChatClient {
     }
 
     const data = (await response.json()) as {
+      model: string;
       choices: Array<{ message: { content: string } }>;
       citations?: string[];
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
     };
 
     let content = data.choices[0].message.content;
+    const citations = options.returnCitations === false ? [] : (data.citations ?? []);
 
     // When citations are requested, keep markers like [1], [2] in the content
     // They will be transformed to superscript links client-side
@@ -118,9 +127,27 @@ export class PerplexityClient implements ChatClient {
       content = content.replace(/\s*\[\d+\]/g, '');
     }
 
+    // Build metadata from actual API response
+    const metadata: AIResponseMetadata = {
+      provider: 'perplexity',
+      model: data.model,
+      api: 'chat_completions',
+      usage: data.usage
+        ? {
+            inputTokens: data.usage.prompt_tokens ?? null,
+            outputTokens: data.usage.completion_tokens ?? null,
+            totalTokens: data.usage.total_tokens ?? null,
+          }
+        : undefined,
+      features: {
+        citationsReturned: citations.length > 0,
+      },
+    };
+
     return {
       content,
-      citations: options.returnCitations === false ? [] : (data.citations ?? []),
+      citations,
+      metadata,
     };
   }
 }

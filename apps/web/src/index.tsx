@@ -1237,6 +1237,7 @@ app.get('/api/v1/album', async (c) => {
       response.summary = {
         content: summaryResult.content,
         citations: summaryResult.citations,
+        metadata: summaryResult.metadata,
       };
     }
 
@@ -1291,6 +1292,7 @@ app.get('/api/v1/genre', async (c) => {
         summary: {
           content: result.content,
           citations: result.citations,
+          metadata: result.metadata,
         },
       },
     });
@@ -1312,12 +1314,14 @@ app.post('/api/v1/ask', async (c) => {
     }
 
     const ai = c.get('ai');
-    const response = await ai.askListenAI(question);
+    const result = await ai.askListenAI(question);
 
     return c.json({
       data: {
         question,
-        answer: response,
+        answer: result.response,
+        // Include metadata for debugging (shows actual model, API used, features, etc.)
+        metadata: result.metadata,
       },
     });
   } catch (error) {
@@ -1382,6 +1386,7 @@ app.get('/api/v1/artist', async (c) => {
       response.summary = {
         content: summaryResult.summary,
         citations: summaryResult.citations,
+        metadata: summaryResult.metadata,
       };
     }
 
@@ -1495,6 +1500,7 @@ app.get('/api/v1/album/recommendations', async (c) => {
         recommendations: {
           content: recommendations.content,
           citations: recommendations.citations,
+          metadata: recommendations.metadata,
         },
       },
     });

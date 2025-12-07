@@ -1,10 +1,12 @@
 // Listen AI prompt - Rick Rubin personality chatbot
 
 import { getTaskConfig } from '@listentomore/config';
-import type { ChatClient } from '../types';
+import type { ChatClient, AIResponseMetadata } from '../types';
 
 export interface ListenAIResult {
   response: string;
+  /** Metadata about the API call (for debugging/testing) */
+  metadata?: AIResponseMetadata;
 }
 
 /**
@@ -38,5 +40,6 @@ Keep responses to 4 sentences maximum. Be warm but wise.`,
 
   return {
     response: response.content.trim(),
+    metadata: response.metadata,
   };
 }

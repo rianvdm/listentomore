@@ -1,12 +1,13 @@
 // Album detail prompt - generates album summaries with citations
 
 import { getTaskConfig } from '@listentomore/config';
-import type { ChatClient } from '../types';
+import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
 
 export interface AlbumDetailResult {
   content: string;
   citations: string[];
+  metadata?: AIResponseMetadata;
 }
 
 /**
@@ -66,10 +67,14 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
   const result: AlbumDetailResult = {
     content: response.content,
     citations: response.citations,
+    metadata: response.metadata,
   };
 
-  // Cache the result
-  await cache.set('albumDetail', [normalizedArtist, normalizedAlbum], result);
+  // Cache the result (without metadata - it's only for fresh responses)
+  await cache.set('albumDetail', [normalizedArtist, normalizedAlbum], {
+    content: result.content,
+    citations: result.citations,
+  });
 
   return result;
 }
