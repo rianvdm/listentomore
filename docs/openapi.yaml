@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: Listen To More API
+  description: REST API for music discovery with AI-powered insights and cross-platform streaming links.
+  version: 1.0.0
+  contact:
+    url: https://github.com/rianvdm/listentomore
+
+servers:
+  - url: https://listentomore.com
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    ArtistParam:
+      name: artist
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+      description: Artist name
+
+    AlbumParam:
+      name: album
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+      description: Album name
+
+    QueryParam:
+      name: q
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+      description: Search query
+
+    IncludeParam:
+      name: include
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 100
+        pattern: '^[a-z,]+$'
+      description: Comma-separated list of fields to include
+
+paths:
+  /api/v1/album:
+    get:
+      summary: Get album information
+      description: Get comprehensive album information including metadata, AI-generated summary, and streaming links.
+      operationId: getAlbum
+      parameters:
+        - $ref: '#/components/parameters/ArtistParam'
+        - $ref: '#/components/parameters/AlbumParam'
+        - name: include
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+            pattern: '^(summary|links|tracks)(,(summary|links|tracks))*$'
+          description: "Comma-separated list: summary, links, tracks"
+      responses:
+        '200':
+          description: Album information
+        '400':
+          description: Missing or invalid parameters
+        '401':
+          description: Invalid or missing API key
+        '404':
+          description: Album not found
+        '429':
+          description: Rate limit exceeded
+
+  /api/v1/album/recommendations:
+    get:
+      summary: Get album recommendations
+      description: Get AI-generated album recommendations based on a source album.
+      operationId: getAlbumRecommendations
+      parameters:
+        - $ref: '#/components/parameters/ArtistParam'
+        - $ref: '#/components/parameters/AlbumParam'
+      responses:
+        '200':
+          description: Album recommendations
+        '400':
+          description: Missing or invalid parameters
+        '401':
+          description: Invalid or missing API key
+        '404':
+          description: Album not found
+        '429':
+          description: Rate limit exceeded
+
+  /api/v1/links:
+    get:
+      summary: Get streaming links
+      description: Get cross-platform streaming links for an album.
+      operationId: getLinks
+      parameters:
+        - $ref: '#/components/parameters/ArtistParam'
+        - $ref: '#/components/parameters/AlbumParam'
+      responses:
+        '200':
+          description: Streaming links
+        '400':
+          description: Missing or invalid parameters
+        '401':
+          description: Invalid or missing API key
+        '404':
+          description: Album not found
+        '429':
+          description: Rate limit exceeded
+
+  /api/v1/artist:
+    get:
+      summary: Get artist information
+      description: Get artist information with AI-generated summary and top albums.
+      operationId: getArtist
+      parameters:
+        - $ref: '#/components/parameters/QueryParam'
+        - name: include
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+            pattern: '^(summary|albums)(,(summary|albums))*$'
+          description: "Comma-separated list: summary, albums"
+      responses:
+        '200':
+          description: Artist information
+        '400':
+          description: Missing or invalid parameters
+        '401':
+          description: Invalid or missing API key
+        '404':
+          description: Artist not found
+        '429':
+          description: Rate limit exceeded
+
+  /api/v1/genre:
+    get:
+      summary: Get genre information
+      description: Get AI-generated information about a music genre.
+      operationId: getGenre
+      parameters:
+        - $ref: '#/components/parameters/QueryParam'
+      responses:
+        '200':
+          description: Genre information
+        '400':
+          description: Missing or invalid parameters
+        '401':
+          description: Invalid or missing API key
+        '404':
+          description: Genre not found
+        '429':
+          description: Rate limit exceeded
+
+  /api/v1/ask:
+    post:
+      summary: Ask the music AI
+      description: Chat with the music AI assistant.
+      operationId: askQuestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - question
+              properties:
+                question:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+                  description: Your question about music
+              additionalProperties: false
+      responses:
+        '200':
+          description: AI response
+        '400':
+          description: Missing or invalid question
+        '401':
+          description: Invalid or missing API key
+        '429':
+          description: Rate limit exceeded
