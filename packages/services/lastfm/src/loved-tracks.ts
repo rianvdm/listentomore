@@ -1,6 +1,7 @@
-// ABOUTME: Last.fm loved tracks functionality.
+// ABOUTME: Last.fm loved tracks functionality with caching.
 // ABOUTME: Fetches user's favorited/loved tracks.
 
+import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0';
@@ -31,9 +32,21 @@ export interface LastfmConfig {
 }
 
 export class LovedTracks {
-  constructor(private config: LastfmConfig) {}
+  constructor(
+    private config: LastfmConfig,
+    private cache?: KVNamespace
+  ) {}
 
   async getLovedTracks(limit: number = 10): Promise<LovedTrack[]> {
+    // Check cache first
+    const cacheKey = `lastfm:lovedtracks:${this.config.username}:${limit}`;
+    if (this.cache) {
+      const cached = await this.cache.get(cacheKey, 'json');
+      if (cached) {
+        return cached as LovedTrack[];
+      }
+    }
+
     const url = `${LASTFM_API_BASE}/?method=user.getlovedtracks&user=${encodeURIComponent(this.config.username)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&limit=${limit}`;
 
     const response = await fetchWithTimeout(url, { timeout: 'fast' });
@@ -45,7 +58,7 @@ export class LovedTracks {
     const data = (await response.json()) as LastfmLovedTracksResponse;
     const tracks = data.lovedtracks?.track || [];
 
-    return tracks.map((track) => ({
+    const results = tracks.map((track) => ({
       title: track.name,
       artist: track.artist?.name || '',
       dateLiked: track.date?.uts
@@ -54,5 +67,14 @@ export class LovedTracks {
       image: track.image?.find((img) => img.size === 'extralarge')?.['#text'] || null,
       songUrl: track.url,
     }));
+
+    // Cache results
+    if (this.cache) {
+      await this.cache.put(cacheKey, JSON.stringify(results), {
+        expirationTtl: getTtlSeconds(CACHE_CONFIG.lastfm.lovedTracks),
+      });
+    }
+
+    return results;
   }
 }

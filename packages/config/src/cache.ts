@@ -1,14 +1,8 @@
 // Centralized cache configuration for all services
 
 export const CACHE_CONFIG = {
-  // AI-generated content (expensive to regenerate)
-  ai: {
-    artistSummary: { ttlDays: 180 },
-    albumDetail: { ttlDays: 120 },
-    genreSummary: { ttlDays: 180 },
-    artistSentence: { ttlDays: 180 },
-    albumRecommendations: { ttlDays: 30 },
-  },
+  // NOTE: AI cache TTLs are defined in packages/config/src/ai.ts (AI_TASKS[task].cacheTtlDays)
+  // Do not add AI cache config here - use ai.ts for all AI-related caching
 
   // External API data (changes occasionally)
   spotify: {

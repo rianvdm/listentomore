@@ -40,7 +40,7 @@ export class LastfmService {
     this.topAlbums = new TopAlbums(config, config.cache);
     this.topArtists = new TopArtists(config, config.cache);
     this.artistDetails = new ArtistDetails(config, config.cache);
-    this.lovedTracks = new LovedTracks(config);
+    this.lovedTracks = new LovedTracks(config, config.cache);
   }
 
   // Convenience methods
