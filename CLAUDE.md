@@ -13,6 +13,18 @@ Music discovery web app built with **Hono on Cloudflare Workers**. Monorepo mana
 ```
 apps/
   web/              # Main Hono web app (Cloudflare Worker)
+    src/
+      index.tsx     # App entry, middleware, page routes
+      types.ts      # Shared Bindings/Variables types
+      api/          # API routes (modular structure)
+        index.ts    # API overview + route mounting
+        v1/         # Public API endpoints
+        internal/   # Token-protected internal endpoints
+        admin/      # Admin endpoints (keys, cache)
+      pages/        # Page components and handlers
+      components/   # UI components
+      middleware/   # Auth, rate limiting, logging
+      utils/        # Helpers and utilities
   discord-bot/      # Discord bot (separate Worker)
 packages/
   services/         # Backend services (spotify, lastfm, ai, songlink)
@@ -121,6 +133,65 @@ export async function handleExample(c: Context) {
 import { handleExample } from './pages/example';
 app.get('/example', handleExample);
 ```
+
+### Adding New API Routes
+
+API routes are organized in `apps/web/src/api/` using Hono's sub-app pattern:
+
+| Directory | Purpose | Auth |
+|-----------|---------|------|
+| `api/v1/` | Public API endpoints | Optional API key |
+| `api/internal/` | Progressive loading endpoints | HMAC token |
+| `api/admin/` | Admin operations | Admin secret or premium key |
+
+**Adding a new v1 endpoint:**
+
+```typescript
+// api/v1/my-endpoint.ts
+import { Hono } from 'hono';
+import type { Bindings, Variables } from '../../types';
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+app.get('/', async (c) => {
+  const spotify = c.get('spotify');
+  // ... endpoint logic
+  return c.json({ data: result });
+});
+
+export const myEndpointRoutes = app;
+
+// api/v1/index.ts - add the import and mount
+import { myEndpointRoutes } from './my-endpoint';
+app.route('/my-endpoint', myEndpointRoutes);
+```
+
+**Adding a new internal endpoint:**
+
+```typescript
+// api/internal/my-internal.ts
+import { Hono } from 'hono';
+import type { Bindings, Variables } from '../../types';
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+app.get('/my-internal-data', async (c) => {
+  const ai = c.get('ai');
+  // ... endpoint logic
+  return c.json({ data: result });
+});
+
+export const myInternalRoutes = app;
+
+// api/internal/index.ts - add the import and mount (flat paths)
+import { myInternalRoutes } from './my-internal';
+app.route('/', myInternalRoutes);  // Results in /api/internal/my-internal-data
+```
+
+**Key files:**
+- `apps/web/src/types.ts` - Shared `Bindings` and `Variables` types
+- `apps/web/src/api/index.ts` - Main API router, mounts all sub-routers
+- Middleware (auth, rate limiting) applies at `/api/*` level in `index.tsx`
 
 ### Adding New AI Calls
 
@@ -282,11 +353,13 @@ try {
 - Use `c.get('serviceName')` for data fetching
 - Use progressive loading for slow data (AI, external APIs)
 - Use `Promise.all()` for parallel independent fetches
-- Add routes to `apps/web/src/index.tsx`
+- Add page routes to `apps/web/src/index.tsx`
+- Add API routes to `apps/web/src/api/{v1,internal,admin}/`
 - Return HTML with `c.html(<Component />)`
 - Use `internalFetch()` for all `/api/internal/*` calls
 - Pass `internalToken` to Layout for pages using internal APIs
 - Use `getTtlSeconds(CACHE_CONFIG.x.y)` for cache TTLs
+- Import types from `apps/web/src/types.ts` in API route files
 
 ### Don't
 
@@ -297,6 +370,45 @@ try {
 - Create duplicate components - check `components/ui/` first
 - Use regular `fetch()` for internal APIs
 - Cache user-specific data that changes frequently
+- Define API routes inline in `index.tsx` (use `api/` directory)
+
+---
+
+## API Route Structure
+
+The API is organized into modular sub-applications under `apps/web/src/api/`:
+
+```
+api/
+├── index.ts              # GET /api - overview, mounts all sub-routers
+├── v1/                   # Public API (optional API key auth)
+│   ├── index.ts          # Mounts all v1 routes
+│   ├── album.ts          # GET /api/v1/album, /api/v1/album/recommendations
+│   ├── artist.ts         # GET /api/v1/artist
+│   ├── genre.ts          # GET /api/v1/genre
+│   ├── ask.ts            # POST /api/v1/ask
+│   ├── links.ts          # GET /api/v1/links
+│   └── random-fact.ts    # GET /api/v1/random-fact
+├── internal/             # Progressive loading (HMAC token auth)
+│   ├── index.ts          # Mounts all internal routes (flat paths)
+│   ├── album.ts          # /album-summary, /album-recommendations
+│   ├── artist.ts         # /artist-summary, /artist-sentence
+│   ├── genre.ts          # /genre-summary
+│   ├── search.ts         # /search
+│   ├── streaming.ts      # /streaming-links
+│   └── user.ts           # /user-stats, /user-top-*, /user-recent-tracks
+└── admin/                # Admin operations
+    ├── index.ts          # Exports authRoutes and cacheRoutes
+    ├── keys.ts           # POST /api/auth/keys (admin secret)
+    └── cache.ts          # GET/DELETE /api/cache (premium tier)
+```
+
+**Middleware chain** (applied in `index.tsx` before routes):
+1. `authMiddleware` - Validates API keys, sets `apiKey` in context
+2. `requireAuth` - Enforces auth for specific routes
+3. `userRateLimitMiddleware` - Rate limits by API key tier
+4. `apiLoggingMiddleware` - Logs API requests
+5. `internalAuthMiddleware` - Validates HMAC tokens for `/api/internal/*`
 
 ---
 
