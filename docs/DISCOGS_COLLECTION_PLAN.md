@@ -1727,18 +1727,18 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 **Goal:** Set up basic infrastructure
 
 **Prerequisites:**
-- [ ] Register OAuth app at https://www.discogs.com/settings/developers
-- [ ] Add OAuth credentials to `.dev.vars` (local)
+- [x] Register OAuth app at https://www.discogs.com/settings/developers
+- [x] Add OAuth credentials to `.dev.vars` (local)
 - [ ] Add OAuth credentials via `wrangler secret put` (production)
-- [ ] Add `discogs_username` column to `users` table
+- [x] Add `discogs_username` column to `users` table (already existed)
 
 **Implementation:**
-- [ ] Create `DiscogsService` in `packages/services/discogs`
-- [ ] Implement OAuth 1.0a flow (request token → authorize → access token)
-- [ ] Add OAuth routes: `/auth/discogs/connect`, `/auth/discogs/callback`, `/auth/discogs/disconnect`
+- [x] Create `DiscogsService` in `packages/services/discogs`
+- [x] Implement OAuth 1.0a flow (request token → authorize → access token)
+- [x] Add OAuth routes: `/auth/discogs/connect`, `/auth/discogs/callback`, `/auth/discogs/disconnect`
 - [ ] Test OAuth flow with your personal account
-- [ ] Verify tokens stored securely in `oauth_tokens` table
-- [ ] Add "Connect Discogs" button to account settings page
+- [x] Verify tokens stored securely in `oauth_tokens` table (migration 005 created)
+- [x] Add "Connect Discogs" button to user stats page (`/u/:username`)
 
 **Deliverables:**
 - Users can connect Discogs account via OAuth
@@ -1749,17 +1749,17 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 
 **Goal:** Fetch and cache collection data
 
-- [ ] Implement `DiscogsCollectionSync` service
-- [ ] Add API route: `POST /api/internal/discogs-sync`
-- [ ] Test full collection fetch (all pages)
-- [ ] Implement cache storage in KV
-- [ ] Add sync lock mechanism
-- [ ] Test with large collection (500+ releases)
+- [x] Implement `DiscogsCollectionSync` service (in `packages/services/discogs/src/collection.ts`)
+- [x] Add API route: `POST /api/internal/discogs-sync`
+- [x] Test full collection fetch (all pages) - **1,497 releases synced successfully**
+- [x] Implement cache storage in KV
+- [x] Add sync lock mechanism (4-hour cooldown)
+- [x] Test with large collection (500+ releases) - **Tested with 1,497 releases**
 
 **Deliverables:**
-- Users can trigger manual sync
-- Collection data cached in KV
-- Stats calculated and stored
+- [x] Users can trigger manual sync
+- [x] Collection data cached in KV
+- [x] Stats calculated and stored
 
 ### Phase 3: Background Enrichment (Week 5)
 
