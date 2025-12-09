@@ -30,34 +30,57 @@
 
 ---
 
-## 🚧 What's Next (Phase 4)
+## 🚧 What's Next (Phase 4 & 5)
 
-### Goal: Move stats to dedicated `/u/:username/collection` page
+### Correct Page Structure (from plan):
 
-Currently, the collection stats are displayed **inline** on the main user stats page (`/u/bordesak`). According to the plan, they should be on a **separate page** at `/u/:username/collection`.
+1. **`/u/:username`** - Main user stats page
+   - Show: "6 most recently added albums" from Discogs collection
+   - Link to → `/u/:username/collection` for full stats
+
+2. **`/u/:username/collection`** - Collection stats dashboard
+   - Stats overview (counts, totals)
+   - Charts: genre distribution, format breakdown, top artists, releases by year
+   - "Refresh Collection" button
+   - Link to → `/u/:username/collection/all` for full filterable list
+
+3. **`/u/:username/collection/all`** - Full collection list
+   - All 1,497 releases
+   - Filtering: genre, format, decade, style
+   - Search functionality
+   - Pagination (25 per page)
+   - Sort: date added, artist name
 
 ### What Needs to Be Done:
 
-1. **Create new page:** `apps/web/src/pages/user/collection/stats.tsx`
-   - Move the Discogs stats display logic from `user/stats.tsx` to this new page
-   - Add Chart.js v4 for visualizations (genre pie chart, format breakdown, etc.)
-   - Add privacy checks (respect `profile_visibility` setting)
+**Phase 4: Stats Page (`/u/:username/collection`)**
 
-2. **Create route:** `/u/:username/collection`
-   - Register in `apps/web/src/index.tsx`
-   - Fetch collection stats server-side
-   - Render `CollectionStatsPage` component
+1. **Create:** `apps/web/src/pages/user/collection/stats.tsx`
+   - Stats dashboard with charts (Chart.js v4)
+   - Genre distribution pie chart
+   - Format breakdown bar chart
+   - Top artists bar chart
+   - Releases by year line chart
+   - Privacy checks
+   - "Refresh Collection" button
 
-3. **Update main user page:** `apps/web/src/pages/user/stats.tsx`
-   - Replace inline stats with a simple summary + link
-   - Show: "📀 Vinyl Collection - 1,497 records → [View Collection](/u/bordesak/collection)"
-   - Keep the "Connect Discogs" button if not connected
+2. **Update:** `apps/web/src/pages/user/stats.tsx`
+   - Replace current inline stats with "6 most recently added albums"
+   - Show album covers in grid
+   - Link to `/u/:username/collection` for full stats
 
-4. **Add charts** (using Chart.js v4):
-   - Genre distribution (pie chart)
-   - Format breakdown (bar chart)
-   - Top artists (bar chart)
-   - Releases by year (line chart)
+3. **Create route:** `/u/:username/collection` in `index.tsx`
+
+**Phase 5: Full List Page (`/u/:username/collection/all`)**
+
+1. **Create:** `apps/web/src/pages/user/collection/list.tsx`
+   - Full collection list (all 1,497 releases)
+   - Client-side filtering (genre, format, decade, style)
+   - Client-side search
+   - Pagination (25 per page)
+   - Sort options
+
+2. **Create route:** `/u/:username/collection/all` in `index.tsx`
 
 ---
 

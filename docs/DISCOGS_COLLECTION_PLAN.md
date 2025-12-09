@@ -8,8 +8,9 @@
 - **Phase 1: Foundation** - OAuth flow, token storage, production deployment ✅
 - **Phase 2: Collection Sync** - Full sync working, 1,497 releases cached in production ✅
 
-### 🚧 In Progress:
-- **Phase 4: Stats UI** - Need to move stats to dedicated `/u/:username/collection` page
+### 🚧 Next Up:
+- **Phase 4: Stats UI** - Create dedicated `/u/:username/collection` page with charts
+- **Update `/u/:username`** - Show "6 most recently added albums" instead of inline stats
 
 ### 📊 Production Stats (as of 2025-12-09):
 - **User:** bordesak (elezea-records on Discogs)
@@ -1833,33 +1834,50 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 - Releases progressively enriched with master data
 - Original year, genres, styles populated
 
-### Phase 4: Stats UI 🚧 **IN PROGRESS**
+### Phase 4: Stats UI 🚧 **NEXT UP**
 
 **Goal:** Build dedicated collection stats dashboard page
 
 **Current State:**
 - ✅ Stats currently displayed inline on `/u/:username` page
 - ✅ Basic stats working (counts, genres, formats, year range)
-- ⚠️ Need to move to dedicated `/u/:username/collection` route
+- ⚠️ Need to create dedicated `/u/:username/collection` route
+- ⚠️ Need to change `/u/:username` to show "6 most recently added albums"
+
+**Page Structure (as designed in plan):**
+1. `/u/:username` - Main user page → Show 6 most recently added albums + link to collection
+2. `/u/:username/collection` - Stats dashboard → Charts, stats, "Refresh" button
+3. `/u/:username/collection/all` - Full list → Filtering, search, pagination (Phase 5)
 
 **Implementation:**
-- [ ] Create `/u/:username/collection` route (separate from main stats page)
-- [ ] Build `CollectionStatsPage` component in `apps/web/src/pages/user/collection/stats.tsx`
-- [ ] Move existing stats display code from user stats page to new page
-- [ ] Add chart components (genre distribution, format breakdown, top artists, releases by year)
-  - Use Chart.js v4 (60KB, framework-agnostic - see Chart Library Decision section)
-- [ ] Implement privacy checks (respect `profile_visibility` setting)
-- [ ] Add "Refresh Collection" button for owners (with 4-hour cooldown)
-- [ ] Add link from `/u/:username` to `/u/:username/collection`
-- [ ] Test with different collection sizes
-- [ ] Add empty state when collection not synced
+- [ ] **Update** `/u/:username` page (main user stats):
+  - [ ] Replace inline stats with "6 most recently added albums"
+  - [ ] Show album covers in grid layout
+  - [ ] Add link: "View Full Collection Stats →" pointing to `/u/:username/collection`
+  - [ ] Keep "Connect Discogs" button if not connected
+  - [ ] Keep "Sync Collection" button if connected but not synced
+
+- [ ] **Create** `/u/:username/collection` route (stats dashboard):
+  - [ ] Build `CollectionStatsPage` component in `apps/web/src/pages/user/collection/stats.tsx`
+  - [ ] Show full stats (counts, totals, year range)
+  - [ ] Add chart components using Chart.js v4:
+    - Genre distribution (pie chart)
+    - Format breakdown (bar chart)
+    - Top artists (bar chart)
+    - Releases by year (line chart)
+  - [ ] Implement privacy checks (respect `profile_visibility` setting)
+  - [ ] Add "Refresh Collection" button for owners (with 4-hour cooldown)
+  - [ ] Add link: "Browse Full Collection →" pointing to `/u/:username/collection/all`
+  - [ ] Register route in `apps/web/src/index.tsx`
+  - [ ] Test with different collection sizes
+  - [ ] Add empty state when collection not synced
 
 **Deliverables:**
-- Dedicated stats page at `/u/:username/collection`
-- Charts visualizing genre/format distribution
+- Main user page shows 6 most recently added albums
+- Dedicated stats page at `/u/:username/collection` with charts
 - Privacy controls working
-- Sync button functional on dedicated page
-- Link from main user page to collection page
+- Sync button functional on stats page
+- Links between pages working correctly
 
 ### Phase 5: Full Collection List (Weeks 8-9)
 
