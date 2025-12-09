@@ -19,7 +19,12 @@ const ALLOWED_ORIGINS = [
 ];
 
 // Development origins (only allowed when ENVIRONMENT !== 'production')
-const DEV_ORIGINS = ['http://localhost:8787', 'http://127.0.0.1:8787'];
+const DEV_ORIGINS = [
+  'http://localhost:8787',
+  'http://localhost:8788',
+  'http://127.0.0.1:8787',
+  'http://127.0.0.1:8788',
+];
 
 /**
  * CORS middleware configured for this application

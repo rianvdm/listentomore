@@ -55,8 +55,12 @@ app.use('*', async (c, next) => {
 
 // Apply origin validation to API routes (in production)
 // Skip for OAuth routes since they're browser-based redirects
+// Skip for internal routes since they use token auth instead
 app.use('/api/*', async (c, next) => {
   if (c.req.path.startsWith('/api/auth/discogs/')) {
+    return next();
+  }
+  if (c.req.path.startsWith('/api/internal/')) {
     return next();
   }
   const middleware = originValidationMiddleware({ ENVIRONMENT: c.env.ENVIRONMENT });

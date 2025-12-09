@@ -36,8 +36,12 @@ app.get('/connect', async (c) => {
     });
 
     // Determine callback URL based on request
+    // In local dev, use the Host header to get the correct origin
     const url = new URL(c.req.url);
-    const callbackUrl = `${url.origin}/api/auth/discogs/callback`;
+    const host = c.req.header('Host');
+    const protocol = c.req.header('X-Forwarded-Proto') || url.protocol.replace(':', '');
+    const origin = host ? `${protocol}://${host}` : url.origin;
+    const callbackUrl = `${origin}/api/auth/discogs/callback`;
 
     const { token, secret } = await oauthService.getRequestToken(callbackUrl);
 
