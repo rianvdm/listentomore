@@ -1731,6 +1731,11 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 - [x] Add OAuth credentials to `.dev.vars` (local)
 - [x] Add OAuth credentials via `wrangler secret put` (production) ✅ **Set on 2025-12-08**
 - [x] Add `discogs_username` column to `users` table (already existed)
+- [ ] Run `005_oauth_tokens.sql` migration on production D1 before deploying:
+  ```bash
+  cd apps/web
+  npx wrangler d1 execute listentomore --remote --file=../../packages/db/src/migrations/005_oauth_tokens.sql
+  ```
 
 **Implementation:**
 - [x] Create `DiscogsService` in `packages/services/discogs`
