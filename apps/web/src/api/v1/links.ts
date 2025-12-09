@@ -52,11 +52,10 @@ app.get('/', async (c) => {
           listentomore: `https://listentomore.com/album/${albumData.id}`,
           spotify: albumData.url,
           appleMusic: links.appleMusic?.url || null,
-          youtube: links.youtube?.url || null,
+          songlink: links.songlink,
         },
         confidence: {
           appleMusic: links.appleMusic?.confidence || null,
-          youtube: links.youtube?.confidence || null,
         },
       },
     });

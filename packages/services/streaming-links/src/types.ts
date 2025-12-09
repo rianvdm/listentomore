@@ -54,6 +54,8 @@ export interface StreamingProvider {
 export interface StreamingLinksResult {
   appleMusic: ProviderResult | null;
   youtube: ProviderResult | null;
+  /** Songlink URL in format https://song.link/{spotifyUrl} */
+  songlink: string | null;
   source: TrackMetadata | AlbumMetadata;
   cached: boolean;
 }

@@ -18,7 +18,7 @@ export { YouTubeProvider } from './providers/youtube';
 export interface StreamingLinks {
   pageUrl: string;
   appleUrl: string | null;
-  youtubeUrl: string | null;
+  songlinkUrl: string | null;
   deezerUrl: string | null;
   spotifyUrl: string | null;
   tidalUrl: string | null;
@@ -51,7 +51,8 @@ interface SpotifyAlbumForMetadata {
 
 export class StreamingLinksService {
   private appleMusic: AppleMusicProvider;
-  private youtube: YouTubeProvider;
+  // YouTube provider kept for potential future use but not currently called in getTrackLinks/getAlbumLinks
+  private youtubeProvider: YouTubeProvider;
 
   constructor(
     private cache: KVNamespace,
@@ -61,7 +62,14 @@ export class StreamingLinksService {
     } = {}
   ) {
     this.appleMusic = new AppleMusicProvider(config.appleMusic);
-    this.youtube = new YouTubeProvider(config.youtubeApiKey);
+    this.youtubeProvider = new YouTubeProvider(config.youtubeApiKey);
+  }
+
+  /**
+   * Get the YouTube provider for direct use if needed
+   */
+  get youtube(): YouTubeProvider {
+    return this.youtubeProvider;
   }
 
   /**
@@ -79,15 +87,17 @@ export class StreamingLinksService {
 
     console.log(`[StreamingLinks] Fetching links for track: ${metadata.name} by ${metadata.artists.join(', ')}`);
 
-    // Query providers in parallel
-    const [appleResult, youtubeResult] = await Promise.all([
-      this.appleMusic.searchTrack(metadata),
-      this.youtube.searchTrack(metadata),
-    ]);
+    // Query Apple Music (YouTube provider kept but not called - use songlink instead)
+    const appleResult = await this.appleMusic.searchTrack(metadata);
+
+    // Generate songlink URL from Spotify ID
+    const spotifyUrl = `https://open.spotify.com/track/${metadata.id}`;
+    const songlinkUrl = `https://song.link/${spotifyUrl}`;
 
     const result: StreamingLinksResult = {
       appleMusic: appleResult,
-      youtube: youtubeResult,
+      youtube: null, // YouTube provider available but not used; songlink provides more services
+      songlink: songlinkUrl,
       source: metadata,
       cached: false,
     };
@@ -115,15 +125,17 @@ export class StreamingLinksService {
 
     console.log(`[StreamingLinks] Fetching links for album: ${metadata.name} by ${metadata.artists.join(', ')}`);
 
-    // Query providers in parallel
-    const [appleResult, youtubeResult] = await Promise.all([
-      this.appleMusic.searchAlbum(metadata),
-      this.youtube.searchAlbum(metadata),
-    ]);
+    // Query Apple Music (YouTube provider kept but not called - use songlink instead)
+    const appleResult = await this.appleMusic.searchAlbum(metadata);
+
+    // Generate songlink URL from Spotify ID
+    const spotifyUrl = `https://open.spotify.com/album/${metadata.id}`;
+    const songlinkUrl = `https://song.link/${spotifyUrl}`;
 
     const result: StreamingLinksResult = {
       appleMusic: appleResult,
-      youtube: youtubeResult,
+      youtube: null, // YouTube provider available but not used; songlink provides more services
+      songlink: songlinkUrl,
       source: metadata,
       cached: false,
     };
@@ -188,7 +200,7 @@ export class StreamingLinksService {
       return {
         pageUrl: '', // No Songlink page anymore
         appleUrl: result.appleMusic?.url || null,
-        youtubeUrl: result.youtube?.url || null,
+        songlinkUrl: result.songlink,
         deezerUrl: null, // Not implemented yet
         spotifyUrl: spotifyUrl,
         tidalUrl: null, // Not implemented yet
@@ -204,7 +216,7 @@ export class StreamingLinksService {
       return {
         pageUrl: '',
         appleUrl: result.appleMusic?.url || null,
-        youtubeUrl: result.youtube?.url || null,
+        songlinkUrl: result.songlink,
         deezerUrl: null,
         spotifyUrl: spotifyUrl,
         tidalUrl: null,
@@ -219,7 +231,7 @@ export class StreamingLinksService {
     return {
       pageUrl: '',
       appleUrl: null,
-      youtubeUrl: null,
+      songlinkUrl: null,
       deezerUrl: null,
       spotifyUrl: spotifyUrl,
       tidalUrl: null,

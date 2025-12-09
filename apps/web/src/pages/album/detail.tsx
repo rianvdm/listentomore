@@ -141,7 +141,7 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
               var links = data.data;
               var html = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a><br/>';
               if (links.appleUrl) html += '<a href="' + links.appleUrl + '" target="_blank" rel="noopener noreferrer">Apple Music ↗</a><br/>';
-              if (links.youtubeUrl) html += '<a href="' + links.youtubeUrl + '" target="_blank" rel="noopener noreferrer">YouTube ↗</a><br/>';
+              if (links.songlinkUrl) html += '<a href="' + links.songlinkUrl + '" target="_blank" rel="noopener noreferrer">More services ↗</a><br/>';
               document.getElementById('streaming-links').innerHTML = html;
             })
             .catch(function(e) {

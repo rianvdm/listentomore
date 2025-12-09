@@ -41,7 +41,7 @@ app.get('/streaming-links', async (c) => {
         data: {
           pageUrl: '',
           appleUrl: links.appleMusic?.url || null,
-          youtubeUrl: links.youtube?.url || null,
+          songlinkUrl: links.songlink,
           deezerUrl: null,
           spotifyUrl: album.url,
           tidalUrl: null,

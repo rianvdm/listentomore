@@ -93,11 +93,10 @@ app.get('/', async (c) => {
         listentomore: `https://listentomore.com/album/${albumData.id}`,
         spotify: albumData.url,
         appleMusic: linksResult.appleMusic?.url || null,
-        youtube: linksResult.youtube?.url || null,
+        songlink: linksResult.songlink,
       };
       response.confidence = {
         appleMusic: linksResult.appleMusic?.confidence || null,
-        youtube: linksResult.youtube?.confidence || null,
       };
     } else {
       // Always include listentomore link even if streaming links not requested

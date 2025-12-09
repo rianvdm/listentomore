@@ -29,6 +29,5 @@ export interface Track {
 export interface StreamingLinks {
   spotify: string | null;
   appleMusic: string | null;
-  youtube: string | null;
-  songLink: string | null;
+  songlink: string | null;
 }
