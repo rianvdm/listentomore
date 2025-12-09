@@ -2,6 +2,8 @@
 
 export { DiscogsClient } from './client';
 export { DiscogsCollection } from './collection';
+export { DiscogsOAuthService, encryptToken, decryptToken } from './oauth';
+export type { DiscogsOAuthConfig, OAuthTokenPair } from './oauth';
 export type * from './types';
 
 import { DiscogsCollection } from './collection';

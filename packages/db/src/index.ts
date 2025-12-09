@@ -13,6 +13,8 @@ import type {
   ApiKeyTier,
   ApiKeyScope,
   ParsedApiKey,
+  OAuthToken,
+  OAuthProvider,
 } from './schema';
 import { parseApiKey, TIER_RATE_LIMITS } from './schema';
 
@@ -530,5 +532,73 @@ export class Database {
       return TIER_RATE_LIMITS.public;
     }
     return apiKey.rate_limit_rpm ?? TIER_RATE_LIMITS[apiKey.tier];
+  }
+
+  // ============================================================================
+  // OAuth Token Methods
+  // ============================================================================
+
+  /**
+   * Store or update an OAuth token for a user/provider
+   */
+  async storeOAuthToken(data: {
+    userId: string;
+    provider: OAuthProvider;
+    accessToken: string; // Already encrypted
+    refreshToken?: string; // Already encrypted (token secret for OAuth 1.0a)
+    tokenType?: string;
+    scope?: string;
+    expiresAt?: string;
+    providerUserId?: string;
+    providerUsername?: string;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO oauth_tokens (
+          user_id, provider, access_token_encrypted, refresh_token_encrypted,
+          token_type, scope, expires_at, provider_user_id, provider_username
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, provider) DO UPDATE SET
+          access_token_encrypted = excluded.access_token_encrypted,
+          refresh_token_encrypted = excluded.refresh_token_encrypted,
+          token_type = excluded.token_type,
+          scope = excluded.scope,
+          expires_at = excluded.expires_at,
+          provider_user_id = excluded.provider_user_id,
+          provider_username = excluded.provider_username,
+          updated_at = datetime('now')`
+      )
+      .bind(
+        data.userId,
+        data.provider,
+        data.accessToken,
+        data.refreshToken || null,
+        data.tokenType || 'Bearer',
+        data.scope || null,
+        data.expiresAt || null,
+        data.providerUserId || null,
+        data.providerUsername || null
+      )
+      .run();
+  }
+
+  /**
+   * Get OAuth token for a user/provider
+   */
+  async getOAuthToken(userId: string, provider: OAuthProvider): Promise<OAuthToken | null> {
+    return this.db
+      .prepare('SELECT * FROM oauth_tokens WHERE user_id = ? AND provider = ?')
+      .bind(userId, provider)
+      .first<OAuthToken>();
+  }
+
+  /**
+   * Delete OAuth token for a user/provider
+   */
+  async deleteOAuthToken(userId: string, provider: OAuthProvider): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM oauth_tokens WHERE user_id = ? AND provider = ?')
+      .bind(userId, provider)
+      .run();
   }
 }

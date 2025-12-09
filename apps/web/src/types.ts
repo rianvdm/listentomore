@@ -38,6 +38,8 @@ export type Bindings = {
   DISCOGS_PERSONAL_TOKEN?: string;
   DISCOGS_OAUTH_CONSUMER_KEY?: string;
   DISCOGS_OAUTH_CONSUMER_SECRET?: string;
+  // OAuth encryption key for storing tokens securely
+  OAUTH_ENCRYPTION_KEY?: string;
 };
 
 // Context variables (set by middleware)

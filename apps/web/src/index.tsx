@@ -54,7 +54,11 @@ app.use('*', async (c, next) => {
 });
 
 // Apply origin validation to API routes (in production)
+// Skip for OAuth routes since they're browser-based redirects
 app.use('/api/*', async (c, next) => {
+  if (c.req.path.startsWith('/api/auth/discogs/')) {
+    return next();
+  }
   const middleware = originValidationMiddleware({ ENVIRONMENT: c.env.ENVIRONMENT });
   return middleware(c, next);
 });
@@ -144,6 +148,10 @@ app.use('/api/*', authMiddleware());
 app.use('/api/*', async (c, next) => {
   // Skip auth requirement for key creation endpoint (uses admin secret instead)
   if (c.req.path === '/api/auth/keys') {
+    return next();
+  }
+  // Skip auth for OAuth endpoints (they use browser redirects, not API keys)
+  if (c.req.path.startsWith('/api/auth/discogs/')) {
     return next();
   }
   // Skip auth for internal endpoints (they use signed token auth instead)

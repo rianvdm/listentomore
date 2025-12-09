@@ -77,6 +77,24 @@ export interface RateLimit {
   updated_at: string;
 }
 
+// OAuth token storage for connected services
+export type OAuthProvider = 'discogs' | 'spotify';
+
+export interface OAuthToken {
+  id: string;
+  user_id: string;
+  provider: OAuthProvider;
+  access_token_encrypted: string;
+  refresh_token_encrypted: string | null; // For OAuth 1.0a, stores token secret
+  token_type: string;
+  scope: string | null;
+  expires_at: string | null;
+  provider_user_id: string | null;
+  provider_username: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // API Key types
 export type ApiKeyTier = 'public' | 'standard' | 'premium';
 export type ApiKeyScope = 'read' | 'write' | 'ai';
