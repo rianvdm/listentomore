@@ -11,7 +11,11 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 export class DiscogsClient {
   private accessToken: string;
+  private accessTokenSecret?: string;
+  private consumerKey?: string;
+  private consumerSecret?: string;
   private userAgent: string;
+  private useOAuth: boolean;
   private rateLimitInfo: RateLimitInfo = {
     remaining: RATE_LIMIT_AUTHENTICATED,
     limit: RATE_LIMIT_AUTHENTICATED,
@@ -20,7 +24,12 @@ export class DiscogsClient {
 
   constructor(config: DiscogsConfig) {
     this.accessToken = config.accessToken;
+    this.accessTokenSecret = config.accessTokenSecret;
+    this.consumerKey = config.consumerKey;
+    this.consumerSecret = config.consumerSecret;
     this.userAgent = config.userAgent || DEFAULT_USER_AGENT;
+    // Use OAuth 1.0a if we have all the credentials
+    this.useOAuth = !!(config.accessTokenSecret && config.consumerKey && config.consumerSecret);
   }
 
   /**
@@ -50,8 +59,18 @@ export class DiscogsClient {
       });
     }
 
+    // Build authorization header
+    let authHeader: string;
+    if (this.useOAuth && this.consumerKey && this.consumerSecret && this.accessTokenSecret) {
+      // OAuth 1.0a - sign the request
+      authHeader = await this.buildOAuthHeader(method, url.toString());
+    } else {
+      // Personal access token
+      authHeader = `Discogs token=${this.accessToken}`;
+    }
+
     const headers: Record<string, string> = {
-      Authorization: `Discogs token=${this.accessToken}`,
+      Authorization: authHeader,
       'User-Agent': this.userAgent,
       Accept: 'application/vnd.discogs.v2.discogs+json',
     };
@@ -124,5 +143,98 @@ export class DiscogsClient {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Build OAuth 1.0a Authorization header
+   */
+  private async buildOAuthHeader(method: string, urlString: string): Promise<string> {
+    const url = new URL(urlString);
+    
+    const oauthParams: Record<string, string> = {
+      oauth_consumer_key: this.consumerKey!,
+      oauth_nonce: this.generateNonce(),
+      oauth_signature_method: 'HMAC-SHA1',
+      oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+      oauth_token: this.accessToken,
+      oauth_version: '1.0',
+    };
+
+    // Collect all parameters (OAuth + query string)
+    const allParams: Record<string, string> = { ...oauthParams };
+    url.searchParams.forEach((value, key) => {
+      allParams[key] = value;
+    });
+
+    // Generate signature
+    const signature = await this.generateSignature(
+      method,
+      `${url.origin}${url.pathname}`,
+      allParams
+    );
+
+    // Build header
+    const headerParams = Object.keys(oauthParams)
+      .sort()
+      .map((key) => `${this.percentEncode(key)}="${this.percentEncode(oauthParams[key])}"`)
+      .join(', ');
+
+    return `OAuth ${headerParams}, oauth_signature="${this.percentEncode(signature)}"`;
+  }
+
+  /**
+   * Generate OAuth signature using HMAC-SHA1
+   */
+  private async generateSignature(
+    method: string,
+    baseUrl: string,
+    params: Record<string, string>
+  ): Promise<string> {
+    // Sort parameters alphabetically
+    const sortedParams = Object.keys(params)
+      .sort()
+      .map((key) => `${this.percentEncode(key)}=${this.percentEncode(params[key])}`)
+      .join('&');
+
+    // Create signature base string
+    const signatureBase = [
+      method.toUpperCase(),
+      this.percentEncode(baseUrl),
+      this.percentEncode(sortedParams),
+    ].join('&');
+
+    // Create signing key
+    const signingKey = `${this.percentEncode(this.consumerSecret!)}&${this.percentEncode(this.accessTokenSecret!)}`;
+
+    // Generate HMAC-SHA1 signature using Web Crypto API
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(signingKey),
+      { name: 'HMAC', hash: 'SHA-1' },
+      false,
+      ['sign']
+    );
+
+    const signatureBytes = await crypto.subtle.sign('HMAC', key, encoder.encode(signatureBase));
+
+    // Convert to base64
+    return btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
+  }
+
+  /**
+   * Generate a random nonce
+   */
+  private generateNonce(): string {
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Percent-encode a string per RFC 3986
+   */
+  private percentEncode(str: string): string {
+    return encodeURIComponent(str).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   }
 }

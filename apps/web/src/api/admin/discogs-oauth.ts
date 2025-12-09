@@ -36,12 +36,23 @@ app.get('/connect', async (c) => {
     });
 
     // Determine callback URL based on request
-    // In local dev, use the Host header to get the correct origin
-    const host = c.req.header('Host') || '';
-    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
-    const protocol = isLocalhost ? 'http' : (c.req.header('X-Forwarded-Proto') || 'https');
-    const origin = host ? `${protocol}://${host}` : new URL(c.req.url).origin;
-    const callbackUrl = `${origin}/api/auth/discogs/callback`;
+    // Wrangler dev mode sets Host to production domain due to routes config,
+    // so we check the actual URL and ENVIRONMENT to detect local dev
+    const url = new URL(c.req.url);
+    const isLocalDev = !c.env.ENVIRONMENT || c.env.ENVIRONMENT !== 'production';
+    const isLocalhostUrl = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    
+    let callbackUrl: string;
+    if (isLocalDev || isLocalhostUrl) {
+      // Local development - use localhost
+      const port = url.port || '8788';
+      callbackUrl = `http://localhost:${port}/api/auth/discogs/callback`;
+    } else {
+      // Production
+      callbackUrl = `https://listentomore.com/api/auth/discogs/callback`;
+    }
+
+    console.log('[Discogs OAuth] isLocalDev:', isLocalDev, 'callbackUrl:', callbackUrl);
 
     const { token, secret } = await oauthService.getRequestToken(callbackUrl);
 
