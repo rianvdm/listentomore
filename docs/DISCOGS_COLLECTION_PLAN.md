@@ -1729,7 +1729,7 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 **Prerequisites:**
 - [x] Register OAuth app at https://www.discogs.com/settings/developers
 - [x] Add OAuth credentials to `.dev.vars` (local)
-- [ ] Add OAuth credentials via `wrangler secret put` (production)
+- [x] Add OAuth credentials via `wrangler secret put` (production) ✅ **Set on 2025-12-08**
 - [x] Add `discogs_username` column to `users` table (already existed)
 
 **Implementation:**
