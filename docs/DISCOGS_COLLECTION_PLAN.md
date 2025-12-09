@@ -1,5 +1,25 @@
 # Discogs Collection Integration Plan
 
+## 🚀 Current Status: Phase 2 Complete, Phase 4 In Progress
+
+**Last Updated:** 2025-12-09
+
+### ✅ Completed Phases:
+- **Phase 1: Foundation** - OAuth flow, token storage, production deployment ✅
+- **Phase 2: Collection Sync** - Full sync working, 1,497 releases cached in production ✅
+
+### 🚧 In Progress:
+- **Phase 4: Stats UI** - Need to move stats to dedicated `/u/:username/collection` page
+
+### 📊 Production Stats (as of 2025-12-09):
+- **User:** bordesak (elezea-records on Discogs)
+- **Releases:** 1,497 synced successfully
+- **Sync Time:** ~30 seconds for full collection
+- **Cache:** Working in production KV
+- **OAuth:** Working with encrypted token storage in D1
+
+---
+
 ## Executive Summary
 
 This document outlines the plan to port Discogs collection functionality from the standalone my-music-next Next.js app and brittle Cloudflare Workers setup into the listentomore platform. The new implementation will provide authenticated users with comprehensive collection statistics, search, and filtering capabilities while leveraging listentomore's existing authentication, caching, and API infrastructure.
@@ -1722,7 +1742,7 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 
 ## Migration Strategy
 
-### Phase 1: Foundation (Weeks 1-2)
+### Phase 1: Foundation ✅ **COMPLETE**
 
 **Goal:** Set up basic infrastructure
 
@@ -1731,40 +1751,73 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 - [x] Add OAuth credentials to `.dev.vars` (local)
 - [x] Add OAuth credentials via `wrangler secret put` (production) ✅ **Set on 2025-12-08**
 - [x] Add `discogs_username` column to `users` table (already existed)
-- [ ] Run `005_oauth_tokens.sql` migration on production D1 before deploying:
-  ```bash
-  cd apps/web
-  npx wrangler d1 execute listentomore --remote --file=../../packages/db/src/migrations/005_oauth_tokens.sql
-  ```
+- [x] Run `005_oauth_tokens.sql` migration on production D1 ✅ **Completed 2025-12-09**
 
 **Implementation:**
 - [x] Create `DiscogsService` in `packages/services/discogs`
 - [x] Implement OAuth 1.0a flow (request token → authorize → access token)
 - [x] Add OAuth routes: `/auth/discogs/connect`, `/auth/discogs/callback`, `/auth/discogs/disconnect`
-- [x] Test OAuth flow with your personal account ✅ **Tested successfully on 2025-12-08**
-- [x] Verify tokens stored securely in `oauth_tokens` table (migration 005 created)
+- [x] Test OAuth flow locally ✅ **Tested successfully on 2025-12-08**
+- [x] Test OAuth flow in production ✅ **Tested successfully on 2025-12-09**
+- [x] Verify tokens stored securely in `oauth_tokens` table
 - [x] Add "Connect Discogs" button to user stats page (`/u/:username`)
+- [x] Fix authentication to use username query parameter (not session-based)
 
 **Deliverables:**
 - [x] Users can connect Discogs account via OAuth
 - [x] Tokens stored securely and encrypted in database
-- [x] Your account successfully connected as first test user (`elezea-records`)
+- [x] Production account successfully connected as first test user (`elezea-records`)
+- [x] OAuth callback redirects to correct user page
 
-### Phase 2: Collection Sync (Weeks 3-4)
+**Production Status:** ✅ Deployed and verified working on 2025-12-09
+
+### Phase 2: Collection Sync ✅ **COMPLETE**
 
 **Goal:** Fetch and cache collection data
 
+**Implementation:**
 - [x] Implement `DiscogsCollectionSync` service (in `packages/services/discogs/src/collection.ts`)
 - [x] Add API route: `POST /api/internal/discogs-sync`
+- [x] Add API route: `GET /api/internal/discogs-stats`
+- [x] Add API route: `GET /api/internal/discogs-collection`
+- [x] Add API route: `GET /api/internal/discogs-releases` (with filtering)
 - [x] Test full collection fetch (all pages) - **1,497 releases synced successfully**
 - [x] Implement cache storage in KV
 - [x] Add sync lock mechanism (4-hour cooldown)
-- [x] Test with large collection (500+ releases) - **Tested with 1,497 releases**
+- [x] Test with large collection in production - **1,497 releases in ~30 seconds**
+- [x] Add "Sync Collection Now" button to user stats page
+- [x] Display collection stats on user stats page (inline)
 
 **Deliverables:**
-- [x] Users can trigger manual sync
-- [x] Collection data cached in KV
-- [x] Stats calculated and stored
+- [x] Users can trigger manual sync via button
+- [x] Collection data cached in production KV (`discogs:collection:bordesak`)
+- [x] Stats calculated and displayed:
+  - 1,497 Total Records
+  - 433 Unique Artists
+  - 14 Genres
+  - Year range: 1963-2025
+  - Format breakdown (CD, Vinyl, Cassette, Box Set, SACD)
+
+**Production Data Verified:**
+```json
+{
+  "lastSynced": "2025-12-09T03:31:18.515Z",
+  "releaseCount": 1497,
+  "userId": "bordesak",
+  "discogsUsername": "elezea-records",
+  "stats": {
+    "totalItems": 1497,
+    "uniqueArtists": 433,
+    "uniqueGenres": ["Rock", "Jazz", "Pop", "Electronic", ...],
+    "genreCounts": { "Rock": 862, "Jazz": 368, "Pop": 314, ... },
+    "formatCounts": { "CD": 726, "Vinyl": 688, "Cassette": 44, ... }
+  }
+}
+```
+
+**Production Status:** ✅ Deployed and verified working on 2025-12-09
+
+**Next Step:** Move stats to dedicated `/u/:username/collection` page (Phase 4)
 
 ### Phase 3: Background Enrichment (Week 5)
 
@@ -1780,21 +1833,33 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 - Releases progressively enriched with master data
 - Original year, genres, styles populated
 
-### Phase 4: Stats UI (Weeks 6-7)
+### Phase 4: Stats UI 🚧 **IN PROGRESS**
 
-**Goal:** Build collection stats dashboard
+**Goal:** Build dedicated collection stats dashboard page
 
-- [ ] Create `/u/:username/collection` route
-- [ ] Build `CollectionStatsPage` component
-- [ ] Add chart components (genre, format, artists, year)
-- [ ] Implement privacy checks
-- [ ] Add "Refresh Collection" button for owners
+**Current State:**
+- ✅ Stats currently displayed inline on `/u/:username` page
+- ✅ Basic stats working (counts, genres, formats, year range)
+- ⚠️ Need to move to dedicated `/u/:username/collection` route
+
+**Implementation:**
+- [ ] Create `/u/:username/collection` route (separate from main stats page)
+- [ ] Build `CollectionStatsPage` component in `apps/web/src/pages/user/collection/stats.tsx`
+- [ ] Move existing stats display code from user stats page to new page
+- [ ] Add chart components (genre distribution, format breakdown, top artists, releases by year)
+  - Use Chart.js v4 (60KB, framework-agnostic - see Chart Library Decision section)
+- [ ] Implement privacy checks (respect `profile_visibility` setting)
+- [ ] Add "Refresh Collection" button for owners (with 4-hour cooldown)
+- [ ] Add link from `/u/:username` to `/u/:username/collection`
 - [ ] Test with different collection sizes
+- [ ] Add empty state when collection not synced
 
 **Deliverables:**
-- Stats page showing charts and summaries
+- Dedicated stats page at `/u/:username/collection`
+- Charts visualizing genre/format distribution
 - Privacy controls working
-- Sync button functional
+- Sync button functional on dedicated page
+- Link from main user page to collection page
 
 ### Phase 5: Full Collection List (Weeks 8-9)
 
