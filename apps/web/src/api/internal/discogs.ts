@@ -6,6 +6,16 @@ import type { Bindings, Variables } from '../../types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// Helper to find user by username or lastfm_username
+async function findUser(db: Variables['db'], username: string) {
+  // Try lastfm_username first (more reliable in local dev)
+  let user = await db.getUserByLastfmUsername(username);
+  if (!user) {
+    user = await db.getUserByUsername(username);
+  }
+  return user;
+}
+
 // GET /api/internal/discogs-collection - Get full collection for a user
 app.get('/discogs-collection', async (c) => {
   const username = c.req.query('username');
@@ -14,7 +24,7 @@ app.get('/discogs-collection', async (c) => {
   }
 
   const db = c.get('db');
-  const user = await db.getUserByUsername(username);
+  const user = await findUser(db, username);
 
   if (!user) {
     return c.json({ error: 'User not found' }, 404);
@@ -43,7 +53,7 @@ app.get('/discogs-stats', async (c) => {
   }
 
   const db = c.get('db');
-  const user = await db.getUserByUsername(username);
+  const user = await findUser(db, username);
 
   if (!user) {
     return c.json({ error: 'User not found' }, 404);
@@ -71,7 +81,7 @@ app.post('/discogs-sync', async (c) => {
   }
 
   const db = c.get('db');
-  const user = await db.getUserByUsername(username);
+  const user = await findUser(db, username);
 
   if (!user) {
     return c.json({ error: 'User not found' }, 404);
@@ -130,7 +140,7 @@ app.get('/discogs-releases', async (c) => {
   }
 
   const db = c.get('db');
-  const user = await db.getUserByUsername(username);
+  const user = await findUser(db, username);
 
   if (!user) {
     return c.json({ error: 'User not found' }, 404);
@@ -158,6 +168,23 @@ app.get('/discogs-releases', async (c) => {
       count: releases.length,
     },
   });
+});
+
+// GET /api/internal/discogs-test - Test Discogs API connection (dev only)
+app.get('/discogs-test', async (c) => {
+  try {
+    const discogs = c.get('discogs');
+    // Test by fetching identity
+    const identity = await discogs.collection.getIdentity();
+    return c.json({
+      success: true,
+      identity,
+      message: 'Discogs API connection working!',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return c.json({ success: false, error: errorMessage }, 500);
+  }
 });
 
 export const discogsInternalRoutes = app;

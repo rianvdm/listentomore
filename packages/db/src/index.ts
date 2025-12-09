@@ -35,6 +35,13 @@ export class Database {
       .first<User>();
   }
 
+  async getUserByLastfmUsername(lastfmUsername: string): Promise<User | null> {
+    return this.db
+      .prepare('SELECT * FROM users WHERE LOWER(lastfm_username) = LOWER(?)')
+      .bind(lastfmUsername)
+      .first<User>();
+  }
+
   async getAllUsersWithLastfm(): Promise<User[]> {
     const result = await this.db
       .prepare('SELECT * FROM users WHERE lastfm_username IS NOT NULL')
