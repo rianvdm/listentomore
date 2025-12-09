@@ -301,29 +301,37 @@ Before implementing, you need to register an OAuth application with Discogs:
 
 3. **Save Credentials**
    - You'll receive:
-     - **Consumer Key** (public)
+     - **Consumer Key** (public, but still treated as secret)
      - **Consumer Secret** (private)
-   - Add to `apps/web/wrangler.toml`:
-     ```toml
-     [vars]
-     DISCOGS_OAUTH_CONSUMER_KEY = "your_consumer_key_here"
-     ```
-   - Add secret via wrangler CLI:
-     ```bash
-     cd apps/web
-     npx wrangler secret put DISCOGS_OAUTH_CONSUMER_SECRET
-     # Paste your consumer secret when prompted
-     ```
 
-4. **Local Development**
-   - Add to `apps/web/.dev.vars`:
-     ```
-     DISCOGS_OAUTH_CONSUMER_KEY=your_consumer_key_here
-     DISCOGS_OAUTH_CONSUMER_SECRET=your_consumer_secret_here
-     OAUTH_ENCRYPTION_KEY=your_encryption_key_here
-     ```
+4. **Add to Local Development** (`apps/web/.dev.vars`):
+   ```bash
+   # apps/web/.dev.vars
+   DISCOGS_OAUTH_CONSUMER_KEY=your_consumer_key_here
+   DISCOGS_OAUTH_CONSUMER_SECRET=your_consumer_secret_here
+   OAUTH_ENCRYPTION_KEY=your_existing_encryption_key
+   ```
 
-**Note:** You can keep using your existing personal token (`DISCOGS_API_TOKEN`) for local testing during development, but the production system will use OAuth exclusively.
+5. **Add to Production** (via wrangler CLI):
+   ```bash
+   cd apps/web
+
+   # Add consumer key
+   npx wrangler secret put DISCOGS_OAUTH_CONSUMER_KEY
+   # Paste your consumer key when prompted
+
+   # Add consumer secret
+   npx wrangler secret put DISCOGS_OAUTH_CONSUMER_SECRET
+   # Paste your consumer secret when prompted
+
+   # OAUTH_ENCRYPTION_KEY should already exist from Spotify OAuth
+   ```
+
+**Important:**
+- Do NOT add credentials to `wrangler.toml` - use `.dev.vars` for local and `wrangler secret put` for production
+- Both the consumer key and secret should be treated as secrets
+- `.dev.vars` is gitignored by default
+- You can keep using your existing personal token (`DISCOGS_API_TOKEN`) for initial local testing during development
 
 ### OAuth Flow
 
@@ -553,22 +561,30 @@ export const discogsAuthRoutes = app;
 
 Required environment variables (in addition to existing ones):
 
-```toml
-# apps/web/wrangler.toml
-[vars]
-DISCOGS_OAUTH_CONSUMER_KEY = "your_consumer_key_from_discogs"
-
-# Secrets (set via wrangler secret put)
-# DISCOGS_OAUTH_CONSUMER_SECRET - from Discogs app registration
-# OAUTH_ENCRYPTION_KEY - already exists for Spotify OAuth, reuse it
+**Local Development** (`.dev.vars`):
+```bash
+# apps/web/.dev.vars (gitignored)
+DISCOGS_OAUTH_CONSUMER_KEY=your_consumer_key
+DISCOGS_OAUTH_CONSUMER_SECRET=your_consumer_secret
+OAUTH_ENCRYPTION_KEY=your_existing_encryption_key
 ```
 
-**Setup commands:**
+**Production** (via `wrangler secret put`):
 ```bash
 cd apps/web
+
+# Add both OAuth credentials as secrets
+npx wrangler secret put DISCOGS_OAUTH_CONSUMER_KEY
 npx wrangler secret put DISCOGS_OAUTH_CONSUMER_SECRET
-# Paste the consumer secret from Discogs developer settings
+
+# OAUTH_ENCRYPTION_KEY should already exist from Spotify OAuth
 ```
+
+**Important:**
+- ❌ **DO NOT** add credentials to `wrangler.toml`
+- ✅ **DO** use `.dev.vars` for local development (gitignored)
+- ✅ **DO** use `wrangler secret put` for production
+- Both consumer key and secret are treated as secrets
 
 ---
 
@@ -1711,7 +1727,8 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 
 **Prerequisites:**
 - [ ] Register OAuth app at https://www.discogs.com/settings/developers
-- [ ] Add OAuth credentials to wrangler.toml and secrets
+- [ ] Add OAuth credentials to `.dev.vars` (local)
+- [ ] Add OAuth credentials via `wrangler secret put` (production)
 - [ ] Add `discogs_username` column to `users` table
 
 **Implementation:**
