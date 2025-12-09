@@ -6,6 +6,20 @@ A REST API for music discovery, combining Spotify catalog data with AI-powered i
 
 ---
 
+## Endpoints Overview
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| [`/api/v1/album`](#album) | GET | Album metadata, AI summary, and streaming links |
+| [`/api/v1/album/recommendations`](#album-recommendations) | GET | AI-generated album recommendations |
+| [`/api/v1/links`](#streaming-links) | GET | Cross-platform streaming links only |
+| [`/api/v1/artist`](#artist) | GET | Artist info, AI summary, and top albums |
+| [`/api/v1/genre`](#genre) | GET | AI-generated genre information |
+| [`/api/v1/random-fact`](#random-fact) | GET | Random music trivia |
+| [`/api/v1/ask`](#ask-chat) | POST | Chat with the music AI assistant |
+
+---
+
 ## Table of Contents
 
 - [Authentication](#authentication)
@@ -116,11 +130,10 @@ curl -H "X-API-Key: your_key" \
       "listentomore": "https://listentomore.com/album/35UJLpClj5EDrhpNIi4DFg",
       "spotify": "https://open.spotify.com/album/35UJLpClj5EDrhpNIi4DFg",
       "appleMusic": "https://music.apple.com/album/the-bends/1097862703",
-      "youtube": "https://www.youtube.com/results?search_query=Radiohead%20The%20Bends%20album"
+      "songlink": "https://song.link/https://open.spotify.com/album/35UJLpClj5EDrhpNIi4DFg"
     },
     "confidence": {
-      "appleMusic": 0.98,
-      "youtube": null
+      "appleMusic": 0.98
     }
   }
 }
@@ -144,9 +157,8 @@ curl -H "X-API-Key: your_key" \
 | `links.listentomore` | string | Listen To More album page |
 | `links.spotify` | string | Spotify album URL |
 | `links.appleMusic` | string \| null | Apple Music URL (if found) |
-| `links.youtube` | string \| null | YouTube URL (if found) |
+| `links.songlink` | string | Songlink/Odesli page with all streaming services |
 | `confidence.appleMusic` | number \| null | Match confidence (0.98 = UPC match, 0.8+ = text match) |
-| `confidence.youtube` | number \| null | Match confidence |
 
 ---
 
@@ -232,11 +244,10 @@ curl -H "X-API-Key: your_key" \
       "listentomore": "https://listentomore.com/album/3539EbNgIdEDGBKkUf4wno",
       "spotify": "https://open.spotify.com/album/3539EbNgIdEDGBKkUf4wno",
       "appleMusic": "https://music.apple.com/album/dummy/1440649507",
-      "youtube": "https://www.youtube.com/playlist?list=OLAK5uy_..."
+      "songlink": "https://song.link/https://open.spotify.com/album/3539EbNgIdEDGBKkUf4wno"
     },
     "confidence": {
-      "appleMusic": 0.98,
-      "youtube": 0.85
+      "appleMusic": 0.98
     }
   }
 }
@@ -527,6 +538,12 @@ Cached responses are indistinguishable from fresh responses. If you need to forc
 ---
 
 ## Changelog
+
+### v1.1.0 (December 2025)
+
+- **Breaking change:** Replaced `youtube` link with `songlink` in album and links endpoints
+- Songlink URLs provide access to all streaming platforms via [Odesli/Songlink](https://odesli.co/)
+- Removed `confidence.youtube` field (no longer applicable)
 
 ### v1.0.0 (December 2025)
 
