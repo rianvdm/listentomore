@@ -145,6 +145,7 @@ git checkout feature/discogs-collection
 
 # Pull latest
 git pull origin feature/discogs-collection
+git merge main
 
 # Start development
 cd apps/web
