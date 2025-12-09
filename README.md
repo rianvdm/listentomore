@@ -12,7 +12,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Artist Detail Pages** - Artist profiles with biography, top albums, similar artists, and genre connections
 - **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by Perplexity AI (with source citations)
 - **Genre Exploration** - Discover music by genre with AI-generated descriptions, history, and key artists
-- **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and YouTube via UPC matching
+- **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and Songlink (for all other services)
 - **Album Recommendations** - AI-generated "if you like this, try these" recommendations on album pages
 
 ### Personal Stats
@@ -34,18 +34,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - `/ask question:X` - Chat with the Rick Rubin AI personality
 
 ### REST API
-Full programmatic access to music discovery features. See [API Documentation](docs/API.md) for details.
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/v1/album` | Album details with AI summary and streaming links |
-| `GET /api/v1/album/recommendations` | AI-generated album recommendations |
-| `GET /api/v1/links` | Cross-platform streaming links (Spotify, Apple Music, YouTube) |
-| `GET /api/v1/artist` | Artist info with AI summary and top albums |
-| `GET /api/v1/genre` | AI-generated genre description |
-| `POST /api/v1/ask` | Chat with the music AI |
-
-Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min). [Contact me](https://elezea.com/contact) to request an API key.
+Full programmatic access to music discovery features. Rate-limited with tiered access (standard: 60 req/min, premium: 300 req/min). See [API Documentation](docs/API.md) for details or [contact me](https://elezea.com/contact) to request an API key.
 
 ## Tech Stack
 
@@ -88,12 +77,6 @@ listentomore/
 └── docs/                       # Technical documentation
 ```
 
-## API
-
-The platform exposes a REST API (`/api/v1/`) focused on AI-powered insights and cross-platform streaming links. All endpoints require an API key via the `X-API-Key` header.
-
-See the **[API Documentation](docs/API.md)** for full details including authentication, rate limits, response examples, and endpoint reference.
-
 ## Getting Started
 
 ### Prerequisites
@@ -134,8 +117,7 @@ INTERNAL_API_SECRET=your_random_secret_for_internal_apis
 # Optional - for admin features
 ADMIN_SECRET=your_admin_secret
 
-# Optional - for cross-platform streaming links
-YOUTUBE_API_KEY=your_youtube_api_key
+# Optional - for Apple Music direct links
 APPLE_TEAM_ID=your_apple_team_id
 APPLE_KEY_ID=your_apple_key_id
 APPLE_PRIVATE_KEY=your_apple_private_key
@@ -164,10 +146,10 @@ pnpm deploy
 
 - **[Spotify Web API](https://developer.spotify.com/documentation/web-api)** - Music catalog data
 - **[Last.fm API](https://www.last.fm/api)** - Listening history and scrobbles
-- **[OpenAI API](https://platform.openai.com)** - GPT-4 for chatbot and fact generation, DALL-E for image generation
+- **[OpenAI API](https://platform.openai.com)** - GPT-5 for chatbot and fact generation
 - **[Perplexity API](https://docs.perplexity.ai)** - Sonar model for grounded, cited summaries
 - **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
-- **[YouTube Data API](https://developers.google.com/youtube/v3)** - YouTube album/playlist links
+- **[Songlink/Odesli](https://odesli.co)** - Cross-platform streaming links for all services
 
 ## Want Your Own Stats Page?
 
