@@ -159,8 +159,7 @@ The community listening feed and personal stats pages (`/u/username`) require be
 2. **Connect a scrobbler** to track your listening (Spotify, Apple Music, etc. all have scrobbling options)
 3. **Contact me** to request being added:
    - Open an issue on this repo
-   - Email: rian@elezea.com
-   - Mastodon: [@rian@hachyderm.io](https://hachyderm.io/@rian)
+   - Email: [elezea.com/contact](https://elezea.com/contact/)
 
 Once added, your listening activity will appear on the home page feed and you'll have your own stats page at `listentomore.com/u/your-lastfm-username`.
 
