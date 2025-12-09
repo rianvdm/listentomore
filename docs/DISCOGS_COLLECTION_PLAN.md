@@ -27,6 +27,7 @@ This document outlines the plan to port Discogs collection functionality from th
 9. [Rate Limiting & Caching](#rate-limiting--caching)
 10. [Implementation Phases](#implementation-phases)
 11. [Reusable Components](#reusable-components)
+12. [Chart Library Decision](#chart-library-decision)
 
 ---
 
@@ -1625,7 +1626,7 @@ The following components can be directly reused or adapted:
 ### New Components Needed
 
 1. **Chart Components** - Pie chart, bar chart, line chart
-   - Consider using a lightweight chart library like Chart.js or Recharts
+   - Use Chart.js v4 (see [Chart Library Decision](#chart-library-decision) below)
    - Lazy load charts for performance
 
 2. **CollectionEmptyState** - When user hasn't connected Discogs
@@ -1977,9 +1978,7 @@ npx wrangler deploy --env preview
 
 ## Open Questions
 
-1. **Chart Library**: Which charting library should we use?
-   - **Recommendation:** Chart.js (lightweight, well-documented)
-   - Alternative: Recharts (React-friendly but heavier)
+1. ~~**Chart Library**: Which charting library should we use?~~ **RESOLVED** - Use Chart.js v4 (see [Chart Library Decision](#chart-library-decision) below)
 
 2. **Enrichment Trigger**: When should enrichment start?
    - **Recommendation:** Immediately after sync, process in background
@@ -2005,6 +2004,125 @@ npx wrangler deploy --env preview
 - **API Latency**: <500ms for cached collection, <5s for fresh sync
 - **User Adoption**: % of users who connect Discogs after feature launch
 - **Privacy Compliance**: Zero unauthorized access incidents
+
+---
+
+## Chart Library Decision
+
+### Background
+
+Since listentomore uses server-side rendering with Hono (not React), we need a charting library that works well with SSR and client-side hydration.
+
+### Options Evaluated
+
+#### Recharts (Not Recommended)
+
+- **Version:** 2.12.7
+- **Size:** ~400KB (fairly heavy)
+- **React-specific**
+
+**Pros:**
+- ✅ React-friendly API
+- ✅ Good documentation
+- ✅ Responsive containers
+
+**Cons:**
+- ❌ Large bundle size (~400KB)
+- ❌ Not great for SSR/Workers (React dependency)
+- ❌ Can be sluggish with large datasets
+- ❌ Accessibility could be better
+
+#### Chart.js v4 (⭐ Recommended)
+
+**Why it's better for listentomore:**
+- ✅ **Lightweight:** ~60KB (vs 400KB Recharts) - 6x smaller
+- ✅ **Framework-agnostic:** Works with vanilla JS
+- ✅ **Perfect for SSR:** Render charts client-side after page load
+- ✅ **Great performance:** Canvas-based, handles large datasets (1000+ releases)
+- ✅ **Modern & maintained:** v4.4+ actively developed
+- ✅ **Accessibility:** Built-in ARIA support
+- ✅ **CDN-friendly:** No build complexity
+
+#### ApexCharts (Alternative)
+
+- ✅ Modern, beautiful defaults
+- ✅ Interactive and animated
+- ✅ Good TypeScript support
+- ⚠️ Larger than Chart.js (~150KB)
+- ⚠️ More complex API
+
+#### Plotly.js (Not Recommended)
+
+- ✅ Extremely powerful for complex visualizations
+- ❌ Very heavy (~1MB+) - overkill for pie/bar charts
+
+#### D3.js (Not Recommended)
+
+- ✅ Maximum flexibility, industry standard
+- ❌ Steep learning curve
+- ❌ More code to write for basic charts
+- ❌ Overkill for pie/bar charts
+
+### Comparison Table
+
+| Library     | Size     | SSR-Friendly | Performance | Recommendation |
+|-------------|----------|--------------|-------------|----------------|
+| Chart.js v4 | 60KB     | ✅ Excellent  | ✅ Great     | ⭐ Use this     |
+| ApexCharts  | 150KB    | ✅ Good       | ✅ Good      | Alternative    |
+| Recharts    | 400KB    | ❌ React-only | ⚠️ Okay     | ❌ Don't use    |
+| Plotly      | 1MB+     | ⚠️ Heavy     | ✅ Great     | ❌ Overkill     |
+| D3.js       | Variable | ✅ Excellent  | ✅ Excellent | ❌ Complex      |
+
+### Decision: Use Chart.js v4
+
+**Reasons:**
+1. 6x smaller than Recharts (60KB vs 400KB)
+2. Works perfectly with SSR - render charts client-side
+3. No React dependency - framework-agnostic
+4. Better performance with large collections (1000+ releases)
+5. Easier integration with existing patterns
+6. CDN-friendly - no build complexity
+
+### Implementation Example
+
+```html
+<!-- Load from CDN (no build step needed) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+```
+
+```tsx
+// apps/web/src/pages/user/collection/stats.tsx
+<script dangerouslySetInnerHTML={{ __html: `
+  function renderGenreChart(releases) {
+    const genreCounts = {}; // ... your existing logic
+    
+    const ctx = document.getElementById('genreChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: Object.keys(genreCounts),
+        datasets: [{
+          data: Object.values(genreCounts),
+          backgroundColor: ['#FF6C00', '#FFA500', '#FFD700', /* ... */]
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => \`\${ctx.label}: \${ctx.parsed}%\` 
+            }
+          }
+        }
+      }
+    });
+  }
+\` }} />
+```
+
+**Migration effort:** Low - Chart.js has similar API to Recharts
 
 ---
 
