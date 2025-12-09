@@ -1736,14 +1736,14 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 - [x] Create `DiscogsService` in `packages/services/discogs`
 - [x] Implement OAuth 1.0a flow (request token → authorize → access token)
 - [x] Add OAuth routes: `/auth/discogs/connect`, `/auth/discogs/callback`, `/auth/discogs/disconnect`
-- [ ] Test OAuth flow with your personal account
+- [x] Test OAuth flow with your personal account ✅ **Tested successfully on 2025-12-08**
 - [x] Verify tokens stored securely in `oauth_tokens` table (migration 005 created)
 - [x] Add "Connect Discogs" button to user stats page (`/u/:username`)
 
 **Deliverables:**
-- Users can connect Discogs account via OAuth
-- Tokens stored securely and encrypted in database
-- Your account successfully connected as first test user
+- [x] Users can connect Discogs account via OAuth
+- [x] Tokens stored securely and encrypted in database
+- [x] Your account successfully connected as first test user (`elezea-records`)
 
 ### Phase 2: Collection Sync (Weeks 3-4)
 
