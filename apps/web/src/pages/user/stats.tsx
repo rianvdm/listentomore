@@ -9,10 +9,11 @@ import type { Database } from '@listentomore/db';
 interface UserStatsPageProps {
   username: string;
   lastfmUsername: string;
+  discogsUsername: string | null;
   internalToken?: string;
 }
 
-export function UserStatsPage({ username, lastfmUsername, internalToken }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, discogsUsername, internalToken }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
@@ -69,6 +70,34 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
               <span class="loading-text">Loading top albums...</span>
             </div>
           </div>
+        </section>
+
+        {/* Discogs Collection Section */}
+        <section id="discogs-section" style={{ marginTop: '4em' }}>
+          <h2>📀 Vinyl Collection</h2>
+          {discogsUsername ? (
+            <div id="discogs-stats">
+              <p class="text-center">
+                <strong>Connected to Discogs as </strong>
+                <a href={`https://www.discogs.com/user/${discogsUsername}`} target="_blank" rel="noopener noreferrer">
+                  {discogsUsername}
+                </a>
+              </p>
+              <div id="discogs-collection-stats">
+                <div class="loading-container">
+                  <span class="spinner">↻</span>
+                  <span class="loading-text">Loading collection stats...</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div class="text-center">
+              <p class="text-muted">Connect your Discogs account to see your vinyl collection stats.</p>
+              <a href="/api/auth/discogs/connect" class="button">
+                Connect Discogs →
+              </a>
+            </div>
+          )}
         </section>
       </main>
 
@@ -226,6 +255,61 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
                 console.error('Artist sentence error:', e);
               });
           }
+
+          // Fetch Discogs collection stats (if connected)
+          var discogsStatsEl = document.getElementById('discogs-collection-stats');
+          if (discogsStatsEl) {
+            internalFetch('/api/internal/discogs-stats?username=' + encodeURIComponent(username))
+              .then(function(r) { return r.json(); })
+              .then(function(result) {
+                if (result.error) {
+                  discogsStatsEl.innerHTML = '<p class="text-muted">' + result.error + '</p>' +
+                    '<p class="text-center"><a href="/api/auth/discogs/connect" class="button">Sync Collection</a></p>';
+                  return;
+                }
+
+                var stats = result.data.stats;
+                var html = '<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 2rem 0;">';
+                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
+                html += '<div style="font-size: 2rem; font-weight: bold;">' + stats.totalItems + '</div>';
+                html += '<div style="color: var(--text-muted);">Total Records</div></div>';
+                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
+                html += '<div style="font-size: 2rem; font-weight: bold;">' + stats.uniqueArtists + '</div>';
+                html += '<div style="color: var(--text-muted);">Artists</div></div>';
+                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
+                html += '<div style="font-size: 2rem; font-weight: bold;">' + stats.uniqueGenres.length + '</div>';
+                html += '<div style="color: var(--text-muted);">Genres</div></div>';
+                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
+                var yearRange = (stats.earliestYear && stats.latestYear) ? stats.earliestYear + '-' + stats.latestYear : 'N/A';
+                html += '<div style="font-size: 1.5rem; font-weight: bold;">' + yearRange + '</div>';
+                html += '<div style="color: var(--text-muted);">Year Range</div></div>';
+                html += '</div>';
+
+                // Top genres
+                var topGenres = Object.entries(stats.genreCounts || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
+                if (topGenres.length > 0) {
+                  html += '<h3 style="margin-top: 2rem;">Top Genres</h3><ul>';
+                  topGenres.forEach(function(g) { html += '<li>' + g[0] + ' (' + g[1] + ')</li>'; });
+                  html += '</ul>';
+                }
+
+                // Top formats
+                var topFormats = Object.entries(stats.formatCounts || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
+                if (topFormats.length > 0) {
+                  html += '<h3>Formats</h3><ul>';
+                  topFormats.forEach(function(f) { html += '<li>' + f[0] + ' (' + f[1] + ')</li>'; });
+                  html += '</ul>';
+                }
+
+                html += '<p class="text-muted" style="margin-top: 1rem; font-size: 0.9rem;">Last synced: ' + new Date(result.data.lastSynced).toLocaleDateString() + '</p>';
+
+                discogsStatsEl.innerHTML = html;
+              })
+              .catch(function(e) {
+                console.error('Discogs stats error:', e);
+                discogsStatsEl.innerHTML = '<p class="text-muted">Failed to load collection stats.</p>';
+              });
+          }
         })();
       ` }} />
     </Layout>
@@ -262,8 +346,11 @@ export async function handleUserStats(c: Context) {
   const db = c.get('db') as Database;
   const internalToken = c.get('internalToken') as string;
 
-  // Look up user by username
-  const user = await db.getUserByUsername(username);
+  // Look up user by username or lastfm_username (fallback for local dev)
+  let user = await db.getUserByLastfmUsername(username);
+  if (!user) {
+    user = await db.getUserByUsername(username);
+  }
 
   if (!user || !user.lastfm_username) {
     return c.html(<UserNotFound username={username} />, 404);
@@ -274,6 +361,7 @@ export async function handleUserStats(c: Context) {
     <UserStatsPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
+      discogsUsername={user.discogs_username}
       internalToken={internalToken}
     />
   );
