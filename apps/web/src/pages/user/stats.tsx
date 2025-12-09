@@ -93,7 +93,7 @@ export function UserStatsPage({ username, lastfmUsername, discogsUsername, inter
           ) : (
             <div class="text-center">
               <p class="text-muted">Connect your Discogs account to see your vinyl collection stats.</p>
-              <a href="/api/auth/discogs/connect" class="button">
+              <a href={`/api/auth/discogs/connect?username=${username}`} class="button">
                 Connect Discogs →
               </a>
             </div>
@@ -264,7 +264,32 @@ export function UserStatsPage({ username, lastfmUsername, discogsUsername, inter
               .then(function(result) {
                 if (result.error) {
                   discogsStatsEl.innerHTML = '<p class="text-muted">' + result.error + '</p>' +
-                    '<p class="text-center"><a href="/api/auth/discogs/connect" class="button">Sync Collection</a></p>';
+                    '<p class="text-center"><button id="sync-collection-btn" class="button">Sync Collection Now</button></p>';
+
+                  // Add click handler for sync button
+                  document.getElementById('sync-collection-btn').addEventListener('click', function() {
+                    var btn = this;
+                    btn.disabled = true;
+                    btn.textContent = 'Syncing... (this may take 30-60 seconds)';
+
+                    internalFetch('/api/internal/discogs-sync?username=' + encodeURIComponent(username), { method: 'POST' })
+                      .then(function(r) { return r.json(); })
+                      .then(function(result) {
+                        if (result.error) {
+                          alert('Sync failed: ' + result.error);
+                          btn.disabled = false;
+                          btn.textContent = 'Sync Collection Now';
+                        } else {
+                          alert('Collection synced successfully! ' + result.data.releaseCount + ' releases. Refreshing page...');
+                          window.location.reload();
+                        }
+                      })
+                      .catch(function(err) {
+                        alert('Sync failed: ' + err.message);
+                        btn.disabled = false;
+                        btn.textContent = 'Sync Collection Now';
+                      });
+                  });
                   return;
                 }
 

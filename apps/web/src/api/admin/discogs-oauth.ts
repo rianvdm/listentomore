@@ -13,12 +13,18 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // GET /api/auth/discogs/connect - Initiate OAuth flow
 app.get('/connect', async (c) => {
-  // For now, we use the default user. In a full auth system, this would come from session.
+  // Get username from query parameter
+  const username = c.req.query('username');
+
+  if (!username) {
+    return c.redirect('/?error=missing_username');
+  }
+
   const db = c.get('db');
-  const user = await db.getUser('default');
+  const user = await db.getUserByUsername(username);
 
   if (!user) {
-    return c.redirect('/?error=not_authenticated');
+    return c.redirect(`/?error=user_not_found&username=${username}`);
   }
 
   const consumerKey = c.env.DISCOGS_OAUTH_CONSUMER_KEY;
@@ -59,7 +65,7 @@ app.get('/connect', async (c) => {
     // Store request token temporarily in KV (we need the secret for the callback)
     await c.env.CACHE.put(
       `discogs:oauth:request:${token}`,
-      JSON.stringify({ secret, userId: user.id }),
+      JSON.stringify({ secret, userId: user.id, username: user.username }),
       { expirationTtl: 600 } // 10 minutes
     );
 
@@ -89,7 +95,7 @@ app.get('/callback', async (c) => {
     return c.redirect('/?error=discogs_auth_expired');
   }
 
-  const requestData = JSON.parse(requestDataJson) as { secret: string; userId: string };
+  const requestData = JSON.parse(requestDataJson) as { secret: string; userId: string; username: string };
 
   const consumerKey = c.env.DISCOGS_OAUTH_CONSUMER_KEY;
   const consumerSecret = c.env.DISCOGS_OAUTH_CONSUMER_SECRET;
@@ -148,8 +154,8 @@ app.get('/callback', async (c) => {
     // Clean up temporary request token
     await c.env.CACHE.delete(`discogs:oauth:request:${token}`);
 
-    // Redirect to success page
-    return c.redirect('/?success=discogs_connected');
+    // Redirect back to user's stats page
+    return c.redirect(`/u/${requestData.username}?success=discogs_connected`);
   } catch (error) {
     console.error('Failed to complete Discogs OAuth:', error);
     return c.redirect('/?error=discogs_auth_failed');
@@ -158,12 +164,17 @@ app.get('/callback', async (c) => {
 
 // POST /api/auth/discogs/disconnect - Disconnect Discogs account
 app.post('/disconnect', async (c) => {
-  // For now, we use the default user
+  const username = c.req.query('username');
+
+  if (!username) {
+    return c.json({ error: 'Missing username' }, 400);
+  }
+
   const db = c.get('db');
-  const user = await db.getUser('default');
+  const user = await db.getUserByUsername(username);
 
   if (!user) {
-    return c.json({ error: 'Not authenticated' }, 401);
+    return c.json({ error: 'User not found' }, 404);
   }
 
   try {
@@ -185,11 +196,17 @@ app.post('/disconnect', async (c) => {
 
 // GET /api/auth/discogs/status - Check Discogs connection status
 app.get('/status', async (c) => {
+  const username = c.req.query('username');
+
+  if (!username) {
+    return c.json({ connected: false, error: 'Missing username' });
+  }
+
   const db = c.get('db');
-  const user = await db.getUser('default');
+  const user = await db.getUserByUsername(username);
 
   if (!user) {
-    return c.json({ connected: false, error: 'Not authenticated' });
+    return c.json({ connected: false, error: 'User not found' });
   }
 
   const oauthToken = await db.getOAuthToken(user.id, 'discogs');
