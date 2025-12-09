@@ -9,6 +9,7 @@ import { LastfmService } from '@listentomore/lastfm';
 import { SonglinkService } from '@listentomore/songlink';
 import { StreamingLinksService } from '@listentomore/streaming-links';
 import { AIService } from '@listentomore/ai';
+import { DiscogsService } from '@listentomore/discogs';
 // Note: CACHE_CONFIG and getTtlSeconds used in scheduled() for cron jobs
 import {
   corsMiddleware,
@@ -115,6 +116,16 @@ app.use('*', async (c, next) => {
     new AIService({
       openaiApiKey: c.env.OPENAI_API_KEY,
       perplexityApiKey: c.env.PERPLEXITY_API_KEY,
+      cache: c.env.CACHE,
+    })
+  );
+
+  // Discogs service - uses personal token for now (OAuth coming later)
+  // Generate a personal token at https://www.discogs.com/settings/developers
+  c.set(
+    'discogs',
+    new DiscogsService({
+      accessToken: c.env.DISCOGS_PERSONAL_TOKEN || '',
       cache: c.env.CACHE,
     })
   );

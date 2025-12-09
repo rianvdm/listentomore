@@ -7,6 +7,7 @@ import type { LastfmService } from '@listentomore/lastfm';
 import type { SonglinkService } from '@listentomore/songlink';
 import type { StreamingLinksService } from '@listentomore/streaming-links';
 import type { AIService } from '@listentomore/ai';
+import type { DiscogsService } from '@listentomore/discogs';
 
 // Environment bindings (Cloudflare Workers)
 export type Bindings = {
@@ -33,6 +34,10 @@ export type Bindings = {
   INTERNAL_API_SECRET: string;
   ENVIRONMENT?: string;
   ADMIN_SECRET?: string;
+  // Discogs API
+  DISCOGS_PERSONAL_TOKEN?: string;
+  DISCOGS_OAUTH_CONSUMER_KEY?: string;
+  DISCOGS_OAUTH_CONSUMER_SECRET?: string;
 };
 
 // Context variables (set by middleware)
@@ -44,6 +49,7 @@ export type Variables = {
   songlink: SonglinkService;
   streamingLinks: StreamingLinksService;
   ai: AIService;
+  discogs: DiscogsService;
   // Auth context
   apiKey: ParsedApiKey | null;
   authTier: 'public' | 'standard' | 'premium';

@@ -66,6 +66,9 @@ importers:
       '@listentomore/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@listentomore/discogs':
+        specifier: workspace:*
+        version: link:../../packages/services/discogs
       '@listentomore/lastfm':
         specifier: workspace:*
         version: link:../../packages/services/lastfm
@@ -115,6 +118,19 @@ importers:
         version: 5.9.3
 
   packages/services/ai:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/services/discogs:
     dependencies:
       '@listentomore/config':
         specifier: workspace:*
