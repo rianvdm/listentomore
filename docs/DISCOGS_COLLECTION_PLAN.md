@@ -1837,6 +1837,80 @@ await cache.put(collectionCacheKey, JSON.stringify(data), {
 
 **Total Timeline:** ~11 weeks
 
+### Development Workflow
+
+**All development happens in a feature branch for easy rollback:**
+
+```bash
+# Create feature branch from main
+git checkout main
+git pull
+git checkout -b feature/discogs-collection
+
+# Work on implementation...
+git add .
+git commit -m "Phase 1: Implement OAuth foundation"
+
+# Push to remote regularly
+git push -u origin feature/discogs-collection
+
+# When ready to merge (after all phases complete)
+git checkout main
+git merge feature/discogs-collection
+git push origin main
+
+# If you need to rollback (before merge)
+git checkout main  # Already clean, nothing merged yet
+
+# If you need to rollback (after merge)
+git revert <merge-commit-hash>
+```
+
+**Benefits of feature branch approach:**
+- ✅ **Easy rollback** - Just delete the branch or don't merge
+- ✅ **Safe experimentation** - Main branch stays stable
+- ✅ **Incremental commits** - Can commit after each phase
+- ✅ **Review before deploy** - Can review full diff before merging
+- ✅ **Parallel work** - Can work on other features in separate branches
+- ✅ **Testing isolation** - Deploy feature branch to preview environment
+
+**Branch naming convention:**
+```
+feature/discogs-collection
+```
+
+**Commit message pattern:**
+```
+Phase 1: Implement OAuth foundation
+Phase 2: Add collection sync service
+Phase 3: Implement background enrichment
+Phase 4: Build stats dashboard UI
+Phase 5: Add collection list page
+Phase 6: Add background sync automation
+Phase 7: Polish and testing
+```
+
+**Deployment strategy:**
+1. Develop in `feature/discogs-collection` branch
+2. Test thoroughly in local environment
+3. Optionally deploy branch to preview environment (if using wrangler environments)
+4. Merge to `main` only when fully tested
+5. Deploy `main` to production
+
+**Preview environment (optional):**
+```toml
+# wrangler.toml
+[env.preview]
+name = "listentomore-preview"
+# Use same config as production but different KV namespaces
+```
+
+```bash
+# Deploy feature branch to preview
+git checkout feature/discogs-collection
+npx wrangler deploy --env preview
+```
+
 ---
 
 ## Key Improvements Over Previous Implementation
