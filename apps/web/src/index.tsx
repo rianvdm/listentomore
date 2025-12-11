@@ -773,14 +773,32 @@ async function syncDiscogsCollections(env: Bindings): Promise<void> {
       // Run enrichment for any unenriched releases
       const enrichmentNeeded = await discogs.getEnrichmentNeeded(user.id);
       if (enrichmentNeeded && enrichmentNeeded.needsEnrichment > 0) {
-        console.log(`[CRON Discogs] Enriching ${enrichmentNeeded.needsEnrichment} releases for ${user.username}`);
+        const queue = env.DISCOGS_QUEUE;
 
-        // Process enrichment batches (limit to avoid timeout)
-        const MAX_CRON_BATCHES = 5; // ~5 minutes max per user
-        for (let i = 0; i < MAX_CRON_BATCHES; i++) {
-          const enrichResult = await discogs.enrichBatch(user.id);
-          if (!enrichResult || enrichResult.remaining === 0) break;
-          console.log(`[CRON Discogs] Enrichment batch ${i + 1}: ${enrichResult.processed} processed, ${enrichResult.remaining} remaining`);
+        if (queue) {
+          const progress = await discogs.getEnrichmentProgress(user.id);
+          if (progress && progress.status === 'running') {
+            console.log(`[CRON Discogs] Skipping queue enqueue for ${user.username} - enrichment already in progress (${progress.processed}/${progress.total})`);
+          } else {
+            console.log(`[CRON Discogs] Queuing background enrichment for ${user.username} (${enrichmentNeeded.needsEnrichment} releases)`);
+            await queue.send({
+              type: 'enrich-collection',
+              userId: user.id,
+              discogsUsername: user.discogs_username,
+            });
+          }
+        } else {
+          console.log(`[CRON Discogs] Enriching ${enrichmentNeeded.needsEnrichment} releases inline for ${user.username}`);
+
+          // Process enrichment batches (limit to avoid timeout)
+          const MAX_CRON_BATCHES = 5; // ~5 minutes max per user
+          for (let i = 0; i < MAX_CRON_BATCHES; i++) {
+            const enrichResult = await discogs.enrichBatch(user.id);
+            if (!enrichResult || enrichResult.remaining === 0) break;
+            console.log(
+              `[CRON Discogs] Enrichment batch ${i + 1}: ${enrichResult.processed} processed, ${enrichResult.remaining} remaining`
+            );
+          }
         }
       }
 
