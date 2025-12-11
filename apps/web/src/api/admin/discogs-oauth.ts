@@ -11,6 +11,38 @@ import {
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+/**
+ * Run initial enrichment batches in background
+ * Limited to 1 batch due to Cloudflare Workers 30-second CPU time limit
+ * Remaining enrichment continues via cron or manual trigger
+ */
+async function runInitialEnrichment(
+  discogs: DiscogsService,
+  userId: string
+): Promise<void> {
+  // Only process 1 batch in waitUntil due to Workers CPU time limits
+  // Each batch takes ~55 seconds (50 releases * 1.1s rate limit delay)
+  // Remaining batches will be processed by cron or manual trigger
+  const result = await discogs.enrichBatch(userId);
+
+  if (!result) {
+    console.log(`[Discogs Enrichment] No enrichment service available`);
+    return;
+  }
+
+  console.log(
+    `[Discogs Enrichment] Initial batch: processed ${result.processed}, remaining ${result.remaining}, errors ${result.errors}`
+  );
+
+  if (result.remaining > 0) {
+    console.log(
+      `[Discogs Enrichment] ${result.remaining} releases remaining - will continue via cron or manual trigger`
+    );
+  } else {
+    console.log(`[Discogs Enrichment] Complete for user ${userId}`);
+  }
+}
+
 // GET /api/auth/discogs/connect - Initiate OAuth flow
 app.get('/connect', async (c) => {
   // Get username from query parameter
@@ -154,8 +186,47 @@ app.get('/callback', async (c) => {
     // Clean up temporary request token
     await c.env.CACHE.delete(`discogs:oauth:request:${token}`);
 
-    // Redirect back to user's stats page
-    return c.redirect(`/u/${requestData.username}?success=discogs_connected`);
+    // Trigger initial collection sync in background
+    // This runs after the response is sent, so user isn't blocked
+    const ctx = c.executionCtx;
+    ctx.waitUntil(
+      (async () => {
+        try {
+          console.log(`[Discogs] Starting initial sync for user ${requestData.userId}`);
+          const result = await discogsService.syncCollection(
+            requestData.userId,
+            identity.username
+          );
+          console.log(`[Discogs] Initial sync complete: ${result.releaseCount} releases`);
+
+          // Set last sync timestamp
+          await c.env.CACHE.put(
+            `discogs:last-sync:${requestData.userId}`,
+            Date.now().toString(),
+            { expirationTtl: 86400 }
+          );
+
+          // Queue background enrichment (runs in queue handler with no time limit)
+          if (c.env.DISCOGS_QUEUE) {
+            console.log(`[Discogs] Queuing background enrichment for user ${requestData.userId}`);
+            await c.env.DISCOGS_QUEUE.send({
+              type: 'enrich-collection',
+              userId: requestData.userId,
+              discogsUsername: identity.username,
+            });
+          } else {
+            // Fallback to inline enrichment if queue not available (dev mode)
+            console.log(`[Discogs] Queue not available, running inline enrichment`);
+            await runInitialEnrichment(discogsService, requestData.userId);
+          }
+        } catch (error) {
+          console.error(`[Discogs] Initial sync failed for user ${requestData.userId}:`, error);
+        }
+      })()
+    );
+
+    // Redirect back to user's Discogs page (shows sync in progress)
+    return c.redirect(`/u/${requestData.username}/discogs?success=discogs_connected`);
   } catch (error) {
     console.error('Failed to complete Discogs OAuth:', error);
     return c.redirect('/?error=discogs_auth_failed');

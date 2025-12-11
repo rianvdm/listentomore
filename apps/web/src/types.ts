@@ -40,6 +40,15 @@ export type Bindings = {
   DISCOGS_OAUTH_CONSUMER_SECRET?: string;
   // OAuth encryption key for storing tokens securely
   OAUTH_ENCRYPTION_KEY?: string;
+  // Queues for background processing
+  DISCOGS_QUEUE: Queue<DiscogsQueueMessage>;
+};
+
+// Queue message types
+export type DiscogsQueueMessage = {
+  type: 'enrich-collection';
+  userId: string;
+  discogsUsername: string;
 };
 
 // Context variables (set by middleware)

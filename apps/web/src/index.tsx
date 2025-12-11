@@ -33,6 +33,7 @@ import { handleGenreDetail } from './pages/genre/detail';
 import { handleGenreSearch } from './pages/genre/search';
 import { handleUserStats } from './pages/user/stats';
 import { handleUserRecommendations } from './pages/user/recommendations';
+import { handleAccountDiscogs } from './pages/account/discogs';
 import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
@@ -429,6 +430,7 @@ app.get('/stats/lookup', handleStatsLookup);
 // User routes
 app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
+app.get('/u/:username/discogs', handleAccountDiscogs);
 
 // About, Discord, and legal pages
 app.get('/about', (c) => c.html(<AboutPage />));
@@ -688,9 +690,203 @@ async function scheduled(
   } catch (error) {
     console.error('[CRON] Failed to pre-warm user listens cache:', error);
   }
+
+  // ===== Discogs Collection Sync & Enrichment (runs every 6 hours) =====
+  // Only run at specific hours to avoid running too frequently
+  const hour = now.getHours();
+  const shouldRunDiscogsSync = minute < 5 && (hour === 0 || hour === 6 || hour === 12 || hour === 18);
+
+  if (shouldRunDiscogsSync) {
+    try {
+      await syncDiscogsCollections(env);
+    } catch (error) {
+      console.error('[CRON] Discogs sync failed:', error);
+    }
+  }
+}
+
+/**
+ * Sync Discogs collections for all active users with connected accounts
+ * Runs every 6 hours via cron
+ */
+async function syncDiscogsCollections(env: Bindings): Promise<void> {
+  const db = new Database(env.DB);
+
+  // Get users with Discogs connected who were active in last 7 days
+  const usersWithDiscogs = await db.getUsersWithDiscogs();
+  console.log(`[CRON Discogs] Found ${usersWithDiscogs.length} users with Discogs connected`);
+
+  if (usersWithDiscogs.length === 0) return;
+
+  for (const user of usersWithDiscogs) {
+    if (!user.discogs_username) continue;
+
+    try {
+      // Check if sync is needed (skip if synced recently)
+      const lastSyncKey = `discogs:last-sync:${user.id}`;
+      const lastSync = await env.CACHE.get(lastSyncKey);
+      if (lastSync) {
+        const lastSyncTime = parseInt(lastSync, 10);
+        const hoursSinceSync = (Date.now() - lastSyncTime) / (1000 * 60 * 60);
+        if (hoursSinceSync < 5) {
+          console.log(`[CRON Discogs] Skipping ${user.username} - synced ${hoursSinceSync.toFixed(1)}h ago`);
+          continue;
+        }
+      }
+
+      // Get OAuth tokens
+      const oauthToken = await db.getOAuthToken(user.id, 'discogs');
+      if (!oauthToken) {
+        console.log(`[CRON Discogs] Skipping ${user.username} - no OAuth token`);
+        continue;
+      }
+
+      // Decrypt tokens
+      const { decryptToken } = await import('@listentomore/discogs');
+      if (!env.OAUTH_ENCRYPTION_KEY) {
+        console.log(`[CRON Discogs] Skipping ${user.username} - no encryption key configured`);
+        continue;
+      }
+      const accessToken = await decryptToken(oauthToken.access_token_encrypted, env.OAUTH_ENCRYPTION_KEY);
+      const accessSecret = oauthToken.refresh_token_encrypted
+        ? await decryptToken(oauthToken.refresh_token_encrypted, env.OAUTH_ENCRYPTION_KEY)
+        : '';
+
+      // Create Discogs service
+      const discogs = new DiscogsService({
+        accessToken,
+        accessTokenSecret: accessSecret,
+        consumerKey: env.DISCOGS_OAUTH_CONSUMER_KEY,
+        consumerSecret: env.DISCOGS_OAUTH_CONSUMER_SECRET,
+        cache: env.CACHE,
+      });
+
+      console.log(`[CRON Discogs] Syncing collection for ${user.username}`);
+
+      // Sync collection
+      const result = await discogs.syncCollection(user.id, user.discogs_username);
+      console.log(`[CRON Discogs] Synced ${result.releaseCount} releases for ${user.username}`);
+
+      // Update last sync timestamp
+      await env.CACHE.put(lastSyncKey, Date.now().toString(), { expirationTtl: 86400 });
+
+      // Run enrichment for any unenriched releases
+      const enrichmentNeeded = await discogs.getEnrichmentNeeded(user.id);
+      if (enrichmentNeeded && enrichmentNeeded.needsEnrichment > 0) {
+        console.log(`[CRON Discogs] Enriching ${enrichmentNeeded.needsEnrichment} releases for ${user.username}`);
+
+        // Process enrichment batches (limit to avoid timeout)
+        const MAX_CRON_BATCHES = 5; // ~5 minutes max per user
+        for (let i = 0; i < MAX_CRON_BATCHES; i++) {
+          const enrichResult = await discogs.enrichBatch(user.id);
+          if (!enrichResult || enrichResult.remaining === 0) break;
+          console.log(`[CRON Discogs] Enrichment batch ${i + 1}: ${enrichResult.processed} processed, ${enrichResult.remaining} remaining`);
+        }
+      }
+
+      // Small delay between users to avoid rate limits
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (error) {
+      console.error(`[CRON Discogs] Failed to sync for ${user.username}:`, error);
+    }
+  }
+
+  console.log('[CRON Discogs] Sync complete');
+}
+
+// Queue handler for background Discogs enrichment
+async function queue(
+  batch: MessageBatch<import('./types').DiscogsQueueMessage>,
+  env: Bindings
+): Promise<void> {
+  for (const message of batch.messages) {
+    const { type, userId, discogsUsername } = message.body;
+
+    if (type !== 'enrich-collection') {
+      console.log(`[Queue] Unknown message type: ${type}`);
+      message.ack();
+      continue;
+    }
+
+    console.log(`[Queue] Processing enrichment for user ${userId} (${discogsUsername})`);
+
+    try {
+      const db = new Database(env.DB);
+
+      // Get OAuth tokens for this user
+      const oauthToken = await db.getOAuthToken(userId, 'discogs');
+      if (!oauthToken) {
+        console.log(`[Queue] No OAuth token for user ${userId}, skipping`);
+        message.ack();
+        continue;
+      }
+
+      // Decrypt tokens
+      const { decryptToken } = await import('@listentomore/discogs');
+      if (!env.OAUTH_ENCRYPTION_KEY) {
+        console.error(`[Queue] No encryption key configured`);
+        message.ack();
+        continue;
+      }
+
+      const accessToken = await decryptToken(oauthToken.access_token_encrypted, env.OAUTH_ENCRYPTION_KEY);
+      const accessSecret = oauthToken.refresh_token_encrypted
+        ? await decryptToken(oauthToken.refresh_token_encrypted, env.OAUTH_ENCRYPTION_KEY)
+        : '';
+
+      // Create Discogs service
+      const discogs = new DiscogsService({
+        accessToken,
+        accessTokenSecret: accessSecret,
+        consumerKey: env.DISCOGS_OAUTH_CONSUMER_KEY,
+        consumerSecret: env.DISCOGS_OAUTH_CONSUMER_SECRET,
+        cache: env.CACHE,
+      });
+
+      // Run full enrichment - no time limit in queue handler!
+      const MAX_BATCHES = 100; // Safety limit (~5000 releases max)
+      let batchCount = 0;
+      let totalProcessed = 0;
+
+      while (batchCount < MAX_BATCHES) {
+        const result = await discogs.enrichBatch(userId);
+
+        if (!result) {
+          console.log(`[Queue] No enrichment service available`);
+          break;
+        }
+
+        totalProcessed += result.processed;
+        console.log(
+          `[Queue] Batch ${batchCount + 1}: processed ${result.processed}, remaining ${result.remaining}, errors ${result.errors}`
+        );
+
+        if (result.remaining === 0) {
+          console.log(`[Queue] Enrichment complete for user ${userId}: ${totalProcessed} total processed`);
+          break;
+        }
+
+        batchCount++;
+
+        // Small delay between batches
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      if (batchCount >= MAX_BATCHES) {
+        console.warn(`[Queue] Hit max batch limit for user ${userId}`);
+      }
+
+      message.ack();
+    } catch (error) {
+      console.error(`[Queue] Enrichment failed for user ${userId}:`, error);
+      // Don't ack - let it retry
+      message.retry();
+    }
+  }
 }
 
 export default {
   fetch: app.fetch,
   scheduled,
+  queue,
 };

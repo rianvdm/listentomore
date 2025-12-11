@@ -51,6 +51,13 @@ export class Database {
     return result.results;
   }
 
+  async getUsersWithDiscogs(): Promise<User[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM users WHERE discogs_username IS NOT NULL')
+      .all<User>();
+    return result.results;
+  }
+
   async updateUser(
     id: string,
     data: Partial<Pick<User, 'email' | 'lastfm_username' | 'discogs_username' | 'spotify_connected'>>

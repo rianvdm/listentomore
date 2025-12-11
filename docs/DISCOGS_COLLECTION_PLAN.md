@@ -2214,6 +2214,226 @@ Since listentomore uses server-side rendering with Hono (not React), we need a c
 
 ---
 
+## Background Processing Options for Enrichment
+
+### The Problem
+
+The Discogs enrichment process needs to fetch master release data for each release in a user's collection to get original release years and additional genre/style data. With Discogs API rate limits (60 req/min), a collection of 1,500 releases takes ~25-30 minutes to fully enrich.
+
+**Current limitations:**
+- **Cloudflare Workers `fetch()` handler**: 30 second CPU time limit
+- **`waitUntil()`**: Also limited to ~30 seconds CPU time
+- **`scheduled()` (cron)**: Can run longer but only triggered by cron schedule, not on-demand
+
+**Current workaround:** Browser-based polling where the user must keep the tab open while enrichment runs batch-by-batch. This is not a good UX for production.
+
+### Option 1: Cloudflare Queues (Recommended)
+
+**How it works:**
+- Queue handlers have **no CPU time limit**, only wall time limits (minutes, not seconds)
+- HTTP request triggers a message to the queue, returns immediately
+- Queue consumer processes the enrichment in the background
+- Built-in retry logic and automatic scaling
+
+**Architecture:**
+```
+User connects Discogs
+    ↓
+OAuth callback sends message to Queue
+    ↓
+HTTP response returns immediately (user sees "Syncing...")
+    ↓
+Queue consumer runs enrichment (can take 30+ minutes)
+    ↓
+User can check progress anytime, no need to keep tab open
+```
+
+**Implementation:**
+```toml
+# wrangler.toml
+[[queues.producers]]
+queue = "discogs-enrichment"
+binding = "ENRICHMENT_QUEUE"
+
+[[queues.consumers]]
+queue = "discogs-enrichment"
+max_batch_size = 1
+max_batch_timeout = 30
+max_retries = 3
+```
+
+```typescript
+// Producer (in OAuth callback or sync endpoint)
+await env.ENRICHMENT_QUEUE.send({
+  type: 'enrich-collection',
+  userId: user.id,
+  discogsUsername: user.discogs_username,
+});
+
+// Consumer
+export default {
+  async queue(batch: MessageBatch, env: Env) {
+    for (const message of batch.messages) {
+      const { userId } = message.body;
+      // Run full enrichment - no time limit!
+      await runFullEnrichment(env, userId);
+      message.ack();
+    }
+  }
+}
+```
+
+**Pros:**
+- ✅ True background processing - user doesn't need to wait
+- ✅ Built-in retry logic
+- ✅ Scales automatically
+- ✅ Near-instant execution after queue message
+- ✅ Simple API
+
+**Cons:**
+- ⚠️ Additional Cloudflare product to configure
+- ⚠️ Pricing: $0.40 per million messages (very cheap)
+
+**Pricing:** Free tier includes 1M messages/month, then $0.40/million
+
+---
+
+### Option 2: Cloudflare Workflows (Durable Execution)
+
+**How it works:**
+- Workflows is a durable execution engine built on Workers
+- Each step is independently retriable with state persisted between steps
+- Can run for minutes, hours, or even days
+- Automatic retry with configurable backoff
+
+**Architecture:**
+```typescript
+export class DiscogsEnrichmentWorkflow extends WorkflowEntrypoint {
+  async run(event: WorkflowEvent, step: WorkflowStep) {
+    const { userId, releases } = event.payload;
+    
+    // Each release enrichment is a separate step
+    for (const release of releases) {
+      await step.do(`enrich-${release.id}`, {
+        retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' },
+        timeout: '2 minutes',
+      }, async () => {
+        return await enrichRelease(release);
+      });
+      
+      // Rate limit delay as a sleep step
+      await step.sleep('rate-limit-delay', '1 second');
+    }
+  }
+}
+```
+
+**Pros:**
+- ✅ Most robust solution - survives infrastructure failures
+- ✅ Per-step retry with configurable backoff
+- ✅ State persisted automatically
+- ✅ Built-in observability and metrics
+- ✅ Can pause and resume (human-in-the-loop)
+
+**Cons:**
+- ⚠️ More complex programming model
+- ⚠️ Higher pricing than Queues
+- ⚠️ Overkill for simple batch processing
+
+**Pricing:** $0.01 per 1,000 workflow invocations + CPU time
+
+---
+
+### Option 3: Durable Objects with Alarms
+
+**How it works:**
+- Durable Objects can set alarms that fire almost immediately
+- Alarm handler runs in the DO context with longer time limits
+- Can chain alarms for continuous processing
+
+**Architecture:**
+```typescript
+export class EnrichmentRunner {
+  async fetch(request: Request) {
+    // Start enrichment by setting an alarm
+    await this.ctx.storage.setAlarm(Date.now() + 100);
+    return new Response('Enrichment started');
+  }
+  
+  async alarm() {
+    const state = await this.ctx.storage.get('enrichment-state');
+    const result = await processNextBatch(state);
+    
+    if (result.remaining > 0) {
+      // Chain to next batch
+      await this.ctx.storage.put('enrichment-state', result.state);
+      await this.ctx.storage.setAlarm(Date.now() + 1000);
+    }
+  }
+}
+```
+
+**Pros:**
+- ✅ Near-instant execution
+- ✅ Can maintain state across batches
+- ✅ No additional products needed if already using DOs
+
+**Cons:**
+- ⚠️ More complex setup
+- ⚠️ Requires managing DO lifecycle
+- ⚠️ Less built-in retry logic than Queues/Workflows
+
+---
+
+### Option 4: Enhanced Cron with KV Flag (Current Partial Solution)
+
+**How it works:**
+- Set a flag in KV when user connects
+- Cron job (every 5 minutes) checks for pending enrichments
+- Processes batches over multiple cron runs
+
+**Current implementation:**
+- Cron runs every 6 hours for all users
+- Processes up to 5 batches per user per cron run
+- New users wait up to 6 hours for full enrichment
+
+**Improvements possible:**
+- Add a "pending enrichment" KV flag
+- Run enrichment check more frequently (every 5 min)
+- Prioritize users with pending enrichments
+
+**Pros:**
+- ✅ Already partially implemented
+- ✅ No additional Cloudflare products
+- ✅ Simple to understand
+
+**Cons:**
+- ❌ Not instant - user waits for next cron run
+- ❌ Minimum 1 minute delay (cron granularity)
+- ❌ Full enrichment takes many cron cycles
+
+---
+
+### Recommendation
+
+**For production, use Cloudflare Queues (Option 1):**
+
+1. **Simplest migration path** - minimal code changes
+2. **True background processing** - user gets immediate feedback
+3. **Cost-effective** - free tier covers most usage
+4. **Built-in reliability** - automatic retries
+
+**Implementation priority:**
+1. Set up Queue in wrangler.toml
+2. Add queue producer to OAuth callback
+3. Add queue consumer that runs full enrichment
+4. Update UI to show "Enrichment in progress" status
+5. Remove browser-based polling workaround
+
+**Estimated effort:** 2-4 hours
+
+---
+
 ## Conclusion
 
 This plan provides a comprehensive roadmap for integrating Discogs collection functionality into listentomore. The new implementation addresses all the brittleness of the previous system while leveraging listentomore's existing infrastructure for authentication, caching, and API management.
@@ -2232,3 +2452,4 @@ This plan provides a comprehensive roadmap for integrating Discogs collection fu
 2. Set up Discogs OAuth app credentials
 3. Begin Phase 1 implementation
 4. Iterate based on testing and feedback
+5. **Implement Cloudflare Queues for production-ready background enrichment**

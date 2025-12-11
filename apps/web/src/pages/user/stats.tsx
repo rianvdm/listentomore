@@ -83,17 +83,17 @@ export function UserStatsPage({ username, lastfmUsername, discogsUsername, inter
                   {discogsUsername}
                 </a>
               </p>
-              <div id="discogs-collection-stats">
+              <div id="discogs-collection-summary">
                 <div class="loading-container">
                   <span class="spinner">↻</span>
-                  <span class="loading-text">Loading collection stats...</span>
+                  <span class="loading-text">Loading collection...</span>
                 </div>
               </div>
             </div>
           ) : (
             <div class="text-center">
               <p class="text-muted">Connect your Discogs account to see your vinyl collection stats.</p>
-              <a href={`/api/auth/discogs/connect?username=${username}`} class="button">
+              <a href={`/u/${username}/discogs`} class="button">
                 Connect Discogs →
               </a>
             </div>
@@ -256,83 +256,33 @@ export function UserStatsPage({ username, lastfmUsername, discogsUsername, inter
               });
           }
 
-          // Fetch Discogs collection stats (if connected)
-          var discogsStatsEl = document.getElementById('discogs-collection-stats');
-          if (discogsStatsEl) {
+          // Fetch Discogs collection summary (if connected)
+          var discogsSummaryEl = document.getElementById('discogs-collection-summary');
+          if (discogsSummaryEl) {
             internalFetch('/api/internal/discogs-stats?username=' + encodeURIComponent(username))
               .then(function(r) { return r.json(); })
               .then(function(result) {
                 if (result.error) {
-                  discogsStatsEl.innerHTML = '<p class="text-muted">' + result.error + '</p>' +
-                    '<p class="text-center"><button id="sync-collection-btn" class="button">Sync Collection Now</button></p>';
-
-                  // Add click handler for sync button
-                  document.getElementById('sync-collection-btn').addEventListener('click', function() {
-                    var btn = this;
-                    btn.disabled = true;
-                    btn.textContent = 'Syncing... (this may take 30-60 seconds)';
-
-                    internalFetch('/api/internal/discogs-sync?username=' + encodeURIComponent(username), { method: 'POST' })
-                      .then(function(r) { return r.json(); })
-                      .then(function(result) {
-                        if (result.error) {
-                          alert('Sync failed: ' + result.error);
-                          btn.disabled = false;
-                          btn.textContent = 'Sync Collection Now';
-                        } else {
-                          alert('Collection synced successfully! ' + result.data.releaseCount + ' releases. Refreshing page...');
-                          window.location.reload();
-                        }
-                      })
-                      .catch(function(err) {
-                        alert('Sync failed: ' + err.message);
-                        btn.disabled = false;
-                        btn.textContent = 'Sync Collection Now';
-                      });
-                  });
+                  discogsSummaryEl.innerHTML = '<p class="text-muted">' + result.error + '</p>' +
+                    '<p class="text-center"><a href="/u/' + username + '/discogs" class="button">Manage Discogs →</a></p>';
                   return;
                 }
 
                 var stats = result.data.stats;
-                var html = '<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 2rem 0;">';
-                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
-                html += '<div style="font-size: 2rem; font-weight: bold;">' + stats.totalItems + '</div>';
-                html += '<div style="color: var(--text-muted);">Total Records</div></div>';
-                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
-                html += '<div style="font-size: 2rem; font-weight: bold;">' + stats.uniqueArtists + '</div>';
-                html += '<div style="color: var(--text-muted);">Artists</div></div>';
-                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
-                html += '<div style="font-size: 2rem; font-weight: bold;">' + stats.uniqueGenres.length + '</div>';
-                html += '<div style="color: var(--text-muted);">Genres</div></div>';
-                html += '<div class="stat-card" style="text-align: center; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">';
+                var html = '<div class="text-center" style="margin: 1.5rem 0;">';
+                html += '<p style="font-size: 1.1rem;"><strong>' + stats.totalItems + ' records</strong> from <strong>' + stats.uniqueArtists + ' artists</strong></p>';
+                html += '<p class="text-muted" style="font-size: 0.9rem;">' + stats.uniqueGenres.length + ' genres • ';
                 var yearRange = (stats.earliestYear && stats.latestYear) ? stats.earliestYear + '-' + stats.latestYear : 'N/A';
-                html += '<div style="font-size: 1.5rem; font-weight: bold;">' + yearRange + '</div>';
-                html += '<div style="color: var(--text-muted);">Year Range</div></div>';
+                html += yearRange + '</p>';
+                html += '<p style="margin-top: 1rem;"><a href="/u/' + username + '/discogs" class="button">View Full Collection →</a></p>';
                 html += '</div>';
 
-                // Top genres
-                var topGenres = Object.entries(stats.genreCounts || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
-                if (topGenres.length > 0) {
-                  html += '<h3 style="margin-top: 2rem;">Top Genres</h3><ul>';
-                  topGenres.forEach(function(g) { html += '<li>' + g[0] + ' (' + g[1] + ')</li>'; });
-                  html += '</ul>';
-                }
-
-                // Top formats
-                var topFormats = Object.entries(stats.formatCounts || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
-                if (topFormats.length > 0) {
-                  html += '<h3>Formats</h3><ul>';
-                  topFormats.forEach(function(f) { html += '<li>' + f[0] + ' (' + f[1] + ')</li>'; });
-                  html += '</ul>';
-                }
-
-                html += '<p class="text-muted" style="margin-top: 1rem; font-size: 0.9rem;">Last synced: ' + new Date(result.data.lastSynced).toLocaleDateString() + '</p>';
-
-                discogsStatsEl.innerHTML = html;
+                discogsSummaryEl.innerHTML = html;
               })
               .catch(function(e) {
                 console.error('Discogs stats error:', e);
-                discogsStatsEl.innerHTML = '<p class="text-muted">Failed to load collection stats.</p>';
+                discogsSummaryEl.innerHTML = '<p class="text-muted">Failed to load collection stats.</p>' +
+                  '<p class="text-center"><a href="/u/' + username + '/discogs" class="button">Manage Discogs →</a></p>';
               });
           }
         })();

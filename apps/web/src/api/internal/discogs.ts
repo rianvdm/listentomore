@@ -187,4 +187,118 @@ app.get('/discogs-test', async (c) => {
   }
 });
 
+// GET /api/internal/discogs-enrichment-status - Get enrichment progress
+app.get('/discogs-enrichment-status', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Username required' }, 400);
+  }
+
+  const db = c.get('db');
+  const user = await findUser(db, username);
+
+  if (!user) {
+    return c.json({ error: 'User not found' }, 404);
+  }
+
+  if (!user.discogs_username) {
+    return c.json({ error: 'User has not connected Discogs' }, 404);
+  }
+
+  const discogs = c.get('discogs');
+
+  // Get enrichment needed counts
+  const needed = await discogs.getEnrichmentNeeded(user.id);
+  if (!needed) {
+    return c.json({ error: 'Collection not synced yet' }, 404);
+  }
+
+  // Get current progress if running
+  const progress = await discogs.getEnrichmentProgress(user.id);
+
+  return c.json({
+    data: {
+      ...needed,
+      progress,
+    },
+  });
+});
+
+// POST /api/internal/discogs-enrich - Trigger enrichment batch
+app.post('/discogs-enrich', async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Username required' }, 400);
+  }
+
+  const db = c.get('db');
+  const user = await findUser(db, username);
+
+  if (!user) {
+    return c.json({ error: 'User not found' }, 404);
+  }
+
+  if (!user.discogs_username) {
+    return c.json({ error: 'User has not connected Discogs' }, 400);
+  }
+
+  const discogs = c.get('discogs');
+
+  // Check if enrichment is needed
+  const needed = await discogs.getEnrichmentNeeded(user.id);
+  if (!needed || needed.needsEnrichment === 0) {
+    return c.json({
+      data: {
+        message: 'No enrichment needed',
+        alreadyEnriched: needed?.alreadyEnriched || 0,
+        noMasterId: needed?.noMasterId || 0,
+      },
+    });
+  }
+
+  try {
+    // Check if queue is available for background processing
+    const queue = c.env.DISCOGS_QUEUE;
+    if (queue) {
+      // Queue the full enrichment - runs in background with no time limit
+      await queue.send({
+        type: 'enrich-collection',
+        userId: user.id,
+        discogsUsername: user.discogs_username,
+      });
+
+      return c.json({
+        data: {
+          queued: true,
+          message: `Enrichment queued for ${needed.needsEnrichment} releases. Processing in background...`,
+          remaining: needed.needsEnrichment,
+        },
+      });
+    }
+
+    // Fallback: Process one batch inline (for dev mode without queue)
+    const result = await discogs.enrichBatch(user.id);
+
+    if (!result) {
+      return c.json({ error: 'Enrichment service not available' }, 500);
+    }
+
+    return c.json({
+      data: {
+        processed: result.processed,
+        remaining: result.remaining,
+        errors: result.errors,
+        message:
+          result.remaining > 0
+            ? `Processed ${result.processed} releases. ${result.remaining} remaining.`
+            : 'Enrichment complete!',
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Discogs enrichment failed:', errorMessage, error);
+    return c.json({ error: 'Failed to enrich collection' }, 500);
+  }
+});
+
 export const discogsInternalRoutes = app;
