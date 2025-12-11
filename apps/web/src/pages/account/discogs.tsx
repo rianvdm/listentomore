@@ -283,6 +283,7 @@ export function AccountDiscogsPage({
                 }
 
                 var data = result.data;
+                var isRunning = data.progress && data.progress.status === 'running';
                 var html = '';
 
                 // Show counts
@@ -293,7 +294,7 @@ export function AccountDiscogsPage({
                 html += '</div>';
 
                 // Show progress if running
-                if (data.progress && data.progress.status === 'running') {
+                if (isRunning) {
                   var pct = Math.round((data.progress.processed / data.progress.total) * 100);
                   html += '<div style="margin: 1rem 0;">';
                   html += '<div style="background: var(--bg-primary); border-radius: 4px; height: 8px; overflow: hidden;">';
@@ -307,11 +308,15 @@ export function AccountDiscogsPage({
                 // Show enrich button if needed
                 if (data.needsEnrichment > 0) {
                   html += '<p style="margin-top: 1rem;">';
-                  html += '<button id="enrich-btn" class="button-secondary">';
-                  html += data.progress && data.progress.status === 'running' ? 'Continue Enrichment' : 'Start Enrichment';
+                  html += '<button id="enrich-btn" class="button-secondary"' + (isRunning ? ' disabled>' : '>');
+                  html += isRunning ? 'Processing in background...' : 'Start Enrichment';
                   html += '</button>';
                   html += '</p>';
-                  html += '<p id="enrich-status" class="text-muted" style="font-size: 0.85rem;"></p>';
+                  html += '<p id="enrich-status" class="text-muted" style="font-size: 0.85rem;">';
+                  if (isRunning) {
+                    html += 'Your collection is enriching in the background. You can close this tab.';
+                  }
+                  html += '</p>';
                 } else if (data.alreadyEnriched > 0) {
                   html += '<p style="color: var(--accent-color); margin-top: 1rem;">✓ All releases enriched!</p>';
                 }
@@ -320,8 +325,16 @@ export function AccountDiscogsPage({
 
                 // Attach enrich button handler
                 var enrichBtn = document.getElementById('enrich-btn');
-                if (enrichBtn) {
+                if (enrichBtn && !enrichBtn.disabled) {
                   enrichBtn.addEventListener('click', startEnrichment);
+                }
+
+                if (isRunning) {
+                  var enrichStatus = document.getElementById('enrich-status');
+                  if (enrichStatus && !enrichStatus.textContent) {
+                    enrichStatus.textContent = 'Your collection is enriching in the background. You can close this tab.';
+                  }
+                  startBackgroundPolling();
                 }
               })
               .catch(function(e) {
@@ -369,6 +382,7 @@ export function AccountDiscogsPage({
                 }
 
                 var data = result.data;
+                var isRunning = data.progress && data.progress.status === 'running';
                 if (enrichStatus) {
                   enrichStatus.textContent = data.message;
                 }
