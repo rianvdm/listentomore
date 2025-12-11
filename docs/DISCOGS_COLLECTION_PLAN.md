@@ -1,5 +1,46 @@
 # Discogs Collection Integration Plan
 
+> **⏸️ Feature Paused (Dec 2025)**
+>
+> This feature was in progress on `feature/discogs-collection` but paused to deploy main. The DB schema and OAuth tokens remain intact in production.
+>
+> ### To Resume Work
+>
+> 1. **Check out the feature branch:**
+>    ```bash
+>    git checkout feature/discogs-collection
+>    ```
+>
+> 2. **Recreate the Cloudflare Queue** (was deleted to allow main deploy):
+>    ```bash
+>    cd apps/web
+>    wrangler queues create discogs-enrichment
+>    ```
+>
+> 3. **Deploy the feature branch:**
+>    ```bash
+>    pnpm run deploy
+>    ```
+>
+> ### What's Already Done
+> - ✅ OAuth 1.0a flow working in production
+> - ✅ `oauth_tokens` table exists (migration 005)
+> - ✅ Discogs service package (`packages/services/discogs`)
+> - ✅ Collection sync and enrichment via Queues
+> - ✅ User stats page shows Discogs section with connect button
+>
+> ### What's Left (Phase 3+)
+> - Collection browse/filter UI (`/u/:username/collection`)
+> - Charts and visualizations
+> - Search within collection
+>
+> ### DB Notes
+> - The `oauth_tokens` and `discogs_*` tables remain in prod
+> - Any connected Discogs accounts retain their tokens
+> - Main branch code ignores these tables (safe)
+
+---
+
 ## Executive Summary
 
 This document outlines the plan to port Discogs collection functionality from the standalone my-music-next Next.js app and brittle Cloudflare Workers setup into the listentomore platform. The new implementation will provide authenticated users with comprehensive collection statistics, search, and filtering capabilities while leveraging listentomore's existing authentication, caching, and API infrastructure.
