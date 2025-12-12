@@ -40,7 +40,7 @@ Include their main genres, and name 2-3 similar artists.
 CRITICAL REQUIREMENTS:
 * In total the response HAS to be less than 38 words.
 * If you don't have information about this musical artist, say "There is no information available about this artist."
-* Use plain text with no Markdown formatting.`;
+* Use plain text ONLY - NO Markdown formatting (no **bold**, no *italic*, no ### headers, etc.).`;
 
   const response = await client.chatCompletion({
     model: config.model,
