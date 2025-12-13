@@ -35,7 +35,7 @@ export async function generateAlbumDetail(
 
   const config = getTaskConfig('albumDetail');
 
-  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes.
+  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2-3 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes.
 
 Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.
 

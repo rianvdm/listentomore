@@ -99,7 +99,7 @@ export const AI_TASKS = {
   artistSummary: {
     provider: 'perplexity',
     model: 'sonar',
-    maxTokens: 1000,
+    maxTokens: 1500,
     temperature: 0.5,
     cacheTtlDays: 180,
   },
@@ -107,7 +107,7 @@ export const AI_TASKS = {
   albumDetail: {
     provider: 'perplexity',
     model: 'sonar',
-    maxTokens: 1000,
+    maxTokens: 1500,
     temperature: 0.5,
     cacheTtlDays: 120,
   },
@@ -115,7 +115,7 @@ export const AI_TASKS = {
   genreSummary: {
     provider: 'perplexity',
     model: 'sonar',
-    maxTokens: 1000,
+    maxTokens: 1500,
     temperature: 0.5,
     cacheTtlDays: 180,
   },
