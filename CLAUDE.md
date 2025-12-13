@@ -6,6 +6,8 @@
 
 Music discovery web app built with **Hono on Cloudflare Workers**. Monorepo managed by **Turborepo** and **pnpm**.
 
+**Version:** 1.0.0 (Released 2025-12-13)
+
 **Key constraint:** Single Worker architecture. Do NOT create new workers or separate API services.
 
 ### Architecture
@@ -22,9 +24,16 @@ apps/
         internal/   # Token-protected internal endpoints
         admin/      # Admin endpoints (keys, cache)
       pages/        # Page components and handlers
+        account/    # Account settings and profile management
+        auth/       # Login and Last.fm OAuth callback
+        user/       # User profile and stats pages
+        tools/      # Tools page (Discord bot, MCP server)
+        album/      # Album detail pages
+        artist/     # Artist detail pages
+        genre/      # Genre exploration pages
       components/   # UI components
-      middleware/   # Auth, rate limiting, logging
-      utils/        # Helpers and utilities
+      middleware/   # Auth, rate limiting, logging, session management
+      utils/        # Helpers and utilities (session, internal tokens)
   discord-bot/      # Discord bot (separate Worker)
 packages/
   services/         # Backend services (spotify, lastfm, ai, songlink)
@@ -51,16 +60,24 @@ pnpm run deploy       # Deploy to Cloudflare
 | Albums | `/album/{spotifyId}` | `/album/4LH4d3cOWNNsVw41Gqt2kv` |
 | Artists | `/artist/{spotifyId}` | `/artist/0k17h0D3J5VfsdmQ1iZtE9` |
 | Genres | `/genre/{slug}` | `/genre/indie-rock` |
-| User stats | `/u/{lastfm-username}` | `/u/bordesak` |
+| User profiles | `/u/{lastfm-username}` | `/u/bordesak` |
+| Account settings | `/account` | `/account` |
+| Login | `/login` | `/login?next=/account` |
+| Tools | `/tools` | `/tools` |
 
 ### Services via Context
 
 ```typescript
+// Services
 const spotify = c.get('spotify') as SpotifyService;
 const lastfm = c.get('lastfm') as LastfmService;
 const ai = c.get('ai') as AIService;
 const songlink = c.get('songlink') as SonglinkService;
 const db = c.get('db') as Database;
+
+// User session context (set by sessionMiddleware)
+const currentUser = c.get('currentUser') as User | null;
+const isAuthenticated = c.get('isAuthenticated') as boolean;
 ```
 
 ### Environment Variables
@@ -72,15 +89,84 @@ Required secrets in `apps/web/wrangler.toml`:
 | `SPOTIFY_CLIENT_ID` | Spotify API |
 | `SPOTIFY_CLIENT_SECRET` | Spotify API |
 | `SPOTIFY_REFRESH_TOKEN` | Spotify API |
-| `LASTFM_API_KEY` | Last.fm API |
+| `LASTFM_API_KEY` | Last.fm API (read-only) |
+| `LASTFM_SHARED_SECRET` | Last.fm API (for authentication) |
 | `OPENAI_API_KEY` | GPT models |
 | `PERPLEXITY_API_KEY` | Web-grounded AI |
 | `INTERNAL_API_SECRET` | Internal API tokens |
 | `ADMIN_SECRET` | Admin endpoints |
+| `DISCORD_WEBHOOK_URL` | Discord notifications (user signups) |
 
 ---
 
 ## Key Patterns
+
+### User Authentication & Session Management
+
+The app uses **Last.fm OAuth authentication** with cookie-based sessions.
+
+**Authentication flow:**
+1. User clicks "Sign In" → redirects to `/login`
+2. Login page redirects to Last.fm OAuth
+3. Last.fm redirects back to `/auth/lastfm/callback` with token
+4. App exchanges token for Last.fm session key
+5. App creates user record (or updates existing user)
+6. App creates session with 30-day cookie
+7. User is redirected to original destination
+
+**Session management:**
+
+```typescript
+// Middleware injects currentUser into context for all routes
+import { sessionMiddleware, requireAuth } from './middleware/session';
+
+// Apply session middleware globally in index.tsx
+app.use('*', sessionMiddleware);
+
+// Require authentication for specific routes
+app.get('/account', requireAuth, handleAccount);
+
+// Access current user in route handlers
+export async function handleMyPage(c: Context) {
+  const currentUser = c.get('currentUser') as User | null;
+  const isAuthenticated = c.get('isAuthenticated') as boolean;
+
+  if (!isAuthenticated) {
+    return c.redirect('/login?next=/my-page');
+  }
+
+  return c.html(<MyPage user={currentUser} />);
+}
+```
+
+**Session utilities:**
+
+```typescript
+import { createSession, validateSession, destroySession } from './utils/session';
+
+// Create session on login
+await createSession(c, userId, db);
+
+// Validate session (done automatically by sessionMiddleware)
+const user = await validateSession(c, db);
+
+// Destroy session on logout
+await destroySession(c, db);
+```
+
+**User profile privacy:**
+- Users have `profile_visibility` field: `'public'` or `'private'`
+- Private profiles only visible to the owner
+- Check in route handlers before rendering profile data
+
+**Key files:**
+- `apps/web/src/middleware/session.ts` - Session middleware
+- `apps/web/src/utils/session.ts` - Session utilities
+- `apps/web/src/pages/auth/login.tsx` - Login page
+- `apps/web/src/pages/auth/lastfm.ts` - OAuth callback handler
+- `apps/web/src/pages/account/` - Account settings
+- `packages/db/src/migrations/005_user_auth.sql` - User auth schema
+- `packages/db/src/migrations/006_sessions.sql` - Sessions schema
 
 ### Server-Side Rendering with Progressive Loading
 
@@ -115,9 +201,9 @@ export async function handleAlbumDetail(c: Context) {
 
 ```typescript
 // pages/example/index.tsx
-export function ExamplePage({ data }: Props) {
+export function ExamplePage({ data, currentUser }: Props) {
   return (
-    <Layout title="Example">
+    <Layout title="Example" currentUser={currentUser}>
       <h1>Example</h1>
     </Layout>
   );
@@ -125,13 +211,18 @@ export function ExamplePage({ data }: Props) {
 
 export async function handleExample(c: Context) {
   const spotify = c.get('spotify');
+  const currentUser = c.get('currentUser');
   const data = await spotify.getData();
-  return c.html(<ExamplePage data={data} />);
+  return c.html(<ExamplePage data={data} currentUser={currentUser} />);
 }
 
-// index.tsx
+// index.tsx - public page
 import { handleExample } from './pages/example';
 app.get('/example', handleExample);
+
+// index.tsx - protected page (requires login)
+import { requireAuth } from './middleware/session';
+app.get('/account', requireAuth, handleAccount);
 ```
 
 ### Adding New API Routes
@@ -246,8 +337,30 @@ Key files:
 
 ```typescript
 const db = c.get('db') as Database;
+
+// User queries
 const user = await db.getUserByUsername(username);
+const user = await db.getUser(userId);
+await db.createUser({ username, lastfm_username, ... });
+await db.updateUser(userId, { display_name, bio, profile_visibility, ... });
+await db.deleteUser(userId); // Cascades to sessions, searches, etc.
+
+// Session queries
+await db.createSession({ id, user_id, token_hash, expires_at, ... });
+const session = await db.getSessionByToken(tokenHash);
+await db.deleteSession(sessionId);
+await db.deleteSessionByToken(tokenHash);
+await db.updateSessionActivity(sessionId);
 ```
+
+**Key tables:**
+- `users` - User accounts with Last.fm integration
+  - Fields: `id`, `username`, `lastfm_username`, `lastfm_session_key`, `display_name`, `avatar_url`, `bio`, `profile_visibility`, `last_login_at`, `login_count`
+- `sessions` - Cookie-based sessions (30-day expiry)
+  - Fields: `id`, `user_id`, `token_hash`, `user_agent`, `ip_address`, `expires_at`, `last_active_at`
+  - Cascades on user delete
+- `api_keys` - API authentication
+- `searches` - Search history (user_id foreign key)
 
 **Adding migrations:**
 1. Create file: `packages/db/src/migrations/00X_description.sql`
@@ -307,6 +420,12 @@ npx wrangler tail --format=json
 - Perplexity rate limit: 30 req/min
 - OpenAI rate limit: 60 req/min
 
+**Session/authentication issues:**
+- Session cookie not set - check `LASTFM_SHARED_SECRET` is configured
+- User not authenticated - check `sessionMiddleware` is applied before route
+- Login redirect loop - check `requireAuth` is not applied to `/login` or `/auth/*`
+- Sessions expire after 30 days - users must re-login
+
 ### Inspecting Cache
 
 ```bash
@@ -328,6 +447,12 @@ pnpm --filter @listentomore/web exec wrangler d1 execute DB --local --command "S
 
 # Run against production
 pnpm --filter @listentomore/web exec wrangler d1 execute DB --remote --command "SELECT * FROM users"
+
+# Check active sessions
+pnpm --filter @listentomore/web exec wrangler d1 execute DB --local --command "SELECT u.username, s.last_active_at FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.expires_at > datetime('now')"
+
+# Delete expired sessions
+pnpm --filter @listentomore/web exec wrangler d1 execute DB --local --command "DELETE FROM sessions WHERE expires_at < datetime('now')"
 ```
 
 ### Error Handling Pattern
@@ -351,6 +476,9 @@ try {
 
 - Use existing UI components from `components/ui/`
 - Use `c.get('serviceName')` for data fetching
+- Use `c.get('currentUser')` and `c.get('isAuthenticated')` for user context
+- Use `requireAuth` middleware for protected routes
+- Check `profile_visibility` before showing user data
 - Use progressive loading for slow data (AI, external APIs)
 - Use `Promise.all()` for parallel independent fetches
 - Add page routes to `apps/web/src/index.tsx`
@@ -358,6 +486,7 @@ try {
 - Return HTML with `c.html(<Component />)`
 - Use `internalFetch()` for all `/api/internal/*` calls
 - Pass `internalToken` to Layout for pages using internal APIs
+- Pass `currentUser` to Layout for navigation auth state
 - Use `getTtlSeconds(CACHE_CONFIG.x.y)` for cache TTLs
 - Import types from `apps/web/src/types.ts` in API route files
 
@@ -365,12 +494,14 @@ try {
 
 - Create new workers or separate API services
 - Use client-side data fetching for initial page render (except progressive loading)
-- Expose API keys to browser
+- Expose API keys or session tokens to browser
+- Show private user profiles without checking `profile_visibility`
 - Hardcode cache TTLs (use `CACHE_CONFIG`)
 - Create duplicate components - check `components/ui/` first
 - Use regular `fetch()` for internal APIs
 - Cache user-specific data that changes frequently
 - Define API routes inline in `index.tsx` (use `api/` directory)
+- Store sensitive user data in KV cache
 
 ---
 
