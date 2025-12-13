@@ -78,6 +78,69 @@ This document outlines the plan to add registered/authenticated user support to 
 
 ## Database Schema Changes
 
+### Migration 004.5: Convert User IDs to UUIDs (PREREQUISITE)
+
+**Why this is needed:** The current schema uses `id = lowercase(username)` which was derived from Last.fm usernames. This creates a problem when users can sign up via different services (Discogs, Last.fm, Spotify) where usernames differ. We need stable UUIDs for user IDs.
+
+**Current state:**
+- `users.id` = lowercase username (e.g., `bordesak`, `draklef`)
+- Foreign keys in `searches`, `discogs_releases`, `oauth_tokens`, `discogs_sync_state` reference this
+
+**Target state:**
+- `users.id` = UUID (e.g., `a1b2c3d4e5f6...`)
+- `users.username` = user-chosen or service-derived username (for URLs)
+
+```sql
+-- Migration: Convert user IDs from username to UUID
+-- File: packages/db/src/migrations/004.5_uuid_user_ids.sql
+-- MUST RUN BEFORE any other auth migrations
+
+-- Step 1: Add new UUID column and populate
+ALTER TABLE users ADD COLUMN new_id TEXT;
+UPDATE users SET new_id = lower(hex(randomblob(16)));
+
+-- Step 2: Ensure username column has current id values
+UPDATE users SET username = id WHERE username IS NULL;
+
+-- Step 3: Update foreign keys in related tables
+-- Note: SQLite doesn't support ALTER COLUMN, so we need to recreate tables
+-- or use a more complex migration strategy
+
+-- For oauth_tokens (already has proper FK)
+UPDATE oauth_tokens SET user_id = (
+  SELECT new_id FROM users WHERE users.id = oauth_tokens.user_id
+);
+
+-- For searches
+UPDATE searches SET user_id = (
+  SELECT new_id FROM users WHERE users.id = searches.user_id
+) WHERE user_id != 'default';
+
+-- For discogs_releases  
+UPDATE discogs_releases SET user_id = (
+  SELECT new_id FROM users WHERE users.id = discogs_releases.user_id
+) WHERE user_id != 'default';
+
+-- For discogs_sync_state
+UPDATE discogs_sync_state SET user_id = (
+  SELECT new_id FROM users WHERE users.id = discogs_sync_state.user_id
+) WHERE user_id != 'default';
+
+-- Step 4: Swap id columns
+-- SQLite approach: Create new table, copy data, drop old, rename
+-- (Full implementation depends on exact constraints needed)
+
+-- Step 5: Update indexes
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+```
+
+**Important:** This migration must be tested carefully in a dev environment first. Consider:
+1. Backup production database before running
+2. Update all code that assumes `id = username`
+3. Update `Database` class methods that create users
+
+---
+
 ### Migration 005: Add Authentication Fields
 
 ```sql
