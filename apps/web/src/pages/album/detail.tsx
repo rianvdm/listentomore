@@ -2,6 +2,7 @@
 // Loads basic data immediately, then progressively loads AI summary and streaming links
 
 import type { Context } from 'hono';
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
@@ -22,12 +23,13 @@ interface AlbumDetailProps {
   album: AlbumData | null;
   error?: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
-export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProps) {
+export function AlbumDetailPage({ album, error, internalToken, currentUser }: AlbumDetailProps) {
   if (error || !album) {
     return (
-      <Layout title="Album Not Found">
+      <Layout title="Album Not Found" currentUser={currentUser}>
         <div class="text-center" style={{ paddingTop: '4rem' }}>
           <h1>Album Not Found</h1>
           <p class="text-muted">
@@ -51,6 +53,7 @@ export function AlbumDetailPage({ album, error, internalToken }: AlbumDetailProp
       image={albumImage}
       url={`https://listentomore.com/album/${album.id}`}
       internalToken={internalToken}
+      currentUser={currentUser}
     >
       {/* Header with linked artist */}
       <header>
@@ -202,13 +205,14 @@ export async function handleAlbumDetail(c: Context) {
   const spotifyId = c.req.param('id');
   const spotify = c.get('spotify') as SpotifyService;
   const internalToken = c.get('internalToken') as string;
+  const currentUser = c.get('currentUser') as User | null;
 
   try {
     // Fetch album data from Spotify (fast)
     const albumData = await spotify.getAlbum(spotifyId);
 
     if (!albumData) {
-      return c.html(<AlbumDetailPage album={null} error="Album not found" internalToken={internalToken} />);
+      return c.html(<AlbumDetailPage album={null} error="Album not found" internalToken={internalToken} currentUser={currentUser} />);
     }
 
     const album: AlbumData = {
@@ -222,7 +226,7 @@ export async function handleAlbumDetail(c: Context) {
       spotifyUrl: albumData.url,
     };
 
-    return c.html(<AlbumDetailPage album={album} internalToken={internalToken} />);
+    return c.html(<AlbumDetailPage album={album} internalToken={internalToken} currentUser={currentUser} />);
   } catch (error) {
     console.error('Album detail error:', error);
 
@@ -232,6 +236,6 @@ export async function handleAlbumDetail(c: Context) {
       return c.html(<RateLimitedPage type="album" />, 503);
     }
 
-    return c.html(<AlbumDetailPage album={null} error="Failed to load album" internalToken={internalToken} />);
+    return c.html(<AlbumDetailPage album={null} error="Failed to load album" internalToken={internalToken} currentUser={currentUser} />);
   }
 }

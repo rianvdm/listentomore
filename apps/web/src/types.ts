@@ -1,7 +1,7 @@
 // Shared type definitions for the Hono application
 // Used across all route handlers to ensure type consistency
 
-import type { Database, ParsedApiKey } from '@listentomore/db';
+import type { Database, ParsedApiKey, User } from '@listentomore/db';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { LastfmService } from '@listentomore/lastfm';
 import type { SonglinkService } from '@listentomore/songlink';
@@ -23,6 +23,7 @@ export type Bindings = {
   SPOTIFY_STREAMING_CLIENT_SECRET?: string;
   SPOTIFY_STREAMING_REFRESH_TOKEN?: string;
   LASTFM_API_KEY: string;
+  LASTFM_SHARED_SECRET?: string;
   LASTFM_USERNAME: string;
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
@@ -44,9 +45,12 @@ export type Variables = {
   songlink: SonglinkService;
   streamingLinks: StreamingLinksService;
   ai: AIService;
-  // Auth context
+  // Auth context (API keys)
   apiKey: ParsedApiKey | null;
   authTier: 'public' | 'standard' | 'premium';
+  // User session context
+  currentUser: User | null;
+  isAuthenticated: boolean;
   // Internal API token (for progressive loading)
   internalToken: string;
 };

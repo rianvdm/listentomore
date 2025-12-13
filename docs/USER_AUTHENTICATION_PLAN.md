@@ -1,8 +1,45 @@
 # User Authentication Implementation Plan
 
-## Executive Summary
+## ✅ Implementation Complete (December 2024)
 
-This document outlines the plan to add registered/authenticated user support to ListenToMore. Currently, the app operates as a "bring your own Last.fm username" service with no user accounts. This plan covers database schema changes, authentication flows, security considerations, and UI/UX changes to support proper user registration, login, and personalized experiences.
+This document outlines the plan to add user accounts to ListenToMore using **Last.fm as the sole authentication provider**. Users sign up by connecting their Last.fm account, which automatically links their listening data.
+
+### What Was Built
+
+**Phase 1: Database & Session Foundation** ✅
+- Migration `005_user_auth.sql` - Added auth fields to users table
+- Migration `006_sessions.sql` - Created sessions table
+- Session utilities (`createSession`, `validateSession`, `destroySession`)
+- Session middleware injecting `currentUser` into Hono context
+- MD5 utility for Last.fm API signatures
+
+**Phase 2: Last.fm Authentication** ✅
+- `/login` page with "Continue with Last.fm" button
+- `/auth/lastfm` redirect handler
+- `/auth/lastfm/callback` token exchange and user creation/claim
+- `/auth/logout` session destruction
+- `LASTFM_SHARED_SECRET` added to production secrets
+
+**Phase 3: Navigation & Account Page** ✅
+- NavBar shows user dropdown when logged in, "Sign In" when not
+- User dropdown with avatar, My Profile, Account Settings, Sign Out
+- `/account` page with profile settings, privacy controls, delete account
+- `/stats` redirects to `/login`
+- Added "Tools" link to nav (Discord bot + Last.fm MCP server)
+
+**Phase 4: Profile Privacy** ✅
+- Privacy check on `/u/:username` route
+- `PrivateProfilePage` component for private profiles
+- Internal APIs respect privacy settings via `getUserWithPrivacyCheck`
+
+**Additional Fixes:**
+- Existing users auto-claimed on first Last.fm login
+- Avatar and display_name fetched for returning users
+- `currentUser` passed to Layout on all pages for consistent nav state
+
+---
+
+## Original Plan (for reference)
 
 ---
 
@@ -10,14 +47,14 @@ This document outlines the plan to add registered/authenticated user support to 
 
 1. [Current State Analysis](#current-state-analysis)
 2. [Goals & Non-Goals](#goals--non-goals)
-3. [Database Schema Changes](#database-schema-changes)
-4. [Authentication Strategy](#authentication-strategy)
-5. [Session Management](#session-management)
-6. [Security Considerations](#security-considerations)
-7. [API Changes](#api-changes)
-8. [UI/UX Changes](#uiux-changes)
-9. [Profile Privacy Controls](#profile-privacy-controls)
-10. [Migration Strategy](#migration-strategy)
+3. [Recommended UX Flow](#recommended-ux-flow)
+4. [URL Structure](#url-structure)
+5. [Navigation Changes](#navigation-changes)
+6. [Database Schema Changes](#database-schema-changes)
+7. [Last.fm Web Authentication](#lastfm-web-authentication)
+8. [Session Management](#session-management)
+9. [API Changes](#api-changes)
+10. [UI/UX Designs](#uiux-designs)
 11. [Implementation Phases](#implementation-phases)
 
 ---
@@ -27,31 +64,21 @@ This document outlines the plan to add registered/authenticated user support to 
 ### What Exists
 
 **Database (D1):**
-- `users` table with: `id`, `username`, `email`, `lastfm_username`, `discogs_username`, `spotify_connected`, `created_at`, `updated_at`
-- `api_keys` table with full key management (hash, tier, scopes, rate limits)
-- `searches` table for per-user search history
-- User IDs are now standardized to lowercase usernames (migration 004)
+- `users` table with: `id` (UUID), `username`, `email`, `lastfm_username`, `discogs_username`, `spotify_connected`, `created_at`, `updated_at`
+- `api_keys` table with full key management
+- User IDs now support UUIDs
 
-**Authentication:**
-- API key system for `/api/v1/*` endpoints (X-API-Key header)
-- HMAC-signed internal tokens for `/api/internal/*` (5-minute TTL)
-- Admin secret for `/api/auth/keys` endpoint
-- No user login/signup - users are created manually via SQL
+**Current User Flow:**
+- `/stats` - Anyone enters any Last.fm username
+- `/u/{username}` - Shows stats if user exists in DB with `lastfm_username`
+- No login/signup - users created manually via SQL
 
-**User Pages:**
-- `/u/{username}` - Public stats page (Last.fm data)
-- `/u/{username}/recommendations` - AI recommendations based on listening
-- `/stats` - Entry point where anyone can enter any Last.fm username
-
-### What's Missing
-
-- User registration (signup flow)
-- Password-based or OAuth login
-- Session management (cookies, tokens)
+**What's Missing:**
+- User registration flow
+- Session management (cookies)
 - "Logged in" state in UI
-- User settings/preferences page
-- Account management (change password, delete account)
-- Privacy controls (public vs. private profiles)
+- Account settings page
+- Privacy controls
 
 ---
 
@@ -59,20 +86,146 @@ This document outlines the plan to add registered/authenticated user support to 
 
 ### Goals
 
-1. Allow users to register accounts and claim their username
-2. Enable login via OAuth (Spotify, Last.fm) and/or email+password
-3. Provide personalized dashboard for logged-in users
-4. Let users control privacy (public/private profile)
-5. Enable users to manage their connected services (Last.fm, Spotify, Discogs)
-6. Support account deletion (GDPR compliance)
+1. **Single sign-on with Last.fm** - Users authenticate via Last.fm, no passwords to manage
+2. **Account page** - Replace `/stats` with `/account` for logged-in users
+3. **Profile page** - `/u/{username}` shows user's stats (public or private)
+4. **Privacy controls** - Users can make their profile public/private
+5. **Clean navigation** - Show avatar/username when logged in
 
-### Non-Goals (for initial implementation)
+### Non-Goals (MVP)
 
+- Spotify/Discogs OAuth (future enhancement)
+- Email+password authentication
 - Social features (following, friends)
-- User-generated content (playlists, reviews)
-- Premium subscriptions or payments
-- Mobile app authentication
-- Multi-factor authentication (2FA)
+- Premium subscriptions
+- Multi-factor authentication
+
+---
+
+## Recommended UX Flow
+
+### The Core Insight
+
+The best UX for a music stats app is **"Sign in with Last.fm"** as the only auth method. This is because:
+
+1. **Every user already has Last.fm** - That's the whole point of the app
+2. **No passwords to manage** - Reduces friction and security burden
+3. **Instant data access** - Account creation = data connection in one step
+4. **Familiar pattern** - Users expect "Sign in with X" for single-purpose apps
+
+### User Journey
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           VISITOR (NOT LOGGED IN)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Nav: [Brand] [Albums] [Artists] [About] [Sign In]                          │
+│                                                                             │
+│  • Can browse albums, artists, genres                                       │
+│  • Can view PUBLIC user profiles at /u/{username}                           │
+│  • Cannot see private profiles                                              │
+│  • "Sign In" button in nav → /login                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              /login PAGE                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│                        Sign in to ListenToMore                              │
+│                                                                             │
+│         Connect your Last.fm account to see your listening stats            │
+│         and get personalized recommendations.                               │
+│                                                                             │
+│              ┌─────────────────────────────────────────┐                    │
+│              │  🎵  Continue with Last.fm              │                    │
+│              └─────────────────────────────────────────┘                    │
+│                                                                             │
+│         By signing in, you agree to our Terms and Privacy Policy            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         LAST.FM AUTH FLOW                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Redirect to Last.fm authorization page                                  │
+│  2. User approves ListenToMore access                                       │
+│  3. Last.fm redirects back with token                                       │
+│  4. We fetch user's Last.fm username                                        │
+│  5. Create or update user in DB                                             │
+│  6. Create session, set cookie                                              │
+│  7. Redirect to /account (new users) or /u/{username} (returning)           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LOGGED IN USER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Nav: [Brand] [Albums] [Artists] [About] [👤 Avatar ▼]                      │
+│                                                  │                          │
+│                                                  ├─ My Profile              │
+│                                                  ├─ Account Settings        │
+│                                                  └─ Sign Out                │
+│                                                                             │
+│  • Full access to all features                                              │
+│  • /u/{username} shows their stats                                          │
+│  • /account shows settings (privacy, etc.)                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## URL Structure
+
+| URL | Purpose | Auth Required |
+|-----|---------|---------------|
+| `/login` | Sign in page with Last.fm button | No |
+| `/auth/lastfm` | Initiates Last.fm auth flow | No |
+| `/auth/lastfm/callback` | Handles Last.fm callback | No |
+| `/auth/logout` | Destroys session, redirects to / | Yes |
+| `/account` | Account settings (privacy, etc.) | Yes |
+| `/u/{username}` | Public profile page | No (respects privacy) |
+| `/u/{username}/recommendations` | AI recommendations | No (respects privacy) |
+
+**Removed:**
+- `/stats` - No longer needed; users sign in to see their own stats
+- `/stats/lookup` - Removed; no arbitrary username lookup
+
+---
+
+## Navigation Changes
+
+### Current Navigation
+```
+[Brand] [Albums] [Artists] [Stats] [Discord] [About] [🌙]
+```
+
+### New Navigation (Logged Out)
+```
+[Brand] [Albums] [Artists] [About] [Sign In] [🌙]
+```
+
+### New Navigation (Logged In)
+```
+[Brand] [Albums] [Artists] [About] [👤 ▼] [🌙]
+                                    │
+                                    ├─ My Profile
+                                    ├─ Account Settings  
+                                    └─ Sign Out
+```
+
+**Changes:**
+- Remove "Stats" link (replaced by account flow)
+- Remove "Discord" link (move to About page or footer)
+- Add "Sign In" button for logged-out users
+- Add user dropdown with avatar for logged-in users
 
 ---
 
@@ -81,139 +234,73 @@ This document outlines the plan to add registered/authenticated user support to 
 ### Migration 005: Add Authentication Fields
 
 ```sql
--- Migration: Add authentication fields to users table
--- File: packages/db/src/migrations/005_user_auth.sql
+-- Migration: 005_user_auth.sql
+-- Simplified auth fields for Last.fm-only authentication
 
--- Add auth-related columns to users table
-ALTER TABLE users ADD COLUMN password_hash TEXT;
-ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'email';
--- auth_provider: 'email', 'spotify', 'lastfm', 'discord'
+-- Session key from Last.fm (for API calls on user's behalf)
+ALTER TABLE users ADD COLUMN lastfm_session_key TEXT;
 
-ALTER TABLE users ADD COLUMN oauth_provider_id TEXT;
--- External ID from OAuth provider (Spotify user ID, Last.fm username, etc.)
-
-ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0;
-ALTER TABLE users ADD COLUMN email_verification_token TEXT;
-ALTER TABLE users ADD COLUMN email_verification_expires TEXT;
-
-ALTER TABLE users ADD COLUMN password_reset_token TEXT;
-ALTER TABLE users ADD COLUMN password_reset_expires TEXT;
-
+-- Profile fields
 ALTER TABLE users ADD COLUMN display_name TEXT;
--- User-chosen display name (username is for URLs)
-
 ALTER TABLE users ADD COLUMN avatar_url TEXT;
--- Profile picture (from OAuth or uploaded)
-
 ALTER TABLE users ADD COLUMN bio TEXT;
--- Short user bio/description
 
+-- Privacy: 'public' (anyone), 'private' (only owner)
 ALTER TABLE users ADD COLUMN profile_visibility TEXT DEFAULT 'public';
--- 'public', 'private', 'unlisted'
 
+-- Timestamps
 ALTER TABLE users ADD COLUMN last_login_at TEXT;
 ALTER TABLE users ADD COLUMN login_count INTEGER DEFAULT 0;
 
--- Index for OAuth lookups
-CREATE INDEX IF NOT EXISTS idx_users_oauth ON users(auth_provider, oauth_provider_id);
-CREATE INDEX IF NOT EXISTS idx_users_email_verified ON users(email) WHERE email_verified = 1;
+-- Index for Last.fm username lookups (already exists, but ensure it's there)
+CREATE INDEX IF NOT EXISTS idx_users_lastfm ON users(lastfm_username);
 ```
 
 ### Migration 006: User Sessions Table
 
 ```sql
--- Migration: Add sessions table for authentication
--- File: packages/db/src/migrations/006_sessions.sql
+-- Migration: 006_sessions.sql
+-- Simple session management for cookie-based auth
 
 CREATE TABLE IF NOT EXISTS sessions (
-  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-  -- Session token (stored hashed in DB, raw in cookie)
   token_hash TEXT NOT NULL UNIQUE,
-
-  -- Device/context info
   user_agent TEXT,
   ip_address TEXT,
-  device_name TEXT,  -- User-friendly name like "Chrome on macOS"
-
-  -- Lifecycle
   created_at TEXT DEFAULT (datetime('now')),
   expires_at TEXT NOT NULL,
-  last_active_at TEXT DEFAULT (datetime('now')),
-  revoked_at TEXT  -- NULL = active
+  last_active_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 ```
 
-### Migration 007: OAuth Tokens Table
-
-```sql
--- Migration: Add OAuth tokens table for connected services
--- File: packages/db/src/migrations/007_oauth_tokens.sql
-
-CREATE TABLE IF NOT EXISTS oauth_tokens (
-  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-  provider TEXT NOT NULL,  -- 'spotify', 'lastfm', 'discogs'
-
-  -- Token storage (encrypted)
-  access_token_encrypted TEXT NOT NULL,
-  refresh_token_encrypted TEXT,
-
-  -- Token metadata
-  token_type TEXT DEFAULT 'Bearer',
-  scope TEXT,  -- Space-separated scopes
-  expires_at TEXT,
-
-  -- Provider-specific user info
-  provider_user_id TEXT,
-  provider_username TEXT,
-
-  -- Lifecycle
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_user_provider ON oauth_tokens(user_id, provider);
-CREATE INDEX IF NOT EXISTS idx_oauth_provider ON oauth_tokens(provider);
-```
-
-### Updated User TypeScript Interface
+### Updated TypeScript Interfaces
 
 ```typescript
 // packages/db/src/schema.ts
 
 export interface User {
-  id: string;
-  username: string;
+  id: string;  // UUID
+  username: string;  // URL-safe identifier (lowercase lastfm username)
   email: string | null;
-
-  // Authentication
-  password_hash: string | null;
-  auth_provider: 'email' | 'spotify' | 'lastfm' | 'discord';
-  oauth_provider_id: string | null;
-  email_verified: number;
-  email_verification_token: string | null;
-  email_verification_expires: string | null;
-  password_reset_token: string | null;
-  password_reset_expires: string | null;
-
+  
+  // Last.fm connection
+  lastfm_username: string;  // Required for auth
+  lastfm_session_key: string | null;  // For authenticated Last.fm API calls
+  
   // Profile
   display_name: string | null;
   avatar_url: string | null;
   bio: string | null;
-  profile_visibility: 'public' | 'private' | 'unlisted';
-
-  // Connected services (legacy fields)
-  lastfm_username: string | null;
+  profile_visibility: 'public' | 'private';
+  
+  // Legacy fields (keep for now)
   discogs_username: string | null;
   spotify_connected: number;
-
+  
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -227,129 +314,112 @@ export interface Session {
   token_hash: string;
   user_agent: string | null;
   ip_address: string | null;
-  device_name: string | null;
   created_at: string;
   expires_at: string;
   last_active_at: string;
-  revoked_at: string | null;
-}
-
-export interface OAuthToken {
-  id: string;
-  user_id: string;
-  provider: 'spotify' | 'lastfm' | 'discogs';
-  access_token_encrypted: string;
-  refresh_token_encrypted: string | null;
-  token_type: string;
-  scope: string | null;
-  expires_at: string | null;
-  provider_user_id: string | null;
-  provider_username: string | null;
-  created_at: string;
-  updated_at: string;
 }
 ```
 
 ---
 
-## Authentication Strategy
+## Last.fm Web Authentication
 
-### Primary: OAuth with Spotify
+Last.fm uses a **Web Authentication** flow (not OAuth 2.0). It's simpler but different:
 
-Spotify OAuth is recommended as the primary auth method because:
-1. All users have Spotify (it's the core data source)
-2. No passwords to manage or leak
-3. Immediate access to user's Spotify data
-4. Trusted, familiar login flow
+### How Last.fm Auth Works
 
-**Flow:**
-1. User clicks "Sign in with Spotify"
-2. Redirect to Spotify OAuth consent screen
-3. Spotify redirects back with authorization code
-4. Exchange code for access/refresh tokens
-5. Fetch Spotify user profile (id, display_name, email, images)
-6. Create or login user, store encrypted tokens
+1. **Get API Key & Secret** - Register app at https://www.last.fm/api/account/create
+2. **Redirect to Last.fm** - User authorizes on Last.fm's site
+3. **Callback with Token** - Last.fm redirects back with a temporary token
+4. **Exchange for Session Key** - Call `auth.getSession` to get permanent session key
+5. **Store Session Key** - Use for authenticated API calls
 
-### Secondary: Email + Password
+### Required Environment Variables
 
-For users who prefer not to use OAuth:
+```
+LASTFM_API_KEY=your_api_key          # Already have this
+LASTFM_SHARED_SECRET=your_secret     # Need to add this
+```
 
-**Registration Flow:**
-1. User enters email, username, password
-2. Hash password with Argon2id (via Web Crypto API or cf-argon2 binding)
-3. Create user with `email_verified = 0`
-4. Send verification email with signed token
-5. User clicks link, verify token, set `email_verified = 1`
-
-**Login Flow:**
-1. User enters email and password
-2. Lookup user by email
-3. Verify password hash
-4. Create session, set cookie
-
-### Password Hashing
-
-On Cloudflare Workers, use the `crypto.subtle` API with PBKDF2 or use a Wasm-based Argon2 library:
+### Implementation
 
 ```typescript
-// utils/password.ts
-const ITERATIONS = 100_000;
-const HASH_LENGTH = 32;
+// apps/web/src/pages/auth/lastfm.tsx
 
-export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits']
-  );
+const LASTFM_AUTH_URL = 'https://www.last.fm/api/auth/';
 
-  const hash = await crypto.subtle.deriveBits(
-    {
-      name: 'PBKDF2',
-      salt,
-      iterations: ITERATIONS,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    HASH_LENGTH * 8
-  );
-
-  // Return as base64: salt:hash
-  const saltB64 = btoa(String.fromCharCode(...salt));
-  const hashB64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
-  return `${saltB64}:${hashB64}`;
+// Step 1: Redirect to Last.fm
+export function handleLastfmAuth(c: Context) {
+  const callbackUrl = `${c.req.url.split('/auth')[0]}/auth/lastfm/callback`;
+  const authUrl = `${LASTFM_AUTH_URL}?api_key=${c.env.LASTFM_API_KEY}&cb=${encodeURIComponent(callbackUrl)}`;
+  return c.redirect(authUrl);
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltB64, expectedHashB64] = stored.split(':');
-  const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+// Step 2: Handle callback
+export async function handleLastfmCallback(c: Context) {
+  const token = c.req.query('token');
+  if (!token) {
+    return c.redirect('/login?error=no_token');
+  }
 
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits']
+  // Step 3: Exchange token for session key
+  const sig = md5(`api_key${c.env.LASTFM_API_KEY}methodauth.getSessiontoken${token}${c.env.LASTFM_SHARED_SECRET}`);
+  
+  const response = await fetch(
+    `https://ws.audioscrobbler.com/2.0/?method=auth.getSession&api_key=${c.env.LASTFM_API_KEY}&token=${token}&api_sig=${sig}&format=json`
   );
+  
+  const data = await response.json();
+  
+  if (data.error) {
+    return c.redirect('/login?error=auth_failed');
+  }
 
-  const hash = await crypto.subtle.deriveBits(
-    {
-      name: 'PBKDF2',
-      salt,
-      iterations: ITERATIONS,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    HASH_LENGTH * 8
-  );
+  const { name: lastfmUsername, key: sessionKey } = data.session;
 
-  const hashB64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
-  return hashB64 === expectedHashB64;
+  // Step 4: Create or update user
+  const db = c.get('db');
+  let user = await db.getUserByLastfmUsername(lastfmUsername);
+  
+  if (!user) {
+    // New user - create account
+    user = await db.createUser({
+      id: crypto.randomUUID(),
+      username: lastfmUsername.toLowerCase(),
+      lastfm_username: lastfmUsername,
+      lastfm_session_key: sessionKey,
+      profile_visibility: 'public',
+    });
+  } else {
+    // Returning user - update session key and login time
+    await db.updateUser(user.id, {
+      lastfm_session_key: sessionKey,
+      last_login_at: new Date().toISOString(),
+      login_count: user.login_count + 1,
+    });
+  }
+
+  // Step 5: Create app session
+  await createSession(c, user.id, db);
+
+  // Redirect to profile (or account for new users)
+  return c.redirect(`/u/${user.username}`);
+}
+```
+
+### MD5 Signature Helper
+
+Last.fm requires MD5 signatures (legacy API):
+
+```typescript
+// utils/md5.ts
+// Use a lightweight MD5 implementation for Cloudflare Workers
+import { md5 } from 'js-md5';  // or implement with crypto.subtle
+
+export function lastfmSignature(params: Record<string, string>, secret: string): string {
+  const sorted = Object.keys(params).sort();
+  const str = sorted.map(k => `${k}${params[k]}`).join('') + secret;
+  return md5(str);
 }
 ```
 
@@ -359,43 +429,27 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 ### Cookie-Based Sessions
 
-Use HTTP-only, secure cookies for session management:
-
 ```typescript
 // utils/session.ts
-import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 
 const SESSION_COOKIE = 'ltm_session';
-const SESSION_DURATION = 30 * 24 * 60 * 60; // 30 days in seconds
+const SESSION_DURATION = 30 * 24 * 60 * 60; // 30 days
 
-export async function createSession(
-  c: Context,
-  userId: string,
-  db: Database
-): Promise<string> {
-  // Generate random session token
-  const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
-  const token = Array.from(tokenBytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-
-  // Hash token for storage
+export async function createSession(c: Context, userId: string, db: Database): Promise<void> {
+  const token = crypto.randomUUID();
   const tokenHash = await hashToken(token);
-
-  // Calculate expiry
   const expiresAt = new Date(Date.now() + SESSION_DURATION * 1000).toISOString();
 
-  // Store session in DB
   await db.createSession({
-    userId,
-    tokenHash,
-    userAgent: c.req.header('User-Agent') || null,
-    ipAddress: c.req.header('CF-Connecting-IP') || null,
-    expiresAt,
+    id: crypto.randomUUID(),
+    user_id: userId,
+    token_hash: tokenHash,
+    user_agent: c.req.header('User-Agent'),
+    ip_address: c.req.header('CF-Connecting-IP'),
+    expires_at: expiresAt,
   });
 
-  // Set cookie
   setCookie(c, SESSION_COOKIE, token, {
     path: '/',
     secure: true,
@@ -403,27 +457,19 @@ export async function createSession(
     sameSite: 'Lax',
     maxAge: SESSION_DURATION,
   });
-
-  return token;
 }
 
-export async function validateSession(
-  c: Context,
-  db: Database
-): Promise<User | null> {
+export async function validateSession(c: Context, db: Database): Promise<User | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
 
   const tokenHash = await hashToken(token);
   const session = await db.getSessionByToken(tokenHash);
 
-  if (!session || session.revoked_at || new Date(session.expires_at) < new Date()) {
+  if (!session || new Date(session.expires_at) < new Date()) {
     deleteCookie(c, SESSION_COOKIE);
     return null;
   }
-
-  // Update last_active_at (fire and forget)
-  db.updateSessionActivity(session.id);
 
   return db.getUser(session.user_id);
 }
@@ -432,24 +478,19 @@ export async function destroySession(c: Context, db: Database): Promise<void> {
   const token = getCookie(c, SESSION_COOKIE);
   if (token) {
     const tokenHash = await hashToken(token);
-    await db.revokeSessionByToken(tokenHash);
+    await db.deleteSessionByToken(tokenHash);
   }
   deleteCookie(c, SESSION_COOKIE);
 }
 
 async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const data = new TextEncoder().encode(token);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 ```
 
 ### Session Middleware
-
-Add middleware to inject `currentUser` into all route handlers:
 
 ```typescript
 // middleware/session.ts
@@ -459,15 +500,15 @@ import { validateSession } from '../utils/session';
 export const sessionMiddleware = createMiddleware(async (c, next) => {
   const db = c.get('db');
   const user = await validateSession(c, db);
-
-  c.set('currentUser', user);  // null if not logged in
+  
+  c.set('currentUser', user);
   c.set('isAuthenticated', !!user);
-
+  
   await next();
 });
 ```
 
-Update `Variables` type:
+### Updated Variables Type
 
 ```typescript
 // types.ts
@@ -480,275 +521,96 @@ export interface Variables {
 
 ---
 
-## Security Considerations
-
-### Password Security
-
-1. **Hashing**: Use PBKDF2 with 100k iterations minimum (or Argon2id if available)
-2. **Salt**: 16 bytes random per password
-3. **Comparison**: Use constant-time comparison to prevent timing attacks
-4. **Requirements**: Minimum 8 characters, no maximum (beyond reason)
-
-### Session Security
-
-1. **Token Length**: 32 bytes (256 bits) of cryptographic randomness
-2. **Storage**: Only store SHA-256 hash in database
-3. **Cookie Flags**: `HttpOnly`, `Secure`, `SameSite=Lax`
-4. **Expiration**: 30 days default, with sliding expiration on activity
-5. **Revocation**: Track `revoked_at` to invalidate sessions
-
-### OAuth Security
-
-1. **State Parameter**: Use CSRF token in OAuth state
-2. **Token Encryption**: Encrypt access/refresh tokens in DB with KMS or env secret
-3. **Scope Minimization**: Request only necessary OAuth scopes
-4. **Token Refresh**: Automatically refresh expired tokens
-
-### CSRF Protection
-
-For forms that modify data, implement CSRF protection:
-
-```typescript
-// utils/csrf.ts
-export async function generateCsrfToken(sessionId: string, secret: string): Promise<string> {
-  const data = `${sessionId}:${Date.now()}`;
-  const signature = await sign(data, secret);
-  return `${data}:${signature}`;
-}
-
-export async function verifyCsrfToken(
-  token: string,
-  sessionId: string,
-  secret: string
-): Promise<boolean> {
-  const [storedSessionId, timestamp, signature] = token.split(':');
-
-  // Check session matches
-  if (storedSessionId !== sessionId) return false;
-
-  // Check not expired (1 hour)
-  if (Date.now() - parseInt(timestamp) > 3600000) return false;
-
-  // Verify signature
-  const data = `${storedSessionId}:${timestamp}`;
-  const expectedSig = await sign(data, secret);
-  return signature === expectedSig;
-}
-```
-
-### Rate Limiting
-
-Add rate limiting for auth endpoints:
-
-| Endpoint | Limit | Window |
-|----------|-------|--------|
-| POST /auth/login | 5 attempts | 15 minutes |
-| POST /auth/register | 3 attempts | 1 hour |
-| POST /auth/forgot-password | 3 attempts | 1 hour |
-| POST /auth/verify-email | 5 attempts | 15 minutes |
-
-### Account Security
-
-1. **Email Verification**: Required for password reset
-2. **Password Reset**: Time-limited tokens (1 hour), single-use
-3. **Session Management**: UI to view/revoke active sessions
-4. **Audit Log**: Track login attempts, password changes
-
----
-
 ## API Changes
 
-### New Auth Endpoints
+### New Routes
 
 ```
-POST /auth/register          - Create new account (email/password)
-POST /auth/login             - Login with email/password
-POST /auth/logout            - Destroy current session
-GET  /auth/me                - Get current user info
+GET  /login                    - Login page with Last.fm button
+GET  /auth/lastfm              - Initiates Last.fm auth redirect
+GET  /auth/lastfm/callback     - Handles Last.fm callback
+GET  /auth/logout              - Destroys session, redirects to /
 
-GET  /auth/oauth/spotify     - Initiate Spotify OAuth
-GET  /auth/oauth/spotify/callback  - Handle Spotify callback
-GET  /auth/oauth/lastfm      - Initiate Last.fm OAuth (if supported)
-GET  /auth/oauth/lastfm/callback
+GET  /account                  - Account settings (requires auth)
+POST /account/profile          - Update display name, bio
+POST /account/privacy          - Update profile visibility
+POST /account/delete           - Delete account
 
-POST /auth/forgot-password   - Request password reset email
-POST /auth/reset-password    - Reset password with token
-POST /auth/verify-email      - Verify email with token
-POST /auth/resend-verification
-
-GET  /account/sessions       - List active sessions
-DELETE /account/sessions/:id - Revoke a session
-DELETE /account              - Delete account (with confirmation)
-
-PATCH /account/profile       - Update display name, bio, avatar
-PATCH /account/privacy       - Update profile visibility
-PATCH /account/password      - Change password (requires current)
-PATCH /account/email         - Change email (requires verification)
-
-POST /account/connect/spotify   - Connect Spotify to existing account
-POST /account/connect/lastfm    - Connect Last.fm
-DELETE /account/connect/spotify - Disconnect Spotify
-DELETE /account/connect/lastfm  - Disconnect Last.fm
+GET  /u/:username              - Profile page (respects privacy)
+GET  /u/:username/recommendations - Recommendations (respects privacy)
 ```
 
-### Auth Middleware Updates
+### Removed Routes
+
+```
+GET  /stats                    - Remove (replaced by /login flow)
+GET  /stats/lookup             - Remove (no arbitrary lookup)
+```
+
+### Auth Middleware
 
 ```typescript
 // middleware/require-auth.ts
 export const requireAuth = createMiddleware(async (c, next) => {
   if (!c.get('isAuthenticated')) {
-    // For pages, redirect to login
-    if (c.req.header('Accept')?.includes('text/html')) {
-      return c.redirect('/login?next=' + encodeURIComponent(c.req.path));
-    }
-    // For API, return 401
-    return c.json({ error: 'Authentication required' }, 401);
+    return c.redirect('/login?next=' + encodeURIComponent(c.req.path));
   }
   await next();
 });
-
-// middleware/require-owner.ts (for user-specific resources)
-export const requireOwner = (paramName: string = 'username') =>
-  createMiddleware(async (c, next) => {
-    const currentUser = c.get('currentUser');
-    const requestedUsername = c.req.param(paramName);
-
-    if (!currentUser || currentUser.username !== requestedUsername) {
-      return c.json({ error: 'Not authorized' }, 403);
-    }
-    await next();
-  });
 ```
 
-### Internal API Updates
-
-The internal APIs (`/api/internal/*`) should also check authentication for user-specific data:
+### Privacy Check for Profile Routes
 
 ```typescript
-// Example: User recommendations should only be viewable by owner if profile is private
-app.get('/user-recommendations', async (c) => {
-  const username = c.req.query('username');
-  const currentUser = c.get('currentUser');
-  const targetUser = await db.getUserByUsername(username);
+// In /u/:username handler
+const targetUser = await db.getUserByUsername(username);
+const currentUser = c.get('currentUser');
 
-  if (!targetUser) {
-    return c.json({ error: 'User not found' }, 404);
+if (!targetUser) {
+  return c.html(<NotFoundPage />);
+}
+
+// Check privacy
+if (targetUser.profile_visibility === 'private') {
+  if (!currentUser || currentUser.id !== targetUser.id) {
+    return c.html(<PrivateProfilePage />);
   }
+}
 
-  // Check privacy
-  if (targetUser.profile_visibility === 'private') {
-    if (!currentUser || currentUser.id !== targetUser.id) {
-      return c.json({ error: 'This profile is private' }, 403);
-    }
-  }
-
-  // ... continue with recommendations
-});
+// Render profile
+return c.html(<ProfilePage user={targetUser} isOwner={currentUser?.id === targetUser.id} />);
 ```
 
 ---
 
-## UI/UX Changes
+## UI/UX Designs
 
-### Navigation Updates
-
-**Current Navigation:**
-```
-[Brand] [Albums] [Artists] [Stats] [Discord] [About] [Theme Toggle]
-```
-
-**Logged Out:**
-```
-[Brand] [Albums] [Artists] [Discover] [About] [Sign In] [Theme Toggle]
-```
-
-**Logged In:**
-```
-[Brand] [Albums] [Artists] [Discover] [About] [Avatar/Username ▼] [Theme Toggle]
-                                              └─ My Profile
-                                              └─ My Stats
-                                              └─ Settings
-                                              └─ Sign Out
-```
-
-### New Pages
-
-#### `/login` - Login Page
+### `/login` - Sign In Page
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                  Sign In                        │
 │                                                 │
-│  ┌──────────────────────────────────────────┐  │
-│  │  🎵 Continue with Spotify                │  │
-│  └──────────────────────────────────────────┘  │
+│           Sign in to ListenToMore               │
 │                                                 │
-│  ─────────────── or ────────────────           │
+│   Connect your Last.fm account to see your      │
+│   listening stats and get personalized          │
+│   recommendations.                              │
 │                                                 │
-│  Email                                          │
-│  ┌──────────────────────────────────────────┐  │
-│  │ you@example.com                          │  │
-│  └──────────────────────────────────────────┘  │
+│   ┌─────────────────────────────────────────┐   │
+│   │  🎵  Continue with Last.fm              │   │
+│   └─────────────────────────────────────────┘   │
 │                                                 │
-│  Password                                       │
-│  ┌──────────────────────────────────────────┐  │
-│  │ ••••••••                                 │  │
-│  └──────────────────────────────────────────┘  │
+│   By signing in, you agree to our               │
+│   Terms of Service and Privacy Policy           │
 │                                                 │
-│  [Sign In]              Forgot password?        │
-│                                                 │
-│  Don't have an account? Sign up                 │
 └─────────────────────────────────────────────────┘
 ```
 
-#### `/register` - Registration Page
-
-```
-┌─────────────────────────────────────────────────┐
-│               Create Account                    │
-│                                                 │
-│  ┌──────────────────────────────────────────┐  │
-│  │  🎵 Sign up with Spotify                 │  │
-│  └──────────────────────────────────────────┘  │
-│                                                 │
-│  ─────────────── or ────────────────           │
-│                                                 │
-│  Username (for your profile URL)                │
-│  ┌──────────────────────────────────────────┐  │
-│  │ musicfan                                 │  │
-│  └──────────────────────────────────────────┘  │
-│  listentomore.com/u/musicfan                   │
-│                                                 │
-│  Email                                          │
-│  ┌──────────────────────────────────────────┐  │
-│  │ you@example.com                          │  │
-│  └──────────────────────────────────────────┘  │
-│                                                 │
-│  Password                                       │
-│  ┌──────────────────────────────────────────┐  │
-│  │ ••••••••                                 │  │
-│  └──────────────────────────────────────────┘  │
-│  8+ characters                                  │
-│                                                 │
-│  [Create Account]                               │
-│                                                 │
-│  Already have an account? Sign in               │
-└─────────────────────────────────────────────────┘
-```
-
-#### `/account` - Account Settings (replaces `/stats`)
+### `/account` - Account Settings
 
 ```
 ┌─────────────────────────────────────────────────┐
 │  Account Settings                               │
-│                                                 │
-│  ┌─────────────────────────────────────────┐   │
-│  │  Profile                                │   │
-│  │  Connected Services                     │   │
-│  │  Privacy                                │   │
-│  │  Security                               │   │
-│  │  Danger Zone                            │   │
-│  └─────────────────────────────────────────┘   │
 │                                                 │
 │  ═══════════════════════════════════════════   │
 │                                                 │
@@ -768,16 +630,11 @@ app.get('/user-recommendations', async (c) => {
 │                                                 │
 │  ═══════════════════════════════════════════   │
 │                                                 │
-│  CONNECTED SERVICES                             │
-│                                                 │
-│  🎵 Spotify        Connected as @bordesak      │
-│                    [Disconnect]                 │
+│  CONNECTED ACCOUNT                              │
 │                                                 │
 │  📻 Last.fm        Connected as @bordesak      │
-│                    [Disconnect]                 │
-│                                                 │
-│  💿 Discogs        Not connected               │
-│                    [Connect]                    │
+│                    (Cannot disconnect - used    │
+│                     for authentication)         │
 │                                                 │
 │  ═══════════════════════════════════════════   │
 │                                                 │
@@ -785,57 +642,41 @@ app.get('/user-recommendations', async (c) => {
 │                                                 │
 │  Profile Visibility                             │
 │  ○ Public - Anyone can see your profile        │
-│  ○ Unlisted - Only people with the link        │
-│  ○ Private - Only you can see your profile     │
-│                                                 │
-│  ═══════════════════════════════════════════   │
-│                                                 │
-│  SECURITY                                       │
-│                                                 │
-│  Password                                       │
-│  Last changed: Never                            │
-│  [Change Password]                              │
-│                                                 │
-│  Active Sessions                                │
-│  Chrome on macOS (current)  [This device]      │
-│  Safari on iPhone           [Revoke]           │
+│  ● Private - Only you can see your profile     │
 │                                                 │
 │  ═══════════════════════════════════════════   │
 │                                                 │
 │  DANGER ZONE                                    │
 │                                                 │
 │  [Delete Account]                               │
-│  This will permanently delete your account      │
-│  and all associated data.                       │
+│  This will permanently delete your account.     │
 │                                                 │
 └─────────────────────────────────────────────────┘
 ```
 
-#### `/u/{username}` - Public Profile (Updated)
+### `/u/{username}` - Profile Page
 
-For logged-in user viewing their own profile, add edit button:
-
+**Owner viewing their profile:**
 ```
 ┌─────────────────────────────────────────────────┐
-│  [Avatar]  Rian (@bordesak)           [Edit]   │
-│            "Music lover from Cape Town"         │
+│  [Avatar]  Rian (@bordesak)    [Account Settings]│
+│            "Music lover from Cape Town"          │
 │                                                 │
 │  ───────────────────────────────────────────   │
 │                                                 │
-│  Now Playing                                    │
+│  🎧 Recent Listening                            │
 │  [Track info...]                                │
 │                                                 │
-│  Top Artists (7 Days)                           │
+│  👩‍🎤 Top Artists (7 Days)                       │
 │  [Grid of artists...]                           │
 │                                                 │
-│  Top Albums (30 Days)                           │
+│  🏆 Top Albums (30 Days)                        │
 │  [Grid of albums...]                            │
 │                                                 │
 └─────────────────────────────────────────────────┘
 ```
 
-For private profiles viewed by non-owners:
-
+**Private profile (non-owner):**
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -847,76 +688,30 @@ For private profiles viewed by non-owners:
 └─────────────────────────────────────────────────┘
 ```
 
-### Remove `/stats` Entry Page
-
-The current `/stats` page allows anyone to enter any Last.fm username. This should be:
-
-1. **Removed** as a public entry point
-2. **Replaced** with a "My Stats" link for logged-in users
-3. **Legacy URLs** (`/u/{username}`) still work for public/unlisted profiles
-
-Users should no longer be able to look up arbitrary Last.fm usernames - they should connect their own Last.fm account.
-
-**Alternative:** Keep the stats lookup but require login to use it. This prevents scraping while still allowing discovery.
-
 ---
 
-## Profile Privacy Controls
+## Profile Privacy
 
 ### Visibility Levels
 
-| Level | Description | Who Can View |
-|-------|-------------|--------------|
-| `public` | Fully public | Anyone on the internet |
-| `unlisted` | Hidden from search | Anyone with direct link |
-| `private` | Completely private | Only the account owner |
+| Level | Description |
+|-------|-------------|
+| `public` | Anyone can view the profile |
+| `private` | Only the owner can view |
+
+(Removed `unlisted` for simplicity - can add later if needed)
 
 ### Implementation
 
 ```typescript
-// Check visibility in route handlers
-async function canViewProfile(targetUser: User, currentUser: User | null): boolean {
-  switch (targetUser.profile_visibility) {
-    case 'public':
-      return true;
-    case 'unlisted':
-      return true;  // Anyone with the link can view
-    case 'private':
-      return currentUser?.id === targetUser.id;
-    default:
-      return false;
+function canViewProfile(targetUser: User, currentUser: User | null): boolean {
+  if (targetUser.profile_visibility === 'public') return true;
+  if (targetUser.profile_visibility === 'private') {
+    return currentUser?.id === targetUser.id;
   }
+  return false;
 }
-
-// In profile route
-app.get('/u/:username', async (c) => {
-  const targetUser = await db.getUserByUsername(c.req.param('username'));
-  const currentUser = c.get('currentUser');
-
-  if (!targetUser) {
-    return c.html(<NotFoundPage />);
-  }
-
-  if (!await canViewProfile(targetUser, currentUser)) {
-    return c.html(<PrivateProfilePage />);
-  }
-
-  // Render normal profile
-  return c.html(<ProfilePage user={targetUser} isOwner={currentUser?.id === targetUser.id} />);
-});
 ```
-
-### What's Hidden on Private Profiles
-
-- Listening stats (recent tracks, top artists, top albums)
-- Recommendations
-- Connected services
-- Bio and display name
-
-### What's Always Visible
-
-- Username (for shareable URLs)
-- That the account exists (vs. 404)
 
 ---
 
@@ -924,217 +719,91 @@ app.get('/u/:username', async (c) => {
 
 ### Existing Users
 
-The database has 6 existing users created manually. These need to be migrated:
+The database has existing users created manually with `lastfm_username` set. When they sign in via Last.fm auth:
+
+1. The callback checks if a user with that `lastfm_username` already exists
+2. If yes, update their `lastfm_session_key` and log them in
+3. If no, create a new user
+
+This means existing users automatically get "claimed" when they sign in with their Last.fm account.
+
+### Migration SQL
 
 ```sql
--- Mark existing users as verified (grandfathered in)
+-- Set defaults for existing users
 UPDATE users SET
-  email_verified = 1,
-  auth_provider = 'legacy',
-  profile_visibility = 'public'
-WHERE created_at < '2025-01-01';
+  profile_visibility = 'public',
+  display_name = lastfm_username
+WHERE profile_visibility IS NULL;
 ```
-
-For these users to log in, they'll need to:
-1. Use "Forgot Password" flow to set a password, OR
-2. Use "Connect with Spotify" to link their account
-
-### Data Migration Script
-
-```typescript
-// scripts/migrate-users.ts
-async function migrateExistingUsers(db: Database) {
-  const users = await db.getAllUsers();
-
-  for (const user of users) {
-    // If they have lastfm_username, use it as default display_name
-    const displayName = user.lastfm_username || user.username;
-
-    await db.updateUser(user.id, {
-      display_name: displayName,
-      auth_provider: 'legacy',
-      email_verified: 1,  // Trust existing users
-      profile_visibility: 'public',  // Default to current behavior
-    });
-  }
-}
-```
-
-### Claiming Usernames
-
-Since usernames are already in the database, new registrations must check availability:
-
-```typescript
-async function isUsernameAvailable(username: string, db: Database): Promise<boolean> {
-  // Case-insensitive check
-  const existing = await db.getUserByUsername(username);
-  return !existing;
-}
-```
-
-For existing users with Last.fm usernames who haven't "claimed" their account, we may need a verification flow (e.g., "Prove you own this Last.fm account").
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Database + Core Auth)
+### Phase 1: Database & Session Foundation
 
-**Duration: 1-2 sprints**
+1. Create migration 005 (auth fields) and 006 (sessions table)
+2. Implement session utilities (`createSession`, `validateSession`, `destroySession`)
+3. Add session middleware to inject `currentUser` into context
+4. Update `Variables` type with `currentUser` and `isAuthenticated`
 
-1. Create database migrations (005, 006, 007)
-2. Implement password hashing utilities
-3. Implement session management utilities
-4. Add session middleware
-5. Update `Variables` and `User` types
-6. Add `currentUser` to all route contexts
+**Deliverable:** Session infrastructure ready, no visible changes yet
 
-**Deliverables:**
-- Database schema ready for auth
-- Session utilities working
-- All existing pages continue to work (no breaking changes)
+### Phase 2: Last.fm Authentication
 
-### Phase 2: OAuth Authentication
+1. Add `LASTFM_SHARED_SECRET` to environment
+2. Create `/login` page with "Continue with Last.fm" button
+3. Implement `/auth/lastfm` redirect handler
+4. Implement `/auth/lastfm/callback` to exchange token and create session
+5. Implement `/auth/logout` to destroy session
 
-**Duration: 1 sprint**
+**Deliverable:** Users can sign in and out via Last.fm
 
-1. Implement Spotify OAuth flow
-2. Create `/auth/oauth/spotify` and callback routes
-3. Implement OAuth token storage and encryption
-4. Add "Sign in with Spotify" button
-5. Handle user creation for new OAuth users
-6. Handle account linking for existing users
+### Phase 3: Navigation & Account Page
 
-**Deliverables:**
-- Users can sign in with Spotify
-- New users created on first OAuth login
-- Existing users can link Spotify
+1. Update `NavBar` to show auth state (Sign In vs Avatar dropdown)
+2. Create `/account` page with profile settings and privacy controls
+3. Implement profile update and privacy toggle endpoints
+4. Remove `/stats` route (redirect to `/login` or `/account`)
 
-### Phase 3: Email/Password Authentication
+**Deliverable:** Full auth UX with account management
 
-**Duration: 1 sprint**
+### Phase 4: Profile Privacy
 
-1. Implement registration flow
-2. Implement login flow
-3. Add email verification (optional initially)
-4. Add password reset flow
-5. Create login/register pages
+1. Add privacy check to `/u/:username` route
+2. Create `PrivateProfilePage` component
+3. Update internal APIs to respect privacy settings
+4. Add "Account Settings" link on own profile
 
-**Deliverables:**
-- Users can register with email/password
-- Users can log in with email/password
-- Password reset works
-
-### Phase 4: Account Management UI
-
-**Duration: 1-2 sprints**
-
-1. Create account settings page
-2. Implement profile editing
-3. Implement privacy controls
-4. Implement connected services management
-5. Implement session management UI
-6. Add account deletion flow
-
-**Deliverables:**
-- Full account settings page
-- Users can manage their profile
-- Users can control privacy
-- Users can delete their account
-
-### Phase 5: Navigation & UX Updates
-
-**Duration: 1 sprint**
-
-1. Update navigation for logged in/out states
-2. Add user dropdown menu
-3. Remove `/stats` public entry (or gate behind auth)
-4. Add "Edit" buttons on own profile
-5. Implement private profile view
-6. Polish and responsive design
-
-**Deliverables:**
-- Navigation shows auth state
-- Clean UX for all auth states
-- Private profiles work correctly
-
-### Phase 6: Security Hardening
-
-**Duration: 1 sprint**
-
-1. Add CSRF protection to all forms
-2. Add rate limiting to auth endpoints
-3. Implement audit logging
-4. Add session activity monitoring
-5. Security review and testing
-6. Documentation
-
-**Deliverables:**
-- All security measures in place
-- Rate limiting working
-- Audit log capturing events
-- Security documentation
+**Deliverable:** Privacy controls working end-to-end
 
 ---
 
 ## Environment Variables
 
-New secrets needed:
-
-| Variable | Purpose |
-|----------|---------|
-| `SESSION_SECRET` | Sign session tokens |
-| `OAUTH_ENCRYPTION_KEY` | Encrypt OAuth tokens in DB |
-| `SPOTIFY_OAUTH_CLIENT_ID` | Spotify OAuth (different from API) |
-| `SPOTIFY_OAUTH_CLIENT_SECRET` | Spotify OAuth secret |
-| `RESEND_API_KEY` | Email sending (for verification, reset) |
+| Variable | Purpose | Status |
+|----------|---------|--------|
+| `LASTFM_API_KEY` | Last.fm API calls | ✅ Configured |
+| `LASTFM_SHARED_SECRET` | Last.fm auth signatures | ✅ Added to production |
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **Username reservation**: Should we reserve common usernames (admin, api, etc.)?
-2. **Email requirement**: Is email required, or optional for OAuth users?
-3. **Last.fm OAuth**: Does Last.fm support OAuth, or only API keys?
-4. **Discogs OAuth**: Should we support Discogs OAuth for collection sync?
-5. **Email provider**: Use Resend, SendGrid, or Cloudflare Email Workers?
-6. **Profile URL format**: Keep `/u/{username}` or change to `/@{username}`?
-7. **Data portability**: Should users be able to export their data?
-8. **Existing users**: How to handle the 6 existing manual users?
-
----
-
-## Risks & Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Password breach | High | Use strong hashing, rate limit, audit logging |
-| OAuth token theft | High | Encrypt tokens, use short-lived access tokens |
-| Session hijacking | High | HttpOnly cookies, secure flag, short TTL option |
-| Account takeover | High | Email verification, password strength requirements |
-| CSRF attacks | Medium | CSRF tokens on all state-changing forms |
-| Username squatting | Low | Rate limit registration, email verification |
-| GDPR compliance | Medium | Account deletion, data export |
-
----
-
-## Success Metrics
-
-- **Registration conversion**: % of visitors who complete registration
-- **Login success rate**: % of login attempts that succeed
-- **OAuth adoption**: % of users using OAuth vs. email/password
-- **Session retention**: Average session length
-- **Account deletion rate**: % of users who delete accounts (lower is better)
-- **Support tickets**: Auth-related issues reported
+1. **Reserved usernames**: Not implemented yet (future enhancement)
+2. **Existing users**: ✅ Auto-claimed on first Last.fm login
+3. **Profile URL**: ✅ Using `/u/{lastfm_username}` as canonical URL
+4. **Account deletion**: ✅ Hard delete implemented
 
 ---
 
 ## Conclusion
 
-This plan outlines a comprehensive approach to adding user authentication to ListenToMore. The phased implementation allows for incremental delivery while maintaining backwards compatibility. The focus on OAuth (especially Spotify) reduces password management burden while providing a seamless user experience for a music-focused application.
+Implementation complete as of December 2024. The system uses **Last.fm as the sole authentication provider** with:
 
-Key decisions to make before implementation:
-1. Primary OAuth provider priority (Spotify recommended)
-2. Whether to require email verification
-3. How to handle existing manual users
-4. Whether to keep public Last.fm lookup feature
+- **Simple auth flow** - One-click Last.fm sign-in
+- **Automatic user claim** - Existing users claimed on first login
+- **Privacy controls** - Public/private profile visibility
+- **Consistent nav state** - Auth state shown on all pages
+- **Tools page** - Discord bot and Last.fm MCP server documentation

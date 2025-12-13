@@ -1,10 +1,15 @@
 // Privacy policy page
 
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 
-export function PrivacyPage() {
+interface PrivacyPageProps {
+  currentUser?: User | null;
+}
+
+export function PrivacyPage({ currentUser }: PrivacyPageProps) {
   return (
-    <Layout title="Privacy Policy" description="Privacy policy for Listen To More">
+    <Layout title="Privacy Policy" description="Privacy policy for Listen To More" currentUser={currentUser}>
       <h1>Privacy Policy</h1>
       <p>
         <strong>Effective Date:</strong> September 16, 2024

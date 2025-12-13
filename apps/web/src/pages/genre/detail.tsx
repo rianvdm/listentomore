@@ -2,6 +2,7 @@
 // Shows genre info with AI-generated summary, progressively loaded
 
 import type { Context } from 'hono';
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { slugToDisplayName } from '../../data/genres';
 import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
@@ -10,15 +11,17 @@ interface GenreDetailProps {
   displayName: string;
   slug: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
-export function GenreDetailPage({ displayName, slug, internalToken }: GenreDetailProps) {
+export function GenreDetailPage({ displayName, slug, internalToken, currentUser }: GenreDetailProps) {
   return (
     <Layout
       title={displayName}
       description={`Learn about the history, musical elements, and seminal albums of ${displayName} music`}
       url={`https://listentomore.com/genre/${slug}`}
       internalToken={internalToken}
+      currentUser={currentUser}
     >
       <header>
         <h1>{displayName}</h1>
@@ -86,8 +89,9 @@ export async function handleGenreDetail(c: Context) {
   const slug = c.req.param('slug');
   const displayName = slugToDisplayName(slug);
   const internalToken = c.get('internalToken') as string;
+  const currentUser = c.get('currentUser');
 
   return c.html(
-    <GenreDetailPage displayName={displayName} slug={slug} internalToken={internalToken} />
+    <GenreDetailPage displayName={displayName} slug={slug} internalToken={internalToken} currentUser={currentUser} />
   );
 }

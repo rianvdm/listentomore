@@ -3,6 +3,7 @@
 
 import type { Child } from 'hono/jsx';
 import { SITE_CONFIG } from '@listentomore/config';
+import type { User } from '@listentomore/db';
 import { globalStyles } from '../../styles/globals';
 import { NavBar } from './NavBar';
 
@@ -13,12 +14,13 @@ interface LayoutProps {
   image?: string;
   url?: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
 // Default fallback image for social sharing
 const DEFAULT_OG_IMAGE = 'https://file.elezea.com/listentomore-og.png';
 
-export function Layout({ children, title, description, image, url, internalToken }: LayoutProps) {
+export function Layout({ children, title, description, image, url, internalToken, currentUser }: LayoutProps) {
   const pageTitle = title ? `${title} | ${SITE_CONFIG.name}` : SITE_CONFIG.name;
   const pageDescription = description || SITE_CONFIG.description;
   const ogImage = image || DEFAULT_OG_IMAGE;
@@ -100,7 +102,7 @@ export function Layout({ children, title, description, image, url, internalToken
         )}
       </head>
       <body>
-        <NavBar />
+        <NavBar currentUser={currentUser} />
 
         <main class="main-content">{children}</main>
 
@@ -141,6 +143,30 @@ export function Layout({ children, title, description, image, url, internalToken
                 });
 
                 updateIcon();
+              })();
+            `,
+          }}
+        />
+
+        {/* User Menu Dropdown Script */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var toggle = document.getElementById('user-menu-toggle');
+                var dropdown = document.getElementById('user-dropdown');
+                if (!toggle || !dropdown) return;
+
+                toggle.addEventListener('click', function(e) {
+                  e.stopPropagation();
+                  dropdown.classList.toggle('open');
+                });
+
+                document.addEventListener('click', function(e) {
+                  if (!dropdown.contains(e.target) && !toggle.contains(e.target)) {
+                    dropdown.classList.remove('open');
+                  }
+                });
               })();
             `,
           }}

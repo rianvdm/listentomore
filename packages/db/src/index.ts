@@ -4,6 +4,7 @@ export * from './schema';
 
 import type {
   User,
+  Session,
   Search,
   RecentSearch,
   DiscogsSyncState,
@@ -42,9 +43,48 @@ export class Database {
     return result.results;
   }
 
+  async getUserByLastfmUsername(lastfmUsername: string): Promise<User | null> {
+    return this.db
+      .prepare('SELECT * FROM users WHERE LOWER(lastfm_username) = LOWER(?)')
+      .bind(lastfmUsername)
+      .first<User>();
+  }
+
+  async createUser(data: {
+    id: string;
+    username: string;
+    lastfm_username: string;
+    lastfm_session_key?: string;
+    display_name?: string;
+    avatar_url?: string;
+    profile_visibility?: 'public' | 'private';
+  }): Promise<User> {
+    const result = await this.db
+      .prepare(
+        `INSERT INTO users (id, username, lastfm_username, lastfm_session_key, display_name, avatar_url, profile_visibility, login_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+         RETURNING *`
+      )
+      .bind(
+        data.id,
+        data.username,
+        data.lastfm_username,
+        data.lastfm_session_key || null,
+        data.display_name || data.lastfm_username,
+        data.avatar_url || null,
+        data.profile_visibility || 'public'
+      )
+      .first<User>();
+
+    if (!result) {
+      throw new Error('Failed to create user');
+    }
+    return result;
+  }
+
   async updateUser(
     id: string,
-    data: Partial<Pick<User, 'email' | 'lastfm_username' | 'discogs_username' | 'spotify_connected'>>
+    data: Partial<Pick<User, 'email' | 'lastfm_username' | 'lastfm_session_key' | 'discogs_username' | 'spotify_connected' | 'display_name' | 'avatar_url' | 'bio' | 'profile_visibility' | 'last_login_at' | 'login_count'>>
   ): Promise<void> {
     const fields: string[] = [];
     const values: unknown[] = [];
@@ -57,6 +97,10 @@ export class Database {
       fields.push('lastfm_username = ?');
       values.push(data.lastfm_username);
     }
+    if (data.lastfm_session_key !== undefined) {
+      fields.push('lastfm_session_key = ?');
+      values.push(data.lastfm_session_key);
+    }
     if (data.discogs_username !== undefined) {
       fields.push('discogs_username = ?');
       values.push(data.discogs_username);
@@ -64,6 +108,30 @@ export class Database {
     if (data.spotify_connected !== undefined) {
       fields.push('spotify_connected = ?');
       values.push(data.spotify_connected);
+    }
+    if (data.display_name !== undefined) {
+      fields.push('display_name = ?');
+      values.push(data.display_name);
+    }
+    if (data.avatar_url !== undefined) {
+      fields.push('avatar_url = ?');
+      values.push(data.avatar_url);
+    }
+    if (data.bio !== undefined) {
+      fields.push('bio = ?');
+      values.push(data.bio);
+    }
+    if (data.profile_visibility !== undefined) {
+      fields.push('profile_visibility = ?');
+      values.push(data.profile_visibility);
+    }
+    if (data.last_login_at !== undefined) {
+      fields.push('last_login_at = ?');
+      values.push(data.last_login_at);
+    }
+    if (data.login_count !== undefined) {
+      fields.push('login_count = ?');
+      values.push(data.login_count);
     }
 
     if (fields.length === 0) return;
@@ -74,6 +142,93 @@ export class Database {
     await this.db
       .prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`)
       .bind(...values)
+      .run();
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM users WHERE id = ?')
+      .bind(id)
+      .run();
+  }
+
+  // Session management
+  async createSession(data: {
+    id: string;
+    user_id: string;
+    token_hash: string;
+    user_agent?: string | null;
+    ip_address?: string | null;
+    expires_at: string;
+  }): Promise<Session> {
+    const result = await this.db
+      .prepare(
+        `INSERT INTO sessions (id, user_id, token_hash, user_agent, ip_address, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         RETURNING *`
+      )
+      .bind(
+        data.id,
+        data.user_id,
+        data.token_hash,
+        data.user_agent || null,
+        data.ip_address || null,
+        data.expires_at
+      )
+      .first<Session>();
+
+    if (!result) {
+      throw new Error('Failed to create session');
+    }
+    return result;
+  }
+
+  async getSessionByToken(tokenHash: string): Promise<Session | null> {
+    return this.db
+      .prepare('SELECT * FROM sessions WHERE token_hash = ?')
+      .bind(tokenHash)
+      .first<Session>();
+  }
+
+  async getSessionsByUser(userId: string): Promise<Session[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM sessions WHERE user_id = ? ORDER BY created_at DESC')
+      .bind(userId)
+      .all<Session>();
+    return result.results;
+  }
+
+  async updateSessionActivity(id: string): Promise<void> {
+    await this.db
+      .prepare("UPDATE sessions SET last_active_at = datetime('now') WHERE id = ?")
+      .bind(id)
+      .run();
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM sessions WHERE id = ?')
+      .bind(id)
+      .run();
+  }
+
+  async deleteSessionByToken(tokenHash: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM sessions WHERE token_hash = ?')
+      .bind(tokenHash)
+      .run();
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    await this.db
+      .prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
+      .run();
+  }
+
+  async deleteUserSessions(userId: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM sessions WHERE user_id = ?')
+      .bind(userId)
       .run();
   }
 

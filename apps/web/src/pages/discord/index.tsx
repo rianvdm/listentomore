@@ -1,10 +1,15 @@
 // Discord Bot page
 
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 
-export function DiscordPage() {
+interface DiscordPageProps {
+  currentUser?: User | null;
+}
+
+export function DiscordPage({ currentUser }: DiscordPageProps) {
   return (
-    <Layout title="Discord Bot" description="Add the Listen To More Discord bot to your server">
+    <Layout title="Discord Bot" description="Add the Listen To More Discord bot to your server" currentUser={currentUser}>
       <h1>Discord Bot</h1>
 
       <p>

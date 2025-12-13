@@ -22,6 +22,7 @@ import {
   apiLoggingMiddleware,
 } from './middleware/auth';
 import { internalAuthMiddleware } from './middleware/internal-auth';
+import { sessionMiddleware } from './middleware/session';
 import { generateInternalToken } from './utils/internal-token';
 import { Layout } from './components/layout';
 import { handleAlbumSearch } from './pages/album/search';
@@ -32,7 +33,11 @@ import { handleGenreDetail } from './pages/genre/detail';
 import { handleGenreSearch } from './pages/genre/search';
 import { handleUserStats } from './pages/user/stats';
 import { handleUserRecommendations } from './pages/user/recommendations';
-import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
+import { handleStatsLookup } from './pages/stats/entry';
+import { handleLogin } from './pages/auth/login';
+import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
+import { handleAccount, handleAccountProfile, handleAccountPrivacy, handleAccountDelete } from './pages/account';
+import { ToolsPage } from './pages/tools';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
@@ -123,8 +128,15 @@ app.use('*', async (c, next) => {
   const internalToken = await generateInternalToken(c.env.INTERNAL_API_SECRET);
   c.set('internalToken', internalToken);
 
+  // Initialize user session context (will be populated by session middleware)
+  c.set('currentUser', null);
+  c.set('isAuthenticated', false);
+
   await next();
 });
+
+// Apply session middleware to validate user sessions (after db is initialized)
+app.use('*', sessionMiddleware);
 
 // Apply auth middleware to API routes (validates API key if present)
 app.use('/api/*', authMiddleware());
@@ -209,6 +221,7 @@ Sitemap: https://listentomore.com/sitemap.xml
 app.get('/', async (c) => {
   const ai = c.get('ai');
   const internalToken = c.get('internalToken');
+  const currentUser = c.get('currentUser');
 
   // Get day greeting (e.g., "Happy Friday, friend!") using user's timezone
   const userTimezone = (c.req.raw.cf as { timezone?: string } | undefined)?.timezone || 'UTC';
@@ -218,7 +231,7 @@ app.get('/', async (c) => {
   const randomFact = await ai.getRandomFact().catch(() => null);
 
   return c.html(
-    <Layout title="Home" description="Discover music, explore albums, and track your listening habits" internalToken={internalToken}>
+    <Layout title="Home" description="Discover music, explore albums, and track your listening habits" internalToken={internalToken} currentUser={currentUser}>
       <header>
         <h1>Happy {dayName}, friend!</h1>
       </header>
@@ -399,19 +412,32 @@ app.get('/artist/:id', handleArtistDetail);
 app.get('/genre', handleGenreSearch);
 app.get('/genre/:slug', handleGenreDetail);
 
-// Stats routes
-app.get('/stats', handleStatsEntry);
+// Auth routes
+app.get('/login', handleLogin);
+app.get('/auth/lastfm', handleLastfmAuth);
+app.get('/auth/lastfm/callback', handleLastfmCallback);
+app.get('/auth/logout', handleLogout);
+
+// Account routes
+app.get('/account', handleAccount);
+app.post('/account/profile', handleAccountProfile);
+app.post('/account/privacy', handleAccountPrivacy);
+app.get('/account/delete', handleAccountDelete);
+
+// Stats routes (legacy - redirect to login)
+app.get('/stats', (c) => c.redirect('/login'));
 app.get('/stats/lookup', handleStatsLookup);
 
 // User routes
 app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
 
-// About, Discord, and legal pages
-app.get('/about', (c) => c.html(<AboutPage />));
-app.get('/discord', (c) => c.html(<DiscordPage />));
-app.get('/privacy', (c) => c.html(<PrivacyPage />));
-app.get('/terms', (c) => c.html(<TermsPage />));
+// About, Tools, Discord, and legal pages
+app.get('/about', (c) => c.html(<AboutPage currentUser={c.get('currentUser')} />));
+app.get('/tools', (c) => c.html(<ToolsPage currentUser={c.get('currentUser')} />));
+app.get('/discord', (c) => c.html(<DiscordPage currentUser={c.get('currentUser')} />));
+app.get('/privacy', (c) => c.html(<PrivacyPage currentUser={c.get('currentUser')} />));
+app.get('/terms', (c) => c.html(<TermsPage currentUser={c.get('currentUser')} />));
 
 // Widget endpoint for external sites (public, no auth required)
 // Replicates the api-lastfm-recenttracks worker functionality for elezea.com

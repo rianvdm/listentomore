@@ -1,10 +1,15 @@
 // About page
 
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 
-export function AboutPage() {
+interface AboutPageProps {
+  currentUser?: User | null;
+}
+
+export function AboutPage({ currentUser }: AboutPageProps) {
   return (
-    <Layout title="About" description="About Listen To More - a music discovery platform">
+    <Layout title="About" description="About Listen To More - a music discovery platform" currentUser={currentUser}>
       <h1>About Listen To More</h1>
 
       <p>
