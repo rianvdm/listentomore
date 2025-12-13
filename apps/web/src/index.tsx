@@ -23,6 +23,7 @@ import {
 } from './middleware/auth';
 import { internalAuthMiddleware } from './middleware/internal-auth';
 import { sessionMiddleware } from './middleware/session';
+import { crawlerLoggingMiddleware } from './middleware/crawler-logging';
 import { generateInternalToken } from './utils/internal-token';
 import { Layout } from './components/layout';
 import { handleAlbumSearch } from './pages/album/search';
@@ -50,6 +51,9 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Apply security headers to all responses
 app.use('*', securityHeadersMiddleware());
+
+// Log social crawler requests for debugging
+app.use('*', crawlerLoggingMiddleware);
 
 // Apply CORS middleware (needs to run before other middleware)
 app.use('*', async (c, next) => {
