@@ -3,6 +3,7 @@
 
 import type { Child } from 'hono/jsx';
 import { SITE_CONFIG } from '@listentomore/config';
+import type { User } from '@listentomore/db';
 import { globalStyles } from '../../styles/globals';
 import { NavBar } from './NavBar';
 
@@ -13,6 +14,7 @@ interface LayoutProps {
   image?: string;
   url?: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
 // Default fallback image for social sharing

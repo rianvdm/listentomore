@@ -281,8 +281,11 @@ export async function handleUserStats(c: Context) {
   const db = c.get('db') as Database;
   const internalToken = c.get('internalToken') as string;
 
-  // Look up user by username
-  const user = await db.getUserByUsername(username);
+  // Look up user by lastfm_username first (canonical), then fall back to username
+  let user = await db.getUserByLastfmUsername(username);
+  if (!user) {
+    user = await db.getUserByUsername(username);
+  }
 
   if (!user || !user.lastfm_username) {
     return c.html(<UserNotFound username={username} />, 404);

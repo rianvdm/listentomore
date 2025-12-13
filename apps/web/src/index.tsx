@@ -22,6 +22,7 @@ import {
   apiLoggingMiddleware,
 } from './middleware/auth';
 import { internalAuthMiddleware } from './middleware/internal-auth';
+import { sessionMiddleware } from './middleware/session';
 import { generateInternalToken } from './utils/internal-token';
 import { Layout } from './components/layout';
 import { handleAlbumSearch } from './pages/album/search';
@@ -32,7 +33,9 @@ import { handleGenreDetail } from './pages/genre/detail';
 import { handleGenreSearch } from './pages/genre/search';
 import { handleUserStats } from './pages/user/stats';
 import { handleUserRecommendations } from './pages/user/recommendations';
-import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
+import { handleStatsLookup } from './pages/stats/entry';
+import { handleLogin } from './pages/auth/login';
+import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
@@ -123,8 +126,15 @@ app.use('*', async (c, next) => {
   const internalToken = await generateInternalToken(c.env.INTERNAL_API_SECRET);
   c.set('internalToken', internalToken);
 
+  // Initialize user session context (will be populated by session middleware)
+  c.set('currentUser', null);
+  c.set('isAuthenticated', false);
+
   await next();
 });
+
+// Apply session middleware to validate user sessions (after db is initialized)
+app.use('*', sessionMiddleware);
 
 // Apply auth middleware to API routes (validates API key if present)
 app.use('/api/*', authMiddleware());
@@ -399,8 +409,14 @@ app.get('/artist/:id', handleArtistDetail);
 app.get('/genre', handleGenreSearch);
 app.get('/genre/:slug', handleGenreDetail);
 
-// Stats routes
-app.get('/stats', handleStatsEntry);
+// Auth routes
+app.get('/login', handleLogin);
+app.get('/auth/lastfm', handleLastfmAuth);
+app.get('/auth/lastfm/callback', handleLastfmCallback);
+app.get('/auth/logout', handleLogout);
+
+// Stats routes (legacy - redirect to login)
+app.get('/stats', (c) => c.redirect('/login'));
 app.get('/stats/lookup', handleStatsLookup);
 
 // User routes

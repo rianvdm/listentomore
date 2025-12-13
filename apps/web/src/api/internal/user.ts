@@ -10,7 +10,11 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // Helper to get LastfmService for a user
 async function getUserLastfm(c: Context<{ Bindings: Bindings; Variables: Variables }>, username: string) {
   const db = c.get('db');
-  const user = await db.getUserByUsername(username);
+  // Look up by lastfm_username first (canonical), then fall back to username
+  let user = await db.getUserByLastfmUsername(username);
+  if (!user) {
+    user = await db.getUserByUsername(username);
+  }
 
   if (!user || !user.lastfm_username) {
     return null;

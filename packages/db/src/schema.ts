@@ -5,10 +5,28 @@ export interface User {
   username: string | null;
   email: string | null;
   lastfm_username: string | null;
+  lastfm_session_key: string | null;
   discogs_username: string | null;
   spotify_connected: number;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  profile_visibility: 'public' | 'private';
+  last_login_at: string | null;
+  login_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Session {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  created_at: string;
+  expires_at: string;
+  last_active_at: string;
 }
 
 export interface Search {
