@@ -268,7 +268,7 @@ app.get('/', async (c) => {
         </form>
 
         {/* Recently Listened by Users - Progressive Loading */}
-        <h2>What we're listening to</h2>
+        <h2>What users are listening to</h2>
         {!currentUser && (
           <p class="text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>
             Want your own user page? <a href="/login">Sign up with Last.fm now!</a>
