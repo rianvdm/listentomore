@@ -6,6 +6,12 @@ A music discovery platform that combines real-time listening data with AI-powere
 
 ## Features
 
+### User Accounts
+- **Sign in with Last.fm** - One-click authentication using your Last.fm account
+- **Personal Profile** - Your own profile page at `/u/your-username` with listening stats
+- **Privacy Controls** - Choose to make your profile public or private
+- **Account Settings** - Manage your display name, bio, and privacy preferences
+
 ### Music Discovery
 - **Album & Artist Search** - Search the Spotify catalog with instant results
 - **Album Detail Pages** - Rich album pages with release info, track listings, genres, and AI-generated summaries with citations
@@ -16,7 +22,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Album Recommendations** - AI-generated "if you like this, try these" recommendations on album pages
 
 ### Personal Stats
-- **Real-time Listening Stats** - Connect your Last.fm account to see your recent listening activity
+- **Real-time Listening Stats** - See your recent listening activity from Last.fm
 - **Top Artists & Albums** - View your most-played music over different time periods (7 days, 30 days, etc.)
 - **Personalized Recommendations** - Discover new artists based on your listening habits and similar artist connections
 - **Loved Tracks** - See your favorite tracks with AI-generated artist insights
@@ -25,7 +31,11 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Community Listening** - See what registered users are listening to in real-time (updates every 5 minutes)
 - **Daily Music Facts** - A new AI-generated music fact every hour
 
-### Discord Bot
+### Tools & Integrations
+- **Discord Bot** - Share album details and streaming links in your Discord server ([learn more](/discord))
+- **Last.fm MCP Server** - Connect AI assistants like Claude to your Last.fm data ([lastfm-mcp.com](https://lastfm-mcp.com))
+
+### Discord Bot Commands
 - `/listento artist:X album:Y` - Get album details with streaming links and AI summary
 - `/listenlast lastfm_user:X` - See what someone is listening to on Last.fm
 - `/listenurl url:X` - Get cross-platform links from a Spotify URL
@@ -151,17 +161,13 @@ pnpm deploy
 - **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
 - **[Songlink/Odesli](https://odesli.co)** - Cross-platform streaming links for all services
 
-## Want Your Own Stats Page?
+## Get Started
 
-The community listening feed and personal stats pages (`/u/username`) require being added to the database. If you'd like your Last.fm listening data to appear on the site:
+1. **Visit [listentomore.com](https://listentomore.com)**
+2. **Click "Sign In"** and connect your Last.fm account
+3. **That's it!** Your profile is live at `listentomore.com/u/your-lastfm-username`
 
-1. **Create a Last.fm account** at [last.fm](https://www.last.fm) if you don't have one
-2. **Connect a scrobbler** to track your listening (Spotify, Apple Music, etc. all have scrobbling options)
-3. **Contact me** to request being added:
-   - Open an issue on this repo
-   - Email: [elezea.com/contact](https://elezea.com/contact/)
-
-Once added, your listening activity will appear on the home page feed and you'll have your own stats page at `listentomore.com/u/your-lastfm-username`.
+Don't have a Last.fm account? [Create one for free](https://www.last.fm/join) and connect a scrobbler to track your listening from Spotify, Apple Music, or any other service.
 
 ## License
 
