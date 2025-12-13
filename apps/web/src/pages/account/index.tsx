@@ -189,11 +189,9 @@ function AccountPage({ user }: AccountPageProps) {
 
               btn.addEventListener('click', function() {
                 if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-                  if (confirm('This will permanently delete all your data. Type "DELETE" to confirm.')) {
-                    var input = prompt('Type DELETE to confirm account deletion:');
-                    if (input === 'DELETE') {
-                      window.location.href = '/account/delete';
-                    }
+                  var input = prompt('Type DELETE to confirm account deletion:');
+                  if (input === 'DELETE') {
+                    window.location.href = '/account/delete';
                   }
                 }
               });
@@ -264,15 +262,65 @@ export async function handleAccountDelete(c: Context<{ Bindings: Bindings; Varia
 
   const db = c.get('db');
 
-  // Delete user sessions first
-  await db.deleteUserSessions(currentUser.id);
+  try {
+    console.log('[DELETE_USER] Starting user deletion', {
+      user_id: currentUser.id,
+      username: currentUser.username,
+      lastfm_username: currentUser.lastfm_username,
+      timestamp: new Date().toISOString(),
+    });
 
-  // Delete user
-  await db.deleteUser(currentUser.id);
+    // Delete user sessions first
+    console.log('[DELETE_USER] Deleting user sessions', { user_id: currentUser.id });
+    await db.deleteUserSessions(currentUser.id);
+    console.log('[DELETE_USER] Sessions deleted successfully');
 
-  // Clear session cookie
-  const { destroySession } = await import('../../utils/session');
-  await destroySession(c, db);
+    // Delete user (CASCADE will handle api_keys, searches, discogs data)
+    console.log('[DELETE_USER] Deleting user record (CASCADE will delete related data)', {
+      user_id: currentUser.id,
+    });
+    await db.deleteUser(currentUser.id);
+    console.log('[DELETE_USER] User record deleted successfully');
 
-  return c.redirect('/');
+    // Clear session cookie
+    console.log('[DELETE_USER] Clearing session cookie');
+    const { destroySession } = await import('../../utils/session');
+    await destroySession(c, db);
+
+    console.log('[DELETE_USER] User deletion completed successfully', {
+      user_id: currentUser.id,
+      username: currentUser.username,
+      timestamp: new Date().toISOString(),
+    });
+
+    return c.redirect('/');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[DELETE_USER] User deletion failed', {
+      user_id: currentUser.id,
+      username: currentUser.username,
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Return error page instead of redirect
+    return c.html(
+      <Layout title="Error" currentUser={currentUser}>
+        <div style={{ maxWidth: '600px', margin: '2rem auto', padding: '0 1rem' }}>
+          <h1 style={{ color: '#c00' }}>Account Deletion Failed</h1>
+          <p>
+            We encountered an error while trying to delete your account. Please try again or contact support.
+          </p>
+          <p class="text-muted" style={{ fontSize: '0.9rem', marginTop: '1rem' }}>
+            Error: {errorMessage}
+          </p>
+          <a href="/account" class="button" style={{ marginTop: '1rem', display: 'inline-block' }}>
+            Back to Account Settings
+          </a>
+        </div>
+      </Layout>,
+      500
+    );
+  }
 }

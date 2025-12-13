@@ -130,13 +130,43 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
 
     // Send Discord notification for new signups
     if (c.env.DISCORD_WEBHOOK_URL) {
+      const webhookPayload = {
+        content: `🎉 New signup: **${username}** (Last.fm: ${lastfmUsername})`
+      };
+      console.log('[DISCORD_WEBHOOK] Sending new signup notification', {
+        username,
+        lastfm_username: lastfmUsername,
+        webhook_url: c.env.DISCORD_WEBHOOK_URL.substring(0, 50) + '...',
+        payload: webhookPayload,
+      });
+
       fetch(c.env.DISCORD_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: `🎉 New signup: **${username}** (Last.fm: ${lastfmUsername})`
+        body: JSON.stringify(webhookPayload)
+      })
+        .then(res => {
+          if (res.ok) {
+            console.log('[DISCORD_WEBHOOK] New signup notification sent successfully', {
+              username,
+              status: res.status,
+            });
+          } else {
+            console.error('[DISCORD_WEBHOOK] New signup notification failed', {
+              username,
+              status: res.status,
+              statusText: res.statusText,
+            });
+          }
         })
-      }).catch(err => console.error('Discord webhook failed:', err));
+        .catch(err => {
+          console.error('[DISCORD_WEBHOOK] New signup notification error', {
+            username,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    } else {
+      console.log('[DISCORD_WEBHOOK] DISCORD_WEBHOOK_URL not configured, skipping new signup notification');
     }
   } else {
     // Returning user - update session key, login time, and refresh avatar if missing
@@ -178,13 +208,41 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
 
     // Send Discord notification for first-time account claims (existing users)
     if ((user.login_count || 0) === 0 && c.env.DISCORD_WEBHOOK_URL) {
+      const webhookPayload = {
+        content: `🔗 Account claimed: **${user.username}** (Last.fm: ${lastfmUsername})`
+      };
+      console.log('[DISCORD_WEBHOOK] Sending account claim notification', {
+        username: user.username,
+        lastfm_username: lastfmUsername,
+        webhook_url: c.env.DISCORD_WEBHOOK_URL.substring(0, 50) + '...',
+        payload: webhookPayload,
+      });
+
       fetch(c.env.DISCORD_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: `🔗 Account claimed: **${user.username}** (Last.fm: ${lastfmUsername})`
+        body: JSON.stringify(webhookPayload)
+      })
+        .then(res => {
+          if (res.ok) {
+            console.log('[DISCORD_WEBHOOK] Account claim notification sent successfully', {
+              username: user.username,
+              status: res.status,
+            });
+          } else {
+            console.error('[DISCORD_WEBHOOK] Account claim notification failed', {
+              username: user.username,
+              status: res.status,
+              statusText: res.statusText,
+            });
+          }
         })
-      }).catch(err => console.error('Discord webhook failed:', err));
+        .catch(err => {
+          console.error('[DISCORD_WEBHOOK] Account claim notification error', {
+            username: user.username,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
     }
   }
 
