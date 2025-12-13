@@ -2,14 +2,19 @@
 // URL: /genre
 
 import type { Context } from 'hono';
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { POPULAR_GENRES, slugToDisplayName, getRandomGenre, displayNameToSlug } from '../../data/genres';
 
-export function GenreSearchPage() {
+interface GenreSearchProps {
+  currentUser?: User | null;
+}
+
+export function GenreSearchPage({ currentUser }: GenreSearchProps) {
   const randomGenre = getRandomGenre();
 
   return (
-    <Layout title="Browse Genres" description="Explore music genres and learn about their history">
+    <Layout title="Browse Genres" description="Explore music genres and learn about their history" currentUser={currentUser}>
       <header>
         <h1>Browse Genres</h1>
       </header>
@@ -54,9 +59,10 @@ export function GenreSearchPage() {
 // Route handler
 export async function handleGenreSearch(c: Context) {
   const query = c.req.query('q')?.trim();
+  const currentUser = c.get('currentUser');
 
   if (!query) {
-    return c.html(<GenreSearchPage />);
+    return c.html(<GenreSearchPage currentUser={currentUser} />);
   }
 
   // Redirect to genre detail page with the search term as slug

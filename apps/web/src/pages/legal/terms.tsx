@@ -1,10 +1,15 @@
 // Terms of Service page
 
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 
-export function TermsPage() {
+interface TermsPageProps {
+  currentUser?: User | null;
+}
+
+export function TermsPage({ currentUser }: TermsPageProps) {
   return (
-    <Layout title="Terms of Service" description="Terms of Service for Listen To More">
+    <Layout title="Terms of Service" description="Terms of Service for Listen To More" currentUser={currentUser}>
       <h1>Terms of Service</h1>
       <p>
         <strong>Effective Date:</strong> September 16, 2024

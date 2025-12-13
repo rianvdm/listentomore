@@ -2,17 +2,19 @@
 // Renders immediately, loads results progressively via client-side JS
 
 import type { Context } from 'hono';
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { Input, Button, LoadingSpinner } from '../../components/ui';
 
 interface ArtistSearchProps {
   query: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
-export function ArtistSearchPage({ query, internalToken }: ArtistSearchProps) {
+export function ArtistSearchPage({ query, internalToken, currentUser }: ArtistSearchProps) {
   return (
-    <Layout title="Search Artists" description="Search for artists on Spotify" internalToken={internalToken}>
+    <Layout title="Search Artists" description="Search for artists on Spotify" internalToken={internalToken} currentUser={currentUser}>
       <h1>🎤 Search Artists</h1>
 
       {/* Search Form */}
@@ -89,5 +91,6 @@ export function ArtistSearchPage({ query, internalToken }: ArtistSearchProps) {
 export async function handleArtistSearch(c: Context) {
   const query = c.req.query('q') || '';
   const internalToken = c.get('internalToken') as string;
-  return c.html(<ArtistSearchPage query={query} internalToken={internalToken} />);
+  const currentUser = c.get('currentUser');
+  return c.html(<ArtistSearchPage query={query} internalToken={internalToken} currentUser={currentUser} />);
 }

@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { enrichLinksScript } from '../../utils/client-scripts';
-import type { Database } from '@listentomore/db';
+import type { Database, User } from '@listentomore/db';
 import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
 
 interface UserRecommendationsPageProps {
@@ -13,6 +13,7 @@ interface UserRecommendationsPageProps {
   lovedTracks: LovedTrack[];
   topArtists: TopArtist[];
   internalToken?: string;
+  currentUser?: User | null;
 }
 
 export function UserRecommendationsPage({
@@ -21,6 +22,7 @@ export function UserRecommendationsPage({
   lovedTracks,
   topArtists,
   internalToken,
+  currentUser,
 }: UserRecommendationsPageProps) {
   const hasLovedTracks = lovedTracks.length > 0;
   const hasTopArtists = topArtists.length > 0;
@@ -34,6 +36,7 @@ export function UserRecommendationsPage({
       description={`Music recommendations from ${username} - loved tracks and artist discoveries`}
       url={`https://listentomore.com/u/${username}/recommendations`}
       internalToken={internalToken}
+      currentUser={currentUser}
     >
       <header>
         <h1>
@@ -254,9 +257,13 @@ export async function handleUserRecommendations(c: Context) {
   const username = c.req.param('username');
   const db = c.get('db') as Database;
   const internalToken = c.get('internalToken') as string;
+  const currentUser = c.get('currentUser') as User | null;
 
-  // Look up user by username
-  const user = await db.getUserByUsername(username);
+  // Look up user by lastfm_username first (canonical), then fall back to username
+  let user = await db.getUserByLastfmUsername(username);
+  if (!user) {
+    user = await db.getUserByUsername(username);
+  }
 
   if (!user || !user.lastfm_username) {
     return c.html(<UserNotFound username={username} />, 404);
@@ -283,6 +290,7 @@ export async function handleUserRecommendations(c: Context) {
       lovedTracks={lovedTracks}
       topArtists={topArtists}
       internalToken={internalToken}
+      currentUser={currentUser}
     />
   );
 }

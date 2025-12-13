@@ -2,6 +2,7 @@
 // Loads basic data immediately, then progressively loads AI summary and Last.fm data
 
 import type { Context } from 'hono';
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
@@ -19,16 +20,18 @@ interface ArtistDetailProps {
   artist: ArtistData | null;
   error?: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
 export function ArtistDetailPage({
   artist,
   error,
   internalToken,
+  currentUser,
 }: ArtistDetailProps) {
   if (error || !artist) {
     return (
-      <Layout title="Artist Not Found">
+      <Layout title="Artist Not Found" currentUser={currentUser}>
         <div class="text-center" style={{ paddingTop: '4rem' }}>
           <h1>Artist Not Found</h1>
           <p class="text-muted">{error || 'The artist you requested could not be found.'}</p>
@@ -51,6 +54,7 @@ export function ArtistDetailPage({
       image={artistImage}
       url={`https://listentomore.com/artist/${artist.id}`}
       internalToken={internalToken}
+      currentUser={currentUser}
     >
       {/* Header */}
       <header>
@@ -252,13 +256,14 @@ export async function handleArtistDetail(c: Context) {
   const spotifyId = c.req.param('id');
   const spotify = c.get('spotify') as SpotifyService;
   const internalToken = c.get('internalToken') as string;
+  const currentUser = c.get('currentUser') as User | null;
 
   try {
     const artistData = await spotify.getArtist(spotifyId);
 
     if (!artistData) {
       return c.html(
-        <ArtistDetailPage artist={null} error="Artist not found" internalToken={internalToken} />
+        <ArtistDetailPage artist={null} error="Artist not found" internalToken={internalToken} currentUser={currentUser} />
       );
     }
 
@@ -270,7 +275,7 @@ export async function handleArtistDetail(c: Context) {
       spotifyUrl: artistData.url,
     };
 
-    return c.html(<ArtistDetailPage artist={artist} internalToken={internalToken} />);
+    return c.html(<ArtistDetailPage artist={artist} internalToken={internalToken} currentUser={currentUser} />);
   } catch (error) {
     console.error('Artist detail error:', error);
 
@@ -281,7 +286,7 @@ export async function handleArtistDetail(c: Context) {
     }
 
     return c.html(
-      <ArtistDetailPage artist={null} error="Failed to load artist" internalToken={internalToken} />
+      <ArtistDetailPage artist={null} error="Failed to load artist" internalToken={internalToken} currentUser={currentUser} />
     );
   }
 }

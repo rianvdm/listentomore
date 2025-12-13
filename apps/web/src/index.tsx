@@ -220,6 +220,7 @@ Sitemap: https://listentomore.com/sitemap.xml
 app.get('/', async (c) => {
   const ai = c.get('ai');
   const internalToken = c.get('internalToken');
+  const currentUser = c.get('currentUser');
 
   // Get day greeting (e.g., "Happy Friday, friend!") using user's timezone
   const userTimezone = (c.req.raw.cf as { timezone?: string } | undefined)?.timezone || 'UTC';
@@ -229,7 +230,7 @@ app.get('/', async (c) => {
   const randomFact = await ai.getRandomFact().catch(() => null);
 
   return c.html(
-    <Layout title="Home" description="Discover music, explore albums, and track your listening habits" internalToken={internalToken}>
+    <Layout title="Home" description="Discover music, explore albums, and track your listening habits" internalToken={internalToken} currentUser={currentUser}>
       <header>
         <h1>Happy {dayName}, friend!</h1>
       </header>
@@ -431,10 +432,10 @@ app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
 
 // About, Discord, and legal pages
-app.get('/about', (c) => c.html(<AboutPage />));
-app.get('/discord', (c) => c.html(<DiscordPage />));
-app.get('/privacy', (c) => c.html(<PrivacyPage />));
-app.get('/terms', (c) => c.html(<TermsPage />));
+app.get('/about', (c) => c.html(<AboutPage currentUser={c.get('currentUser')} />));
+app.get('/discord', (c) => c.html(<DiscordPage currentUser={c.get('currentUser')} />));
+app.get('/privacy', (c) => c.html(<PrivacyPage currentUser={c.get('currentUser')} />));
+app.get('/terms', (c) => c.html(<TermsPage currentUser={c.get('currentUser')} />));
 
 // Widget endpoint for external sites (public, no auth required)
 // Replicates the api-lastfm-recenttracks worker functionality for elezea.com
