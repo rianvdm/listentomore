@@ -5,19 +5,22 @@ import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database } from '@listentomore/db';
+import { LastfmService } from '@listentomore/lastfm';
 
 interface UserStatsPageProps {
   username: string;
   lastfmUsername: string;
+  profileImage?: string;
   internalToken?: string;
 }
 
-export function UserStatsPage({ username, lastfmUsername, internalToken }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, profileImage, internalToken }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
       description={`Real-time listening statistics for ${username}`}
       url={`https://listentomore.com/u/${username}`}
+      image={profileImage}
       internalToken={internalToken}
     >
       <header>
@@ -27,6 +30,22 @@ export function UserStatsPage({ username, lastfmUsername, internalToken }: UserS
             {username}
           </a>
         </h1>
+
+        {/* Centered Profile Picture */}
+        {profileImage && (
+          <div style={{ textAlign: 'center', margin: '2em 0' }}>
+            <img
+              src={profileImage}
+              alt={`${username}'s profile`}
+              style={{
+                width: '150px',
+                height: '150px',
+                borderRadius: '50%',
+                objectFit: 'cover'
+              }}
+            />
+          </div>
+        )}
       </header>
 
       <main>
@@ -269,11 +288,27 @@ export async function handleUserStats(c: Context) {
     return c.html(<UserNotFound username={username} />, 404);
   }
 
+  // Fetch Last.fm user info for profile picture
+  let profileImage: string | undefined;
+  try {
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username: user.lastfm_username,
+      cache: c.env.CACHE,
+    });
+    const userInfo = await lastfm.getUserInfo();
+    profileImage = userInfo.image || undefined;
+  } catch (error) {
+    console.error('Failed to fetch Last.fm user info:', error);
+    // Continue without profile image - will use default
+  }
+
   // Return shell immediately - data loaded via /api/internal/user-stats
   return c.html(
     <UserStatsPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
+      profileImage={profileImage}
       internalToken={internalToken}
     />
   );

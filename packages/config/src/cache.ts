@@ -20,6 +20,7 @@ export const CACHE_CONFIG = {
     lovedTracks: { ttlHours: 1 },
     userListens: { ttlMinutes: 7 }, // Aggregated recent listens for home page (cron pre-warms every 5 min)
     userRecommendations: { ttlHours: 6 }, // Personalized artist recommendations
+    userInfo: { ttlDays: 30 }, // User profile info (avatar, playcount, etc)
   },
 
   discogs: {

@@ -5,6 +5,7 @@ import { TopAlbums, type TimePeriod } from './top-albums';
 import { TopArtists } from './top-artists';
 import { ArtistDetails } from './artist-detail';
 import { LovedTracks } from './loved-tracks';
+import { UserInfo } from './user-info';
 
 export { RecentTracks } from './recent-tracks';
 export type { RecentTrack } from './recent-tracks';
@@ -21,6 +22,9 @@ export type { ArtistDetail, ArtistTopAlbum } from './artist-detail';
 export { LovedTracks } from './loved-tracks';
 export type { LovedTrack } from './loved-tracks';
 
+export { UserInfo } from './user-info';
+export type { UserInfoData } from './user-info';
+
 export interface LastfmConfig {
   apiKey: string;
   username: string;
@@ -34,6 +38,7 @@ export class LastfmService {
   public readonly topArtists: TopArtists;
   public readonly artistDetails: ArtistDetails;
   public readonly lovedTracks: LovedTracks;
+  public readonly userInfo: UserInfo;
 
   constructor(config: LastfmConfig) {
     this.recentTracks = new RecentTracks(config);
@@ -41,6 +46,7 @@ export class LastfmService {
     this.topArtists = new TopArtists(config, config.cache);
     this.artistDetails = new ArtistDetails(config, config.cache);
     this.lovedTracks = new LovedTracks(config, config.cache);
+    this.userInfo = new UserInfo(config, config.cache);
   }
 
   // Convenience methods
@@ -70,5 +76,9 @@ export class LastfmService {
 
   async getLovedTracks(limit: number = 10) {
     return this.lovedTracks.getLovedTracks(limit);
+  }
+
+  async getUserInfo() {
+    return this.userInfo.getUserInfo();
   }
 }
