@@ -563,8 +563,8 @@ async function scheduled(
   // Pre-warm user listens cache (runs every 5 minutes)
   try {
     const db = new Database(env.DB);
-    const users = await db.getAllUsersWithLastfm();
-    console.log(`[CRON] Found ${users.length} users with Last.fm usernames`);
+    const users = await db.getPublicUsersWithLastfm();
+    console.log(`[CRON] Found ${users.length} public users with Last.fm usernames`);
 
     // Create Spotify service for image lookups
     const spotify = new SpotifyService({

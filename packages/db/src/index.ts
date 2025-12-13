@@ -43,6 +43,17 @@ export class Database {
     return result.results;
   }
 
+  async getPublicUsersWithLastfm(): Promise<User[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM users
+         WHERE lastfm_username IS NOT NULL
+         AND profile_visibility = 'public'`
+      )
+      .all<User>();
+    return result.results;
+  }
+
   async getUserByLastfmUsername(lastfmUsername: string): Promise<User | null> {
     return this.db
       .prepare('SELECT * FROM users WHERE LOWER(lastfm_username) = LOWER(?)')

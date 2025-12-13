@@ -208,11 +208,12 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
 
     // Send Discord notification for first-time account claims (existing users)
     if ((user.login_count || 0) === 0 && c.env.DISCORD_WEBHOOK_URL) {
+      const username = user.username; // Capture for async callbacks
       const webhookPayload = {
-        content: `🔗 Account claimed: **${user.username}** (Last.fm: ${lastfmUsername})`
+        content: `🔗 Account claimed: **${username}** (Last.fm: ${lastfmUsername})`
       };
       console.log('[DISCORD_WEBHOOK] Sending account claim notification', {
-        username: user.username,
+        username,
         lastfm_username: lastfmUsername,
         webhook_url: c.env.DISCORD_WEBHOOK_URL.substring(0, 50) + '...',
         payload: webhookPayload,
@@ -226,12 +227,12 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
         .then(res => {
           if (res.ok) {
             console.log('[DISCORD_WEBHOOK] Account claim notification sent successfully', {
-              username: user.username,
+              username,
               status: res.status,
             });
           } else {
             console.error('[DISCORD_WEBHOOK] Account claim notification failed', {
-              username: user.username,
+              username,
               status: res.status,
               statusText: res.statusText,
             });
@@ -239,7 +240,7 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
         })
         .catch(err => {
           console.error('[DISCORD_WEBHOOK] Account claim notification error', {
-            username: user.username,
+            username,
             error: err instanceof Error ? err.message : String(err),
           });
         });
