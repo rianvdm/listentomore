@@ -21,6 +21,9 @@ export function NavBar({ currentUser }: NavBarProps) {
           <a href="/artist" class="nav-link">
             Artists
           </a>
+          <a href="/tools" class="nav-link">
+            Tools
+          </a>
           <a href="/about" class="nav-link">
             About
           </a>

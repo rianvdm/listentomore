@@ -37,6 +37,7 @@ import { handleStatsLookup } from './pages/stats/entry';
 import { handleLogin } from './pages/auth/login';
 import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
 import { handleAccount, handleAccountProfile, handleAccountPrivacy, handleAccountDelete } from './pages/account';
+import { ToolsPage } from './pages/tools';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
@@ -431,8 +432,9 @@ app.get('/stats/lookup', handleStatsLookup);
 app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
 
-// About, Discord, and legal pages
+// About, Tools, Discord, and legal pages
 app.get('/about', (c) => c.html(<AboutPage currentUser={c.get('currentUser')} />));
+app.get('/tools', (c) => c.html(<ToolsPage currentUser={c.get('currentUser')} />));
 app.get('/discord', (c) => c.html(<DiscordPage currentUser={c.get('currentUser')} />));
 app.get('/privacy', (c) => c.html(<PrivacyPage currentUser={c.get('currentUser')} />));
 app.get('/terms', (c) => c.html(<TermsPage currentUser={c.get('currentUser')} />));
