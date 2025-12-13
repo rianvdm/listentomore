@@ -11,7 +11,7 @@
 >    git checkout feature/discogs-collection
 >    ```
 >
-> 2. **Recreate the Cloudflare Queue** (was deleted to allow main deploy):
+> 2. **Recreate the Cloudflare Queue** (deleted to allow main deploy):
 >    ```bash
 >    cd apps/web
 >    wrangler queues create discogs-enrichment
@@ -21,6 +21,19 @@
 >    ```bash
 >    pnpm run deploy
 >    ```
+>
+> ### What's Already Done (on feature branch)
+> - ✅ OAuth 1.0a flow working in production
+> - ✅ `oauth_tokens` table exists (migration 005)
+> - ✅ UUID Migration complete (migration 006)
+> - ✅ Sign-up flow implemented (`/account` page)
+> - ✅ Username conflict fixes
+> - ✅ Discogs collection sync and enrichment
+>
+> ### Current Production State (main branch)
+> - ❌ No Discogs functionality visible to users
+> - ✅ Database tables and data preserved
+> - ✅ OAuth tokens still stored for connected users
 >
 > ### What's Already Done
 > - ✅ OAuth 1.0a flow working in production
