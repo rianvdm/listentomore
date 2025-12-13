@@ -43,7 +43,56 @@ async function runInitialEnrichment(
   }
 }
 
-// GET /api/auth/discogs/connect - Initiate OAuth flow
+// GET /api/auth/discogs/signup - Sign up via Discogs OAuth (creates new user)
+app.get('/signup', async (c) => {
+  const consumerKey = c.env.DISCOGS_OAUTH_CONSUMER_KEY;
+  const consumerSecret = c.env.DISCOGS_OAUTH_CONSUMER_SECRET;
+
+  if (!consumerKey || !consumerSecret) {
+    console.error('Discogs OAuth credentials not configured');
+    return c.redirect('/account?error=oauth_not_configured');
+  }
+
+  try {
+    const oauthService = new DiscogsOAuthService({
+      consumerKey,
+      consumerSecret,
+    });
+
+    // Determine callback URL based on request
+    const url = new URL(c.req.url);
+    const isLocalDev = !c.env.ENVIRONMENT || c.env.ENVIRONMENT !== 'production';
+    const isLocalhostUrl = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+    let callbackUrl: string;
+    if (isLocalDev || isLocalhostUrl) {
+      const port = url.port || '8788';
+      callbackUrl = `http://localhost:${port}/api/auth/discogs/callback`;
+    } else {
+      callbackUrl = `https://listentomore.com/api/auth/discogs/callback`;
+    }
+
+    console.log('[Discogs OAuth Signup] callbackUrl:', callbackUrl);
+
+    const { token, secret } = await oauthService.getRequestToken(callbackUrl);
+
+    // Store request token with isSignup flag
+    await c.env.CACHE.put(
+      `discogs:oauth:request:${token}`,
+      JSON.stringify({ secret, isSignup: true }),
+      { expirationTtl: 600 } // 10 minutes
+    );
+
+    // Redirect user to Discogs authorization page
+    const authUrl = oauthService.getAuthorizationUrl(token);
+    return c.redirect(authUrl);
+  } catch (error) {
+    console.error('Failed to initiate Discogs OAuth signup:', error);
+    return c.redirect('/account?error=oauth_failed');
+  }
+});
+
+// GET /api/auth/discogs/connect - Initiate OAuth flow (for existing users)
 app.get('/connect', async (c) => {
   // Get username from query parameter
   const username = c.req.query('username');
@@ -118,16 +167,21 @@ app.get('/callback', async (c) => {
 
   // User cancelled authorization
   if (denied || !token || !verifier) {
-    return c.redirect('/?error=discogs_auth_cancelled');
+    return c.redirect('/account?error=oauth_cancelled');
   }
 
   // Retrieve the stored request token data
   const requestDataJson = await c.env.CACHE.get(`discogs:oauth:request:${token}`);
   if (!requestDataJson) {
-    return c.redirect('/?error=discogs_auth_expired');
+    return c.redirect('/account?error=discogs_auth_expired');
   }
 
-  const requestData = JSON.parse(requestDataJson) as { secret: string; userId: string; username: string };
+  const requestData = JSON.parse(requestDataJson) as {
+    secret: string;
+    isSignup?: boolean;
+    userId?: string;
+    username?: string;
+  };
 
   const consumerKey = c.env.DISCOGS_OAUTH_CONSUMER_KEY;
   const consumerSecret = c.env.DISCOGS_OAUTH_CONSUMER_SECRET;
@@ -135,7 +189,7 @@ app.get('/callback', async (c) => {
 
   if (!consumerKey || !consumerSecret || !encryptionKey) {
     console.error('Discogs OAuth credentials or encryption key not configured');
-    return c.redirect('/?error=oauth_not_configured');
+    return c.redirect('/account?error=oauth_not_configured');
   }
 
   try {
@@ -166,10 +220,48 @@ app.get('/callback', async (c) => {
     const encryptedAccessToken = await encryptToken(accessToken, encryptionKey);
     const encryptedAccessSecret = await encryptToken(accessSecret, encryptionKey);
 
-    // Store OAuth tokens in database
     const db = c.get('db');
+    let userId: string;
+    let username: string;
+
+    // Handle signup flow - create new user
+    if (requestData.isSignup) {
+      // Check if username is available
+      const isAvailable = await db.isUsernameAvailable(identity.username);
+      if (!isAvailable) {
+        console.log(`[Discogs Signup] Username ${identity.username} already taken`);
+        await c.env.CACHE.delete(`discogs:oauth:request:${token}`);
+        return c.redirect('/account?error=username_taken');
+      }
+
+      // Create new user with Discogs username
+      console.log(`[Discogs Signup] Creating new user: ${identity.username}`);
+      const newUser = await db.createUser({
+        username: identity.username,
+        discogs_username: identity.username,
+      });
+
+      userId = newUser.id;
+      username = newUser.username;
+      console.log(`[Discogs Signup] Created user ${username} with ID ${userId}`);
+    } else {
+      // Existing connect flow
+      if (!requestData.userId || !requestData.username) {
+        console.error('Missing userId or username in connect flow');
+        return c.redirect('/account?error=invalid_state');
+      }
+      userId = requestData.userId;
+      username = requestData.username;
+
+      // Update user's discogs_username
+      await db.updateUser(userId, {
+        discogs_username: identity.username,
+      });
+    }
+
+    // Store OAuth tokens in database
     await db.storeOAuthToken({
-      userId: requestData.userId,
+      userId,
       provider: 'discogs',
       accessToken: encryptedAccessToken,
       refreshToken: encryptedAccessSecret, // OAuth 1.0a uses token secret instead of refresh token
@@ -178,58 +270,54 @@ app.get('/callback', async (c) => {
       providerUsername: identity.username,
     });
 
-    // Update user's discogs_username
-    await db.updateUser(requestData.userId, {
-      discogs_username: identity.username,
-    });
-
     // Clean up temporary request token
     await c.env.CACHE.delete(`discogs:oauth:request:${token}`);
 
     // Trigger initial collection sync in background
-    // This runs after the response is sent, so user isn't blocked
     const ctx = c.executionCtx;
     ctx.waitUntil(
       (async () => {
         try {
-          console.log(`[Discogs] Starting initial sync for user ${requestData.userId}`);
-          const result = await discogsService.syncCollection(
-            requestData.userId,
-            identity.username
-          );
+          console.log(`[Discogs] Starting initial sync for user ${userId}`);
+          const result = await discogsService.syncCollection(userId, identity.username);
           console.log(`[Discogs] Initial sync complete: ${result.releaseCount} releases`);
 
           // Set last sync timestamp
           await c.env.CACHE.put(
-            `discogs:last-sync:${requestData.userId}`,
+            `discogs:last-sync:${userId}`,
             Date.now().toString(),
             { expirationTtl: 86400 }
           );
 
-          // Queue background enrichment (runs in queue handler with no time limit)
+          // Queue background enrichment
           if (c.env.DISCOGS_QUEUE) {
-            console.log(`[Discogs] Queuing background enrichment for user ${requestData.userId}`);
+            console.log(`[Discogs] Queuing background enrichment for user ${userId}`);
             await c.env.DISCOGS_QUEUE.send({
               type: 'enrich-collection',
-              userId: requestData.userId,
+              userId,
               discogsUsername: identity.username,
             });
           } else {
-            // Fallback to inline enrichment if queue not available (dev mode)
             console.log(`[Discogs] Queue not available, running inline enrichment`);
-            await runInitialEnrichment(discogsService, requestData.userId);
+            await runInitialEnrichment(discogsService, userId);
           }
         } catch (error) {
-          console.error(`[Discogs] Initial sync failed for user ${requestData.userId}:`, error);
+          console.error(`[Discogs] Initial sync failed for user ${userId}:`, error);
         }
       })()
     );
 
-    // Redirect back to user's Discogs page (shows sync in progress)
-    return c.redirect(`/u/${requestData.username}/discogs?success=discogs_connected`);
+    // Redirect to user's page
+    if (requestData.isSignup) {
+      // New user - redirect to their stats page with welcome message
+      return c.redirect(`/u/${username}?welcome=true`);
+    } else {
+      // Existing user - redirect to Discogs page
+      return c.redirect(`/u/${username}/discogs?success=discogs_connected`);
+    }
   } catch (error) {
     console.error('Failed to complete Discogs OAuth:', error);
-    return c.redirect('/?error=discogs_auth_failed');
+    return c.redirect('/account?error=oauth_failed');
   }
 });
 

@@ -8,12 +8,13 @@ import type { Database } from '@listentomore/db';
 
 interface UserStatsPageProps {
   username: string;
-  lastfmUsername: string;
+  lastfmUsername: string | null;
   discogsUsername: string | null;
   internalToken?: string;
+  welcome?: boolean;
 }
 
-export function UserStatsPage({ username, lastfmUsername, discogsUsername, internalToken }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, discogsUsername, internalToken, welcome }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
@@ -23,14 +24,25 @@ export function UserStatsPage({ username, lastfmUsername, discogsUsername, inter
     >
       <header>
         <h1>
-          Real-time listening stats for{' '}
-          <a href={`https://www.last.fm/user/${lastfmUsername}`} target="_blank" rel="noopener noreferrer">
-            {username}
-          </a>
+          {lastfmUsername ? (
+            <>
+              Real-time listening stats for{' '}
+              <a href={`https://www.last.fm/user/${lastfmUsername}`} target="_blank" rel="noopener noreferrer">
+                {username}
+              </a>
+            </>
+          ) : (
+            <>Welcome, {username}!</>
+          )}
         </h1>
       </header>
 
       <main>
+        {welcome && (
+          <div class="alert alert-success" style={{ marginBottom: '1.5rem' }}>
+            <strong>Welcome to ListenToMore!</strong> Your account has been created and your Discogs collection is syncing in the background.
+          </div>
+        )}
         <section id="lastfm-stats">
           {/* Recent Listening */}
           <h2>🎧 Recent Listening</h2>
@@ -320,24 +332,31 @@ export async function handleUserStats(c: Context) {
   const username = c.req.param('username');
   const db = c.get('db') as Database;
   const internalToken = c.get('internalToken') as string;
+  const welcome = c.req.query('welcome') === 'true';
 
-  // Look up user by username or lastfm_username (fallback for local dev)
-  let user = await db.getUserByLastfmUsername(username);
+  // Look up user by username, lastfm_username, or discogs_username
+  let user = await db.getUserByUsername(username);
   if (!user) {
-    user = await db.getUserByUsername(username);
+    user = await db.getUserByLastfmUsername(username);
+  }
+  if (!user) {
+    user = await db.getUserByDiscogsUsername(username);
   }
 
-  if (!user || !user.lastfm_username) {
+  // User not found
+  if (!user) {
     return c.html(<UserNotFound username={username} />, 404);
   }
 
+  // User exists but has no Last.fm - show page anyway (for Discogs-only users)
   // Return shell immediately - data loaded via /api/internal/user-stats
   return c.html(
     <UserStatsPage
-      username={user.username || user.lastfm_username}
+      username={user.username}
       lastfmUsername={user.lastfm_username}
       discogsUsername={user.discogs_username}
       internalToken={internalToken}
+      welcome={welcome}
     />
   );
 }

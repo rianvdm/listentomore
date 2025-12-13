@@ -35,6 +35,7 @@ import { handleUserStats } from './pages/user/stats';
 import { handleUserRecommendations } from './pages/user/recommendations';
 import { handleAccountDiscogs } from './pages/account/discogs';
 import { handleStatsEntry, handleStatsLookup } from './pages/stats/entry';
+import { handleAccount } from './pages/account';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
@@ -426,6 +427,9 @@ app.get('/genre/:slug', handleGenreDetail);
 // Stats routes
 app.get('/stats', handleStatsEntry);
 app.get('/stats/lookup', handleStatsLookup);
+
+// Account routes
+app.get('/account', handleAccount);
 
 // User routes
 app.get('/u/:username', handleUserStats);

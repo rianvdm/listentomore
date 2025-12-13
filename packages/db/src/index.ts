@@ -95,13 +95,28 @@ export class Database {
 
   /**
    * Check if a username is available (case-insensitive)
+   * Also checks discogs_username to prevent conflicts with existing Discogs connections
    */
   async isUsernameAvailable(username: string): Promise<boolean> {
     const existing = await this.db
-      .prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)')
-      .bind(username)
+      .prepare(
+        `SELECT id FROM users 
+         WHERE LOWER(username) = LOWER(?) 
+         OR LOWER(discogs_username) = LOWER(?)`
+      )
+      .bind(username, username)
       .first<{ id: string }>();
     return !existing;
+  }
+
+  /**
+   * Get user by their Discogs username
+   */
+  async getUserByDiscogsUsername(discogsUsername: string): Promise<User | null> {
+    return this.db
+      .prepare('SELECT * FROM users WHERE LOWER(discogs_username) = LOWER(?)')
+      .bind(discogsUsername)
+      .first<User>();
   }
 
   async updateUser(

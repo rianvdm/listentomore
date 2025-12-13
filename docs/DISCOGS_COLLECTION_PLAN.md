@@ -1,6 +1,6 @@
 # Discogs Collection Integration Plan
 
-## 🚀 Current Status: Ready for Sign-up Flow
+## 🚀 Current Status: Sign-up Flow Live
 
 **Last Updated:** 2025-12-13
 
@@ -11,6 +11,7 @@
 - **Enrichment via queues** - Background processing working
 - **Production deployment** - All infrastructure functional
 - **UUID Migration** - ✅ Complete (Migration 006)
+- **Sign-up Flow** - ✅ Complete (Priority 1)
 
 ### ✅ UUID Migration Complete (2025-12-13)
 
@@ -28,19 +29,25 @@ Migration 006 successfully converted all user IDs from username-based to UUID-ba
 2. D1 has point-in-time recovery via Cloudflare dashboard
 3. Query: `SELECT * FROM _user_id_migration` to see mappings
 
-**Cache note:** Old cache keys (e.g., `discogs:collection:bordesak`) will expire naturally in 6-24 hours. Users may need to re-sync Discogs if accessing before expiry.
+### ✅ Priority 1: Account Page & Sign-up Flow Complete (2025-12-13)
+
+**What was implemented:**
+- Created `/account` page for new user sign-up
+- Added `/api/auth/discogs/signup` route
+- Modified OAuth callback to handle signup flow
+- Fixed username availability check to prevent conflicts with existing Discogs usernames
+- Fixed user lookup to support Discogs-only users
+- Added welcome message for new sign-ups
+
+**URLs:**
+- Sign-up: https://listentomore.com/account
+- Discogs stats: https://listentomore.com/u/:username/discogs
 
 ---
 
-### 🚧 Immediate Next Steps (Alpha UX Fixes):
+### 🚧 Next Steps (Alpha UX Fixes):
 
-**Priority 1: Account Page & Sign-up Flow** ← IN PROGRESS
-- Create `/account` page for new user sign-up
-- Support sign-up via Discogs OAuth (creates `/u/:username`)
-- Last.fm sign-up disabled for now (show "coming soon")
-- After sign-up, redirect to user's stats page
-
-**Priority 2: Sync UX Improvements**
+**Priority 2: Sync UX Improvements** ← NEXT
 - Show loading spinner during initial sync after OAuth connect
 - Display "Syncing your collection..." message on redirect
 - Auto-refresh page when sync completes

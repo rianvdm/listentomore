@@ -501,19 +501,22 @@ export async function handleAccountDiscogs(c: Context) {
   const db = c.get('db') as Database;
   const internalToken = c.get('internalToken') as string;
 
-  // Look up user by username or lastfm_username (fallback for local dev)
-  let user = await db.getUserByLastfmUsername(username);
+  // Look up user by username, lastfm_username, or discogs_username
+  let user = await db.getUserByUsername(username);
   if (!user) {
-    user = await db.getUserByUsername(username);
+    user = await db.getUserByLastfmUsername(username);
+  }
+  if (!user) {
+    user = await db.getUserByDiscogsUsername(username);
   }
 
-  if (!user || !user.lastfm_username) {
+  if (!user) {
     return c.html(<UserNotFound username={username} />, 404);
   }
 
   return c.html(
     <AccountDiscogsPage
-      username={user.username || user.lastfm_username}
+      username={user.username}
       discogsUsername={user.discogs_username}
       internalToken={internalToken}
     />
