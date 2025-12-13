@@ -127,6 +127,17 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
     });
 
     console.log(`Created new user: ${username} (Last.fm: ${lastfmUsername})`);
+
+    // Send Discord notification for new signups
+    if (c.env.DISCORD_WEBHOOK_URL) {
+      fetch(c.env.DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `🎉 New signup: **${username}** (Last.fm: ${lastfmUsername})`
+        })
+      }).catch(err => console.error('Discord webhook failed:', err));
+    }
   } else {
     // Returning user - update session key, login time, and refresh avatar if missing
     const updateData: Record<string, unknown> = {

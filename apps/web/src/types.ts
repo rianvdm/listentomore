@@ -34,6 +34,7 @@ export type Bindings = {
   INTERNAL_API_SECRET: string;
   ENVIRONMENT?: string;
   ADMIN_SECRET?: string;
+  DISCORD_WEBHOOK_URL?: string;
 };
 
 // Context variables (set by middleware)
