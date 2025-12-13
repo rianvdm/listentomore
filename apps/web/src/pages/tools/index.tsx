@@ -25,25 +25,10 @@ export function ToolsPage({ currentUser }: ToolsPageProps) {
         </p>
 
         <div style={{ display: 'flex', justifyContent: 'center', margin: '1.5em 0' }}>
-          <a
-            href="https://discord.com/oauth2/authorize?client_id=1284593290947068024"
-            class="button"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Add to Discord
+          <a href="/discord" class="button">
+            Learn More
           </a>
         </div>
-
-        <h3>Commands</h3>
-        <ul>
-          <li>
-            <strong>/album [search term]</strong> - Search for an album and get streaming links
-          </li>
-          <li>
-            <strong>/artist [search term]</strong> - Search for an artist and get their info
-          </li>
-        </ul>
       </section>
 
       {/* Last.fm MCP Server */}
