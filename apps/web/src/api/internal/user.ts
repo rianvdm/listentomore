@@ -3,13 +3,19 @@
 import { Hono, Context } from 'hono';
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { LastfmService } from '@listentomore/lastfm';
+import type { User } from '@listentomore/db';
 import type { Bindings, Variables } from '../../types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Helper to get LastfmService for a user
-async function getUserLastfm(c: Context<{ Bindings: Bindings; Variables: Variables }>, username: string) {
+// Helper to get user and check privacy
+async function getUserWithPrivacyCheck(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  username: string
+): Promise<{ user: User; lastfm: LastfmService } | { error: string; status: number }> {
   const db = c.get('db');
+  const currentUser = c.get('currentUser');
+
   // Look up by lastfm_username first (canonical), then fall back to username
   let user = await db.getUserByLastfmUsername(username);
   if (!user) {
@@ -17,14 +23,32 @@ async function getUserLastfm(c: Context<{ Bindings: Bindings; Variables: Variabl
   }
 
   if (!user || !user.lastfm_username) {
-    return null;
+    return { error: 'User not found', status: 404 };
   }
 
-  return new LastfmService({
+  // Check privacy - if private and not the owner, deny access
+  if (user.profile_visibility === 'private') {
+    if (!currentUser || currentUser.id !== user.id) {
+      return { error: 'This profile is private', status: 403 };
+    }
+  }
+
+  const lastfm = new LastfmService({
     apiKey: c.env.LASTFM_API_KEY,
     username: user.lastfm_username,
     cache: c.env.CACHE,
   });
+
+  return { user, lastfm };
+}
+
+// Legacy helper for backwards compatibility
+async function getUserLastfm(c: Context<{ Bindings: Bindings; Variables: Variables }>, username: string) {
+  const result = await getUserWithPrivacyCheck(c, username);
+  if ('error' in result) {
+    return null;
+  }
+  return result.lastfm;
 }
 
 app.get('/user-recommendations', async (c) => {
@@ -33,6 +57,14 @@ app.get('/user-recommendations', async (c) => {
   if (!username) {
     return c.json({ error: 'Missing username parameter' }, 400);
   }
+
+  // Check privacy first
+  const result = await getUserWithPrivacyCheck(c, username);
+  if ('error' in result) {
+    return c.json({ error: result.error }, result.status as 403 | 404);
+  }
+
+  const { lastfm: userLastfm } = result;
 
   const CACHE_KEY = `user-recommendations:${username}`;
   const CACHE_TTL_SECONDS = getTtlSeconds(CACHE_CONFIG.lastfm.userRecommendations);
@@ -45,20 +77,6 @@ app.get('/user-recommendations', async (c) => {
       const data = JSON.parse(cached);
       return c.json({ data: data.slice(0, MAX_RESULTS), cached: true });
     }
-
-    // Cache miss - look up user and fetch recommendations
-    const db = c.get('db');
-    const user = await db.getUserByUsername(username);
-
-    if (!user || !user.lastfm_username) {
-      return c.json({ error: 'User not found' }, 404);
-    }
-
-    // Create LastfmService for this user
-    const userLastfm = new LastfmService({
-      apiKey: c.env.LASTFM_API_KEY,
-      username: user.lastfm_username,
-    });
 
     // Get user's top artists
     const topArtists = await userLastfm.getTopArtists('7day', 5);

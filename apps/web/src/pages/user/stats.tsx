@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { enrichLinksScript } from '../../utils/client-scripts';
-import type { Database } from '@listentomore/db';
+import type { Database, User } from '@listentomore/db';
 import { LastfmService } from '@listentomore/lastfm';
 
 interface UserStatsPageProps {
@@ -12,9 +12,10 @@ interface UserStatsPageProps {
   lastfmUsername: string;
   profileImage?: string;
   internalToken?: string;
+  currentUser?: User | null;
 }
 
-export function UserStatsPage({ username, lastfmUsername, profileImage, internalToken }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, profileImage, internalToken, currentUser }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
@@ -22,6 +23,7 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
       url={`https://listentomore.com/u/${username}`}
       image={profileImage}
       internalToken={internalToken}
+      currentUser={currentUser}
     >
       <header>
         <h1>
@@ -275,6 +277,29 @@ function UserNotFound({ username }: { username: string }) {
   );
 }
 
+// Private profile page - shown when profile is private and viewer is not owner
+function PrivateProfile({ username, currentUser }: { username: string; currentUser?: User | null }) {
+  return (
+    <Layout
+      title="Private Profile"
+      description="This profile is private"
+      currentUser={currentUser}
+    >
+      <div class="text-center" style={{ paddingTop: '4rem' }}>
+        <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🔒 Private Profile</h1>
+        <p>
+          <strong>{username}</strong> has chosen to keep their listening stats private.
+        </p>
+        {!currentUser && (
+          <p style={{ marginTop: '1.5rem' }}>
+            <a href="/login" class="button">Sign In</a>
+          </p>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
 // Route handler - returns shell immediately, data loaded progressively via JS
 export async function handleUserStats(c: Context) {
   const username = c.req.param('username');
@@ -289,6 +314,21 @@ export async function handleUserStats(c: Context) {
 
   if (!user || !user.lastfm_username) {
     return c.html(<UserNotFound username={username} />, 404);
+  }
+
+  // Get current logged-in user for nav and privacy check
+  const currentUser = c.get('currentUser') as User | null;
+
+  // Check privacy - if private and not the owner, show private profile page
+  if (user.profile_visibility === 'private') {
+    if (!currentUser || currentUser.id !== user.id) {
+      return c.html(
+        <PrivateProfile
+          username={user.lastfm_username}
+          currentUser={currentUser}
+        />
+      );
+    }
   }
 
   // Fetch Last.fm user info for profile picture
@@ -313,6 +353,7 @@ export async function handleUserStats(c: Context) {
       lastfmUsername={user.lastfm_username}
       profileImage={profileImage}
       internalToken={internalToken}
+      currentUser={currentUser}
     />
   );
 }

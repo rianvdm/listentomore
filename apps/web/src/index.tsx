@@ -36,6 +36,7 @@ import { handleUserRecommendations } from './pages/user/recommendations';
 import { handleStatsLookup } from './pages/stats/entry';
 import { handleLogin } from './pages/auth/login';
 import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
+import { handleAccount, handleAccountProfile, handleAccountPrivacy, handleAccountDelete } from './pages/account';
 import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
@@ -414,6 +415,12 @@ app.get('/login', handleLogin);
 app.get('/auth/lastfm', handleLastfmAuth);
 app.get('/auth/lastfm/callback', handleLastfmCallback);
 app.get('/auth/logout', handleLogout);
+
+// Account routes
+app.get('/account', handleAccount);
+app.post('/account/profile', handleAccountProfile);
+app.post('/account/privacy', handleAccountPrivacy);
+app.get('/account/delete', handleAccountDelete);
 
 // Stats routes (legacy - redirect to login)
 app.get('/stats', (c) => c.redirect('/login'));

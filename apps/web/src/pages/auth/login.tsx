@@ -2,21 +2,24 @@
 // URL: /login
 
 import type { Context } from 'hono';
+import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import type { Bindings, Variables } from '../../types';
 
 interface LoginPageProps {
   error?: string;
   next?: string;
+  currentUser?: User | null;
 }
 
-function LoginPage({ error, next }: LoginPageProps) {
+function LoginPage({ error, next, currentUser }: LoginPageProps) {
   const authUrl = next ? `/auth/lastfm?next=${encodeURIComponent(next)}` : '/auth/lastfm';
 
   return (
     <Layout
       title="Sign In"
       description="Sign in to ListenToMore with your Last.fm account"
+      currentUser={currentUser}
     >
       <div class="text-center" style={{ maxWidth: '400px', margin: '4rem auto', padding: '0 1rem' }}>
         <h1 style={{ marginBottom: '1rem' }}>Sign in to ListenToMore</h1>
@@ -82,11 +85,11 @@ export function handleLogin(c: Context<{ Bindings: Bindings; Variables: Variable
 
   // If already logged in, redirect to profile
   if (currentUser) {
-    return c.redirect(`/u/${currentUser.username}`);
+    return c.redirect(`/u/${currentUser.lastfm_username}`);
   }
 
   const error = c.req.query('error');
   const next = c.req.query('next');
 
-  return c.html(<LoginPage error={error} next={next} />);
+  return c.html(<LoginPage error={error} next={next} currentUser={null} />);
 }
