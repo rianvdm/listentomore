@@ -237,12 +237,9 @@ function UserNotFound({ username }: { username: string }) {
         <p>
           No user with username "<strong>{username}</strong>" exists in our system.
         </p>
-        <p style={{ marginTop: '1rem', maxWidth: '400px', marginLeft: 'auto', marginRight: 'auto' }}>
-          This feature is currently in testing. If you'd like to try it out,{' '}
-          <a href="https://elezea.com/contact/" target="_blank" rel="noopener noreferrer">
-            get in touch
-          </a>{' '}
-          and I'll set you up.
+        <p style={{ marginTop: '1rem', maxWidth: '500px', marginLeft: 'auto', marginRight: 'auto' }}>
+          Want to create your own profile?{' '}
+          <a href="/login">Sign in with Last.fm</a> to track your listening stats and get personalized recommendations.
         </p>
         <p class="mt-2">
           <a href="/stats" class="button">Try Another Username</a>
