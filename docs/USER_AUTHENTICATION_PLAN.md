@@ -1,14 +1,45 @@
 # User Authentication Implementation Plan
 
-## Executive Summary
+## ✅ Implementation Complete (December 2024)
 
-This document outlines the plan to add user accounts to ListenToMore using **Last.fm as the sole authentication provider**. Users sign up by connecting their Last.fm account, which automatically links their listening data. This approach is simpler than multi-provider OAuth and aligns with the app's core purpose.
+This document outlines the plan to add user accounts to ListenToMore using **Last.fm as the sole authentication provider**. Users sign up by connecting their Last.fm account, which automatically links their listening data.
 
-**Key changes from previous version:**
-- Removed Spotify/Discogs OAuth (can add later if needed)
-- Removed email+password authentication (complexity not worth it for MVP)
-- Simplified to Last.fm Web Authentication only
-- Clearer UX flow with `/account` replacing `/stats`
+### What Was Built
+
+**Phase 1: Database & Session Foundation** ✅
+- Migration `005_user_auth.sql` - Added auth fields to users table
+- Migration `006_sessions.sql` - Created sessions table
+- Session utilities (`createSession`, `validateSession`, `destroySession`)
+- Session middleware injecting `currentUser` into Hono context
+- MD5 utility for Last.fm API signatures
+
+**Phase 2: Last.fm Authentication** ✅
+- `/login` page with "Continue with Last.fm" button
+- `/auth/lastfm` redirect handler
+- `/auth/lastfm/callback` token exchange and user creation/claim
+- `/auth/logout` session destruction
+- `LASTFM_SHARED_SECRET` added to production secrets
+
+**Phase 3: Navigation & Account Page** ✅
+- NavBar shows user dropdown when logged in, "Sign In" when not
+- User dropdown with avatar, My Profile, Account Settings, Sign Out
+- `/account` page with profile settings, privacy controls, delete account
+- `/stats` redirects to `/login`
+- Added "Tools" link to nav (Discord bot + Last.fm MCP server)
+
+**Phase 4: Profile Privacy** ✅
+- Privacy check on `/u/:username` route
+- `PrivateProfilePage` component for private profiles
+- Internal APIs respect privacy settings via `getUserWithPrivacyCheck`
+
+**Additional Fixes:**
+- Existing users auto-claimed on first Last.fm login
+- Avatar and display_name fetched for returning users
+- `currentUser` passed to Layout on all pages for consistent nav state
+
+---
+
+## Original Plan (for reference)
 
 ---
 
@@ -753,27 +784,26 @@ WHERE profile_visibility IS NULL;
 
 | Variable | Purpose | Status |
 |----------|---------|--------|
-| `LASTFM_API_KEY` | Last.fm API calls | Already have |
-| `LASTFM_SHARED_SECRET` | Last.fm auth signatures | **Need to add** |
+| `LASTFM_API_KEY` | Last.fm API calls | ✅ Configured |
+| `LASTFM_SHARED_SECRET` | Last.fm auth signatures | ✅ Added to production |
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **Reserved usernames**: Should we block `admin`, `api`, `account`, etc.?
-2. **Existing users**: Auto-claim on first Last.fm login (recommended)
-3. **Profile URL**: Keep `/u/{username}` (recommended)
-4. **Account deletion**: Soft delete or hard delete?
+1. **Reserved usernames**: Not implemented yet (future enhancement)
+2. **Existing users**: ✅ Auto-claimed on first Last.fm login
+3. **Profile URL**: ✅ Using `/u/{lastfm_username}` as canonical URL
+4. **Account deletion**: ✅ Hard delete implemented
 
 ---
 
 ## Conclusion
 
-This simplified plan focuses on **Last.fm as the sole authentication provider**, removing the complexity of multi-provider OAuth and password management. The key benefits:
+Implementation complete as of December 2024. The system uses **Last.fm as the sole authentication provider** with:
 
-- **Simpler implementation** - One auth flow instead of four
-- **Better UX** - Users already have Last.fm accounts
-- **No password liability** - No passwords to store or breach
-- **Instant data connection** - Auth = data access in one step
-
-The phased approach allows incremental delivery while maintaining backwards compatibility with existing user profiles.
+- **Simple auth flow** - One-click Last.fm sign-in
+- **Automatic user claim** - Existing users claimed on first login
+- **Privacy controls** - Public/private profile visibility
+- **Consistent nav state** - Auth state shown on all pages
+- **Tools page** - Discord bot and Last.fm MCP server documentation
