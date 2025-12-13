@@ -429,7 +429,7 @@ app.get('/widget/recent', async (c) => {
 
     if (!track) {
       if (format === 'html') {
-        return new Response('🎵 No recent tracks found.', {
+        return new Response('♫ No recent tracks found.', {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
       }
@@ -437,7 +437,7 @@ app.get('/widget/recent', async (c) => {
     }
 
     if (format === 'html') {
-      const html = `🎵 Most recently I listened to <strong>${track.album || track.name}</strong> by <strong>${track.artist}</strong>. <a href="https://listentomore.com/u/${username}" target="_blank">See more ↗</a>`;
+      const html = `♫ Most recently I listened to <strong>${track.album || track.name}</strong> by <strong>${track.artist}</strong>. <a href="https://listentomore.com/u/${username}" target="_blank">See more »</a>`;
       return new Response(html, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
@@ -450,7 +450,7 @@ app.get('/widget/recent', async (c) => {
   } catch (error) {
     console.error('Widget recent error:', error);
     if (format === 'html') {
-      return new Response('🎵 Unable to load music info.', {
+      return new Response('♫ Unable to load music info.', {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     }
