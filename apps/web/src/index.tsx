@@ -235,7 +235,13 @@ app.get('/', async (c) => {
   const randomFact = await ai.getRandomFact().catch(() => null);
 
   return c.html(
-    <Layout title="Home" description="Discover music, explore albums, and track your listening habits" internalToken={internalToken} currentUser={currentUser}>
+    <Layout
+      title="Home"
+      description="Discover music, explore albums, and track your listening habits"
+      url="https://listentomore.com/"
+      internalToken={internalToken}
+      currentUser={currentUser}
+    >
       <header>
         <h1>Happy {dayName}, friend!</h1>
       </header>
