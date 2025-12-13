@@ -175,6 +175,17 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
     await db.updateUser(user.id, updateData);
 
     console.log(`User logged in: ${user.username} (Last.fm: ${lastfmUsername})`);
+
+    // Send Discord notification for first-time account claims (existing users)
+    if ((user.login_count || 0) === 0 && c.env.DISCORD_WEBHOOK_URL) {
+      fetch(c.env.DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `🔗 Account claimed: **${user.username}** (Last.fm: ${lastfmUsername})`
+        })
+      }).catch(err => console.error('Discord webhook failed:', err));
+    }
   }
 
   // Step 5: Create app session
