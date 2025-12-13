@@ -1,8 +1,8 @@
 # Discogs Collection Integration Plan
 
-## 🚀 Current Status: Alpha UX Fixes Needed
+## 🚀 Current Status: Ready for Sign-up Flow
 
-**Last Updated:** 2025-12-12
+**Last Updated:** 2025-12-13
 
 ### ✅ What's Working:
 - **OAuth 1.0a flow** - Connect/disconnect Discogs accounts
@@ -10,23 +10,31 @@
 - **Stats display** - Basic stats on `/u/:username/discogs`
 - **Enrichment via queues** - Background processing working
 - **Production deployment** - All infrastructure functional
+- **UUID Migration** - ✅ Complete (Migration 006)
 
-### ⚠️ BLOCKER: UUID Migration Required First
+### ✅ UUID Migration Complete (2025-12-13)
 
-Before implementing any of the priorities below, we must migrate user IDs from username-based to UUID-based. See `docs/USER_AUTHENTICATION_PLAN.md` → Migration 004.5.
+Migration 006 successfully converted all user IDs from username-based to UUID-based.
 
-**Why:** Current `users.id = lowercase(username)` breaks when users sign up via different services (Discogs username ≠ Last.fm username). Need stable UUIDs.
+**What was done:**
+- 14 users migrated to UUID-based IDs
+- All FK references updated (`oauth_tokens`, `searches`, `discogs_releases`, `discogs_sync_state`, `api_keys`)
+- `_user_id_migration` table preserved for rollback reference
+- `createUser()` and `isUsernameAvailable()` methods added to Database class
+- `username` field now required (NOT NULL) in schema
+
+**Rollback plan (if needed):**
+1. Use `_user_id_migration` table to map `new_id → old_id`
+2. D1 has point-in-time recovery via Cloudflare dashboard
+3. Query: `SELECT * FROM _user_id_migration` to see mappings
+
+**Cache note:** Old cache keys (e.g., `discogs:collection:bordesak`) will expire naturally in 6-24 hours. Users may need to re-sync Discogs if accessing before expiry.
 
 ---
 
 ### 🚧 Immediate Next Steps (Alpha UX Fixes):
 
-**Priority 0: UUID Migration** ← DO THIS FIRST
-- Run Migration 004.5 from USER_AUTHENTICATION_PLAN.md
-- Update all foreign key references
-- Test thoroughly before proceeding
-
-**Priority 1: Account Page & Sign-up Flow**
+**Priority 1: Account Page & Sign-up Flow** ← IN PROGRESS
 - Create `/account` page for new user sign-up
 - Support sign-up via Discogs OAuth (creates `/u/:username`)
 - Last.fm sign-up disabled for now (show "coming soon")
@@ -66,9 +74,9 @@ Before implementing any of the priorities below, we must migrate user IDs from u
 | `/api/internal/discogs-enrich` | POST | Trigger enrichment |
 
 ### Production Data
-- **User:** bordesak → elezea-records on Discogs
+- **User:** bordesak (UUID: `21f67178c64bf648a635e46935ee61c1`) → elezea-records on Discogs
 - **Releases:** 1,497 synced
-- **Cache key:** `discogs:collection:bordesak`
+- **Cache key:** `discogs:collection:21f67178c64bf648a635e46935ee61c1` (uses UUID now)
 
 ---
 

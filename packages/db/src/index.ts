@@ -58,6 +58,52 @@ export class Database {
     return result.results;
   }
 
+  /**
+   * Create a new user with a UUID as the primary key
+   * Returns the created user
+   */
+  async createUser(data: {
+    username: string;
+    email?: string;
+    lastfm_username?: string;
+    discogs_username?: string;
+  }): Promise<User> {
+    // Generate UUID for the user ID
+    const id = crypto.randomUUID().replace(/-/g, '');
+
+    const result = await this.db
+      .prepare(
+        `INSERT INTO users (id, username, email, lastfm_username, discogs_username)
+         VALUES (?, ?, ?, ?, ?)
+         RETURNING *`
+      )
+      .bind(
+        id,
+        data.username,
+        data.email || null,
+        data.lastfm_username || null,
+        data.discogs_username || null
+      )
+      .first<User>();
+
+    if (!result) {
+      throw new Error('Failed to create user');
+    }
+
+    return result;
+  }
+
+  /**
+   * Check if a username is available (case-insensitive)
+   */
+  async isUsernameAvailable(username: string): Promise<boolean> {
+    const existing = await this.db
+      .prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)')
+      .bind(username)
+      .first<{ id: string }>();
+    return !existing;
+  }
+
   async updateUser(
     id: string,
     data: Partial<Pick<User, 'email' | 'lastfm_username' | 'discogs_username' | 'spotify_connected'>>

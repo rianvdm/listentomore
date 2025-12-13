@@ -2,7 +2,7 @@
 
 export interface User {
   id: string;
-  username: string | null;
+  username: string;  // Required after migration 006 (UUID migration)
   email: string | null;
   lastfm_username: string | null;
   discogs_username: string | null;
