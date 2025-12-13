@@ -128,12 +128,40 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
 
     console.log(`Created new user: ${username} (Last.fm: ${lastfmUsername})`);
   } else {
-    // Returning user - update session key and login time
-    await db.updateUser(user.id, {
+    // Returning user - update session key, login time, and refresh avatar if missing
+    const updateData: Record<string, unknown> = {
       lastfm_session_key: sessionKey,
       last_login_at: new Date().toISOString(),
       login_count: (user.login_count || 0) + 1,
-    });
+    };
+
+    // Fetch avatar if not set
+    if (!user.avatar_url) {
+      try {
+        const userInfoResponse = await fetch(
+          `${LASTFM_API_URL}?method=user.getinfo&user=${encodeURIComponent(lastfmUsername)}&api_key=${apiKey}&format=json`
+        );
+        if (userInfoResponse.ok) {
+          const userInfo = await userInfoResponse.json() as {
+            user?: { image?: Array<{ '#text': string; size: string }> };
+          };
+          const images = userInfo.user?.image || [];
+          const largeImage = images.find((img) => img.size === 'extralarge') || images[images.length - 1];
+          if (largeImage && largeImage['#text']) {
+            updateData.avatar_url = largeImage['#text'];
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch Last.fm user info:', error);
+      }
+    }
+
+    // Set display_name if not set
+    if (!user.display_name) {
+      updateData.display_name = lastfmUsername;
+    }
+
+    await db.updateUser(user.id, updateData);
 
     console.log(`User logged in: ${user.username} (Last.fm: ${lastfmUsername})`);
   }
