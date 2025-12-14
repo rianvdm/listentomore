@@ -4,6 +4,7 @@ import { AI_TASKS, type AITask } from '@listentomore/config';
 import { OpenAIClient } from './openai';
 import { PerplexityClient } from './perplexity';
 import { AICache } from './cache';
+import { AIRateLimiter } from './rate-limit';
 import type { ChatClient } from './types';
 
 // Re-export common types from types.ts
@@ -35,6 +36,9 @@ export type {
 
 export { AICache } from './cache';
 export type { CacheOptions } from './cache';
+
+export { AIRateLimiter } from './rate-limit';
+export type { AIRateLimitState, AIProvider } from './rate-limit';
 
 // Re-export all prompt functions and types
 export {
@@ -80,10 +84,17 @@ export class AIService {
   public readonly perplexity: PerplexityClient;
   public readonly cache: AICache;
   public readonly kv: KVNamespace;
+  public readonly openaiRateLimiter: AIRateLimiter;
+  public readonly perplexityRateLimiter: AIRateLimiter;
 
   constructor(config: AIServiceConfig) {
-    this.openai = new OpenAIClient(config.openaiApiKey);
-    this.perplexity = new PerplexityClient(config.perplexityApiKey);
+    // Create distributed rate limiters for each provider
+    this.openaiRateLimiter = new AIRateLimiter(config.cache, 'openai');
+    this.perplexityRateLimiter = new AIRateLimiter(config.cache, 'perplexity');
+
+    // Create clients with rate limiters
+    this.openai = new OpenAIClient(config.openaiApiKey, this.openaiRateLimiter);
+    this.perplexity = new PerplexityClient(config.perplexityApiKey, this.perplexityRateLimiter);
     this.cache = new AICache(config.cache);
     this.kv = config.cache;
   }

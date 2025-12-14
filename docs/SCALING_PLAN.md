@@ -12,10 +12,10 @@
 
 ListenToMore is built on Cloudflare Workers with external API dependencies (Spotify, Last.fm, OpenAI, Perplexity). The architecture is serverless and inherently scalable, but several critical systems will fail under growth without intervention:
 
-### 🔴 **Critical (Will Break Soon)**
-1. **Spotify API Rate Limiting** - Single token serving all requests, instance-level rate limiting won't work in Workers
-2. **AI API Rate Limiting** - Same issue, instance-level counters don't persist across requests
-3. **Database Unbounded Growth** - Searches table has no cleanup, sessions accumulate indefinitely
+### ✅ **Critical (Fixed)**
+1. **Spotify API Rate Limiting** - ✅ Implemented KV-based distributed rate limiting (2025-12-14)
+2. **AI API Rate Limiting** - ✅ Implemented KV-based distributed rate limiting (2025-12-14)
+3. **Database Unbounded Growth** - 🔴 Not started - Searches table has no cleanup, sessions accumulate indefinitely
 
 ### 🟡 **High Priority (Will Break with Growth)**
 4. **Cron Job Scaling** - Currently ~14 users, will timeout at ~150 users
@@ -32,7 +32,7 @@ ListenToMore is built on Cloudflare Workers with external API dependencies (Spot
 
 | Phase | Timeline | Systems | Status |
 |-------|----------|---------|--------|
-| **Phase 1: Critical Fixes** | Week 1-2 | Spotify rate limiting, AI rate limiting, DB cleanup | 🔴 Not started |
+| **Phase 1: Critical Fixes** | Week 1-2 | Spotify rate limiting, AI rate limiting, DB cleanup | 🟡 In progress (1.1 & 1.2 done) |
 | **Phase 2: Scaling Infrastructure** | Week 3-4 | Cron optimization, Last.fm rate limiting, monitoring | 🟡 Partially done (cron batching) |
 | **Phase 3: Optimization** | Week 5-8 | Batch APIs, cache optimization, deduplication | 🟢 Future |
 | **Phase 4: Resilience** | Month 3+ | Circuit breakers, multi-region, cost optimization | 🟢 Future |
@@ -691,8 +691,8 @@ See SPOTIFY_RATE_LIMITING.md Option 4 for implementation.
 ## Implementation Roadmap
 
 ### Week 1-2: Critical Fixes
-- [ ] 1.1 Spotify rate limiting (8h)
-- [ ] 1.2 AI rate limiting (6h)
+- [x] 1.1 Spotify rate limiting (8h) - ✅ Done 2025-12-14
+- [x] 1.2 AI rate limiting (6h) - ✅ Done 2025-12-14
 - [ ] 1.3 Database cleanup (4h)
 - **Total:** 18 hours
 
@@ -739,7 +739,7 @@ See SPOTIFY_RATE_LIMITING.md Option 4 for implementation.
 
 | User Count | Action Required |
 |------------|-----------------|
-| **50 users** | Implement Phase 1 (Critical Fixes) |
+| **50 users** | Implement Phase 1 (Critical Fixes) - ✅ 1.1 & 1.2 done |
 | **100 users** | Implement Phase 2 (Scaling Infrastructure) |
 | **150 users** | Must complete Phase 2 (cron timeout risk) |
 | **500 users** | Implement Phase 3 (Optimization) + consider Cloudflare Queues |

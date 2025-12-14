@@ -213,6 +213,11 @@ export const RATE_LIMITS = {
   perplexity: {
     requestsPerMinute: 30,
   },
+  spotify: {
+    requestsPerMinute: 120, // Conservative limit (Spotify allows ~180)
+    maxRetries: 2,
+    retryDelayMs: 1000,
+  },
 } as const;
 
 /**

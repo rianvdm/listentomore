@@ -1,8 +1,8 @@
 // ABOUTME: OpenAI API client for text and image generation.
 // ABOUTME: Supports both Chat Completions API and Responses API (for GPT-5.x).
-// ABOUTME: Includes rate limiting and citation handling for web search models.
+// ABOUTME: Includes distributed rate limiting and citation handling for web search models.
 
-import { AI_PROVIDERS, RATE_LIMITS } from '@listentomore/config';
+import { AI_PROVIDERS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
 import type {
   ChatClient,
@@ -11,6 +11,7 @@ import type {
   Verbosity,
   AIResponseMetadata,
 } from './types';
+import type { AIRateLimiter } from './rate-limit';
 
 // Re-export for backwards compatibility
 export type { ChatMessage } from './types';
@@ -75,23 +76,22 @@ export interface ImageGenerationResponse {
   isDataUrl: boolean;
 }
 
-/** Rate limit window tracking */
-interface RateLimitWindow {
-  requestCount: number;
-  windowStart: number;
-}
-
 export class OpenAIClient implements ChatClient {
   private apiKey: string;
   private baseUrl: string;
-  private rateLimitWindow: RateLimitWindow = {
-    requestCount: 0,
-    windowStart: Date.now(),
-  };
+  private rateLimiter: AIRateLimiter | null = null;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, rateLimiter?: AIRateLimiter) {
     this.apiKey = apiKey;
     this.baseUrl = AI_PROVIDERS.openai.baseUrl;
+    this.rateLimiter = rateLimiter ?? null;
+  }
+
+  /**
+   * Set the rate limiter (for dependency injection after construction)
+   */
+  setRateLimiter(rateLimiter: AIRateLimiter): void {
+    this.rateLimiter = rateLimiter;
   }
 
   /**
@@ -139,28 +139,14 @@ export class OpenAIClient implements ChatClient {
   }
 
   /**
-   * Check and update rate limiting
+   * Check and update rate limiting using distributed KV-based limiter
    */
   private async checkRateLimit(): Promise<void> {
-    const now = Date.now();
-    const windowMs = 60000; // 1 minute window
-
-    // Reset window if expired
-    if (now - this.rateLimitWindow.windowStart >= windowMs) {
-      this.rateLimitWindow = { requestCount: 0, windowStart: now };
+    if (this.rateLimiter) {
+      await this.rateLimiter.acquire();
     }
-
-    // Check if we're over the limit
-    if (
-      this.rateLimitWindow.requestCount >= RATE_LIMITS.openai.requestsPerMinute
-    ) {
-      const waitMs = windowMs - (now - this.rateLimitWindow.windowStart);
-      console.log(`[OpenAI] Rate limited, waiting ${waitMs}ms`);
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-      this.rateLimitWindow = { requestCount: 0, windowStart: Date.now() };
-    }
-
-    this.rateLimitWindow.requestCount++;
+    // If no rate limiter configured, proceed without rate limiting
+    // (backwards compatibility for tests or direct usage)
   }
 
   /**

@@ -2,9 +2,18 @@
 
 > **For LLMs:** This document outlines how to implement application-level rate limiting for Spotify API calls. The goal is to prevent 429 errors from Spotify's API by proactively throttling requests before hitting their limits. This protects the application from external traffic spikes (bots, crawlers, viral traffic) and ensures reliable service for legitimate users.
 
-**Status:** 🔴 Not Implemented (Priority: Critical)
+**Status:** ✅ Implemented (2025-12-14)
 **Related:** See [SCALING_PLAN.md](./SCALING_PLAN.md) Phase 1.1 for overall scaling context.
 **Estimated Effort:** Phase 1-2: 8 hours | Phase 3: 6 hours | Full implementation: ~20 hours
+
+### Implementation Summary
+
+**Completed 2025-12-14:**
+- `packages/services/spotify/src/rate-limit.ts` - `SpotifyRateLimiter` class using KV storage
+- `packages/services/spotify/src/fetch.ts` - `spotifyFetch` wrapper with retry logic
+- Updated `SpotifyAlbums`, `SpotifyArtists`, `SpotifySearch` to use rate-limited fetch
+- Rate limits configured in `packages/config/src/ai.ts`: 120 req/min (conservative)
+- Logs warnings at 80% capacity, respects Retry-After headers on 429
 
 ---
 
@@ -426,25 +435,25 @@ async function checkCircuit(cache: KVNamespace): Promise<boolean> {
 
 ## Recommended Implementation
 
-### Phase 1: Immediate (Low Effort)
+### Phase 1: Immediate (Low Effort) - ✅ DONE
 
-1. **Add retry with backoff** to all Spotify API calls
-2. **Add config** for Spotify rate limits in `packages/config/src/ai.ts`
+1. ✅ **Add retry with backoff** to all Spotify API calls - `spotifyFetch` in `fetch.ts`
+2. ✅ **Add config** for Spotify rate limits in `packages/config/src/ai.ts`
 
-### Phase 2: Near-term (Medium Effort)
+### Phase 2: Near-term (Medium Effort) - ✅ DONE
 
-1. **Implement KV-based rate limiting** in a new `packages/services/spotify/src/rate-limit.ts`
-2. **Integrate into SpotifyService** as a shared rate limiter
-3. **Log rate limit events** for monitoring
+1. ✅ **Implement KV-based rate limiting** in `packages/services/spotify/src/rate-limit.ts`
+2. ✅ **Integrate into SpotifyService** as a shared rate limiter
+3. ✅ **Log rate limit events** for monitoring (80% warning, cooldown logs)
 
-### Phase 3: Batch API Optimization (Medium Effort)
+### Phase 3: Batch API Optimization (Medium Effort) - 🔴 Not Started
 
 1. **Add batch album fetching** - `getAlbums(ids: string[])` using `/albums?ids=`
 2. **Add batch artist fetching** - `getArtists(ids: string[])` using `/artists?ids=`
 3. **Update cron job** to use batch endpoints for Spotify image enrichment
 4. **Update internal APIs** that fetch multiple items to batch requests
 
-### Phase 4: Future (Higher Effort)
+### Phase 4: Future (Higher Effort) - 🔴 Not Started
 
 1. **Circuit breaker** for complete Spotify outages
 2. **Metrics/alerting** on rate limit frequency
@@ -1050,13 +1059,9 @@ The `SpotifyAuth` class in `packages/services/spotify/src/auth.ts` handles token
 
 ## Option: Move Cron Job to Secondary App
 
-**Current state:** The cron job (`scheduled()` in `apps/web/src/index.tsx`) uses the **primary** Spotify app for album image enrichment.
+**Current state:** ✅ The cron job uses the **secondary** Spotify app (with fallback to primary).
 
-**Problem:** During high traffic, the cron job competes with user-facing requests (album/artist detail pages) for the same rate limit budget.
-
-### Option A: Use Secondary App for Cron
-
-Reuse the existing secondary app credentials for the cron job:
+**Implemented 2025-12-14:** The cron job now uses `SPOTIFY_STREAMING_*` credentials if configured, isolating it from user-facing requests.
 
 ```typescript
 // In apps/web/src/index.tsx scheduled() function
@@ -1068,18 +1073,9 @@ const spotify = new SpotifyService({
 });
 ```
 
-**Pros:**
-- No new Spotify app needed
-- Isolates cron from user-facing requests
-- Falls back to primary if secondary not configured
+### Option B: Create Third App for Background Jobs (Future)
 
-**Cons:**
-- Cron now shares budget with streaming-links (40+ parallel requests)
-- May need to monitor if streaming-links + cron exhaust secondary app
-
-### Option B: Create Third App for Background Jobs
-
-Create a dedicated Spotify app for background jobs (cron, future async tasks):
+If streaming-links + cron exhaust the secondary app budget, create a dedicated Spotify app for background jobs:
 
 **Environment variables:**
 - `SPOTIFY_BACKGROUND_CLIENT_ID`
@@ -1097,9 +1093,8 @@ Create a dedicated Spotify app for background jobs (cron, future async tasks):
 
 ### Recommendation
 
-**Now (< 50 users):** Keep current setup (cron uses primary)
-**50-100 users:** Use Option A (cron → secondary app)
-**100+ users:** Use Option B (dedicated background app)
+**Now (< 50 users):** ✅ Using Option A (cron → secondary app)
+**100+ users:** Consider Option B (dedicated background app)
 
 ---
 

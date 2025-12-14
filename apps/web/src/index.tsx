@@ -771,10 +771,11 @@ async function scheduled(
     console.log(`[CRON] Found ${users.length} public users with Last.fm usernames`);
 
     // Create Spotify service for image lookups
+    // Use secondary app if configured to isolate cron from user-facing requests
     const spotify = new SpotifyService({
-      clientId: env.SPOTIFY_CLIENT_ID,
-      clientSecret: env.SPOTIFY_CLIENT_SECRET,
-      refreshToken: env.SPOTIFY_REFRESH_TOKEN,
+      clientId: env.SPOTIFY_STREAMING_CLIENT_ID || env.SPOTIFY_CLIENT_ID,
+      clientSecret: env.SPOTIFY_STREAMING_CLIENT_SECRET || env.SPOTIFY_CLIENT_SECRET,
+      refreshToken: env.SPOTIFY_STREAMING_REFRESH_TOKEN || env.SPOTIFY_REFRESH_TOKEN,
       cache: env.CACHE,
     });
 
