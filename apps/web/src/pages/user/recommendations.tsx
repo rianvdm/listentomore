@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { UserProfileNav } from '../../components/layout/UserProfileNav';
+import { UserProfileHeader } from '../../components/layout/UserProfileHeader';
 import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database, User } from '@listentomore/db';
 import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
@@ -39,14 +40,8 @@ export function UserRecommendationsPage({
       internalToken={internalToken}
       currentUser={currentUser}
     >
+      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
       <UserProfileNav username={username} activePage="recommendations" />
-
-      <header>
-        <h1>
-          Recommendations from{' '}
-          <a href={`/u/${username}`}>{username}</a>
-        </h1>
-      </header>
 
       <main>
         <section id="recommendations">

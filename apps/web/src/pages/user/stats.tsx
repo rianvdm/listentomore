@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { UserProfileNav } from '../../components/layout/UserProfileNav';
+import { UserProfileHeader } from '../../components/layout/UserProfileHeader';
 import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database, User } from '@listentomore/db';
 import { LastfmService } from '@listentomore/lastfm';
@@ -26,32 +27,8 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
       internalToken={internalToken}
       currentUser={currentUser}
     >
+      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
       <UserProfileNav username={username} activePage="stats" />
-
-      <header>
-        <h1>
-          Real-time listening stats for{' '}
-          <a href={`https://www.last.fm/user/${lastfmUsername}`} target="_blank" rel="noopener noreferrer">
-            {username}
-          </a>
-        </h1>
-
-        {/* Centered Profile Picture */}
-        {profileImage && (
-          <div style={{ textAlign: 'center', margin: '2em 0' }}>
-            <img
-              src={profileImage}
-              alt={`${username}'s profile`}
-              style={{
-                width: '150px',
-                height: '150px',
-                borderRadius: '50%',
-                objectFit: 'cover'
-              }}
-            />
-          </div>
-        )}
-      </header>
 
       <main>
         <section id="lastfm-stats">

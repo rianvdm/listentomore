@@ -434,8 +434,8 @@ h4 {
 /* User Profile Subnavigation */
 .profile-nav {
   display: flex;
+  justify-content: center;
   gap: 2rem;
-  border-bottom: 2px solid rgba(var(--c-base-rgb), 0.1);
   margin: 0 auto 2rem;
   max-width: 800px;
   padding: 0 1rem;
@@ -449,7 +449,6 @@ h4 {
   font-weight: 500;
   font-size: 16px;
   border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
   transition: all 0.2s ease;
 }
 
@@ -470,6 +469,50 @@ h4 {
 
   .profile-nav-link {
     font-size: 15px;
+  }
+}
+
+/* User Profile Header - Static header above tabs */
+.profile-header {
+  text-align: center;
+  margin: 0.5rem auto 1.5rem;
+  max-width: 800px;
+  padding: 0 1rem;
+}
+
+.profile-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.profile-header h1 a {
+  color: var(--c-base);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.profile-header h1 a:hover {
+  color: var(--c-accent);
+}
+
+/* Optional: Profile picture styles for future use
+.profile-picture {
+  margin: 1.5rem auto 0;
+}
+
+.profile-picture img {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+*/
+
+@media (max-width: 600px) {
+  .profile-header h1 {
+    font-size: 1.75rem;
   }
 }
 
