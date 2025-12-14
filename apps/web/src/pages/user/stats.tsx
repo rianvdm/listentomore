@@ -67,9 +67,18 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
             </a>
           </p>
 
+          {/* Time Range Toggle */}
+          <div class="time-toggle-container">
+            <div class="time-toggle" id="time-toggle">
+              <button class="time-toggle-btn active" data-period="7day">7 days</button>
+              <button class="time-toggle-btn" data-period="1month">1 month</button>
+              <button class="time-toggle-btn" data-period="12month">1 year</button>
+            </div>
+          </div>
+
           {/* Top Artists */}
           <h2>👩‍🎤 Top Artists</h2>
-          <p class="text-center">
+          <p class="text-center" id="top-artists-subtitle">
             <strong>Top artists in the past 7 days.</strong>
           </p>
           <div id="top-artists">
@@ -81,8 +90,8 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
 
           {/* Top Albums */}
           <h2 style={{ marginTop: '4em' }}>🏆 Top Albums</h2>
-          <p class="text-center">
-            <strong>Top albums in the past 30 days.</strong>
+          <p class="text-center" id="top-albums-subtitle">
+            <strong>Top albums in the past 7 days.</strong>
           </p>
           <div id="top-albums">
             <div class="loading-container">
@@ -99,6 +108,163 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
 
         (function() {
           var username = ${JSON.stringify(username)};
+          var currentPeriod = new URLSearchParams(window.location.search).get('period') || '7day';
+
+          // Period labels for UI
+          var periodLabels = {
+            '7day': '7 days',
+            '1month': 'month',
+            '12month': 'year'
+          };
+
+          // Initialize toggle state from URL
+          function initToggle() {
+            var buttons = document.querySelectorAll('.time-toggle-btn');
+            buttons.forEach(function(btn) {
+              btn.classList.remove('active');
+              if (btn.dataset.period === currentPeriod) {
+                btn.classList.add('active');
+              }
+              btn.addEventListener('click', function() {
+                if (this.dataset.period !== currentPeriod) {
+                  switchPeriod(this.dataset.period);
+                }
+              });
+            });
+          }
+
+          function switchPeriod(period) {
+            currentPeriod = period;
+
+            // Update URL without reload
+            var url = new URL(window.location);
+            url.searchParams.set('period', period);
+            history.pushState({}, '', url);
+
+            // Update toggle UI
+            document.querySelectorAll('.time-toggle-btn').forEach(function(btn) {
+              btn.classList.toggle('active', btn.dataset.period === period);
+              btn.disabled = true; // Disable during loading
+            });
+
+            // Update subtitles
+            updateSubtitles(period);
+
+            // Show loading states
+            showLoading();
+
+            // Fetch new data
+            fetchTopArtists(period);
+            fetchTopAlbums(period);
+          }
+
+          function updateSubtitles(period) {
+            var label = periodLabels[period];
+            var artistsSubtitle = document.getElementById('top-artists-subtitle');
+            var albumsSubtitle = document.getElementById('top-albums-subtitle');
+
+            if (artistsSubtitle) {
+              artistsSubtitle.innerHTML = '<strong>Top artists in the past ' + label + '.</strong>';
+            }
+            if (albumsSubtitle) {
+              albumsSubtitle.innerHTML = '<strong>Top albums in the past ' + label + '.</strong>';
+            }
+          }
+
+          function showLoading() {
+            var artistsEl = document.getElementById('top-artists');
+            var albumsEl = document.getElementById('top-albums');
+
+            if (artistsEl) {
+              artistsEl.innerHTML = '<div class="loading-container"><span class="spinner">↻</span><span class="loading-text">Loading top artists...</span></div>';
+            }
+            if (albumsEl) {
+              albumsEl.innerHTML = '<div class="loading-container"><span class="spinner">↻</span><span class="loading-text">Loading top albums...</span></div>';
+            }
+          }
+
+          function enableToggleButtons() {
+            document.querySelectorAll('.time-toggle-btn').forEach(function(btn) {
+              btn.disabled = false;
+            });
+          }
+
+          function fetchTopArtists(period) {
+            internalFetch('/api/internal/user-top-artists?username=' + encodeURIComponent(username) + '&period=' + period)
+              .then(function(r) { return r.json(); })
+              .then(function(result) {
+                var artistsEl = document.getElementById('top-artists');
+                if (!artistsEl) return;
+
+                if (result.error) {
+                  artistsEl.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
+                  return;
+                }
+
+                var topArtists = result.data;
+                if (topArtists && topArtists.length > 0) {
+                  artistsEl.innerHTML = renderTrackGrid(topArtists.map(function(artist) {
+                    return {
+                      title: artist.name,
+                      subtitle: artist.playcount + ' plays',
+                      image: artist.image,
+                      href: '/artist?q=' + encodeURIComponent(artist.name)
+                    };
+                  }));
+                  enrichLinks('top-artists');
+                } else {
+                  artistsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period. Try a longer time range!</p>';
+                }
+              })
+              .catch(function(err) {
+                console.error('Failed to load top artists:', err);
+                var el = document.getElementById('top-artists');
+                if (el) el.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
+              })
+              .finally(function() {
+                enableToggleButtons();
+              });
+          }
+
+          function fetchTopAlbums(period) {
+            internalFetch('/api/internal/user-top-albums?username=' + encodeURIComponent(username) + '&period=' + period)
+              .then(function(r) { return r.json(); })
+              .then(function(result) {
+                var albumsEl = document.getElementById('top-albums');
+                if (!albumsEl) return;
+
+                if (result.error) {
+                  albumsEl.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
+                  return;
+                }
+
+                var topAlbums = result.data;
+                if (topAlbums && topAlbums.length > 0) {
+                  albumsEl.innerHTML = renderTrackGrid(topAlbums.map(function(album) {
+                    return {
+                      title: album.name,
+                      subtitle: album.artist,
+                      extra: album.playcount + ' plays',
+                      image: album.image,
+                      href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name),
+                      dataArtist: album.artist,
+                      dataAlbum: album.name
+                    };
+                  }));
+                  enrichLinks('top-albums');
+                } else {
+                  albumsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period. Try a longer time range!</p>';
+                }
+              })
+              .catch(function(err) {
+                console.error('Failed to load top albums:', err);
+                var el = document.getElementById('top-albums');
+                if (el) el.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
+              })
+              .finally(function() {
+                enableToggleButtons();
+              });
+          }
 
           // Fetch recent track (fastest - renders first)
           internalFetch('/api/internal/user-recent-track?username=' + encodeURIComponent(username))
@@ -132,74 +298,11 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
               if (el) el.innerHTML = '<p class="text-muted">Failed to load recent track.</p>';
             });
 
-          // Fetch top artists (parallel)
-          internalFetch('/api/internal/user-top-artists?username=' + encodeURIComponent(username))
-            .then(function(r) { return r.json(); })
-            .then(function(result) {
-              var artistsEl = document.getElementById('top-artists');
-              if (!artistsEl) return;
-
-              if (result.error) {
-                artistsEl.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
-                return;
-              }
-
-              var topArtists = result.data;
-              if (topArtists && topArtists.length > 0) {
-                artistsEl.innerHTML = renderTrackGrid(topArtists.map(function(artist) {
-                  return {
-                    title: artist.name,
-                    subtitle: artist.playcount + ' plays',
-                    image: artist.image,
-                    href: '/artist?q=' + encodeURIComponent(artist.name)
-                  };
-                }));
-                enrichLinks('top-artists');
-              } else {
-                artistsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
-              }
-            })
-            .catch(function(err) {
-              console.error('Failed to load top artists:', err);
-              var el = document.getElementById('top-artists');
-              if (el) el.innerHTML = '<p class="text-center text-muted">Failed to load top artists.</p>';
-            });
-
-          // Fetch top albums (parallel)
-          internalFetch('/api/internal/user-top-albums?username=' + encodeURIComponent(username))
-            .then(function(r) { return r.json(); })
-            .then(function(result) {
-              var albumsEl = document.getElementById('top-albums');
-              if (!albumsEl) return;
-
-              if (result.error) {
-                albumsEl.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
-                return;
-              }
-
-              var topAlbums = result.data;
-              if (topAlbums && topAlbums.length > 0) {
-                albumsEl.innerHTML = renderTrackGrid(topAlbums.map(function(album) {
-                  return {
-                    title: album.name,
-                    subtitle: album.artist,
-                    extra: album.playcount + ' plays',
-                    image: album.image,
-                    href: '/album?q=' + encodeURIComponent(album.artist + ' ' + album.name),
-                    dataArtist: album.artist,
-                    dataAlbum: album.name
-                  };
-                }));
-                enrichLinks('top-albums');
-              } else {
-                albumsEl.innerHTML = '<p class="text-center text-muted">No listening data for this period.</p>';
-              }
-            })
-            .catch(function(err) {
-              console.error('Failed to load top albums:', err);
-              var el = document.getElementById('top-albums');
-              if (el) el.innerHTML = '<p class="text-center text-muted">Failed to load top albums.</p>';
-            });
+          // Initialize toggle and load initial data based on period
+          initToggle();
+          updateSubtitles(currentPeriod);
+          fetchTopArtists(currentPeriod);
+          fetchTopAlbums(currentPeriod);
 
           function escapeHtml(str) {
             var div = document.createElement('div');

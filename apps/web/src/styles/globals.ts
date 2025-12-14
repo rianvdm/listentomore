@@ -380,6 +380,57 @@ h4 {
   min-width: 120px;
 }
 
+/* Time Toggle (for user stats page) */
+.time-toggle-container {
+  text-align: center;
+  margin: 3em 0 2em;
+}
+
+.time-toggle {
+  display: inline-flex;
+  background: rgba(var(--c-base-rgb), 0.05);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.time-toggle-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--c-base);
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  min-height: 44px;
+}
+
+.time-toggle-btn:hover {
+  opacity: 0.9;
+}
+
+.time-toggle-btn.active {
+  background: var(--c-accent);
+  color: var(--c-bg);
+  opacity: 1;
+}
+
+.time-toggle-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+@media (max-width: 500px) {
+  .time-toggle-btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+}
+
 /* Inputs */
 .input {
   background-color: var(--c-bg);

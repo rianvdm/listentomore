@@ -219,13 +219,21 @@ app.get('/user-top-artists', async (c) => {
     return c.json({ error: 'Missing username parameter' }, 400);
   }
 
+  // Get and validate period parameter
+  const periodParam = c.req.query('period') || '7day';
+  const validPeriods = ['7day', '1month', '3month', '6month', '12month', 'overall'] as const;
+  if (!validPeriods.includes(periodParam as any)) {
+    return c.json({ error: 'Invalid period parameter. Must be one of: 7day, 1month, 3month, 6month, 12month, overall' }, 400);
+  }
+  const period = periodParam as typeof validPeriods[number];
+
   try {
     const userLastfm = await getUserLastfm(c, username);
     if (!userLastfm) {
       return c.json({ error: 'User not found' }, 404);
     }
 
-    const topArtists = await userLastfm.getTopArtists('7day', 6).catch(() => []);
+    const topArtists = await userLastfm.getTopArtists(period, 6).catch(() => []);
     return c.json({ data: topArtists });
   } catch (error) {
     console.error('Internal user-top-artists error:', error);
@@ -239,13 +247,21 @@ app.get('/user-top-albums', async (c) => {
     return c.json({ error: 'Missing username parameter' }, 400);
   }
 
+  // Get and validate period parameter
+  const periodParam = c.req.query('period') || '7day';
+  const validPeriods = ['7day', '1month', '3month', '6month', '12month', 'overall'] as const;
+  if (!validPeriods.includes(periodParam as any)) {
+    return c.json({ error: 'Invalid period parameter. Must be one of: 7day, 1month, 3month, 6month, 12month, overall' }, 400);
+  }
+  const period = periodParam as typeof validPeriods[number];
+
   try {
     const userLastfm = await getUserLastfm(c, username);
     if (!userLastfm) {
       return c.json({ error: 'User not found' }, 404);
     }
 
-    const topAlbums = await userLastfm.getTopAlbums('1month', 6).catch(() => []);
+    const topAlbums = await userLastfm.getTopAlbums(period, 6).catch(() => []);
     return c.json({ data: topAlbums });
   } catch (error) {
     console.error('Internal user-top-albums error:', error);
