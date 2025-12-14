@@ -1059,13 +1059,9 @@ The `SpotifyAuth` class in `packages/services/spotify/src/auth.ts` handles token
 
 ## Option: Move Cron Job to Secondary App
 
-**Current state:** The cron job (`scheduled()` in `apps/web/src/index.tsx`) uses the **primary** Spotify app for album image enrichment.
+**Current state:** ✅ The cron job uses the **secondary** Spotify app (with fallback to primary).
 
-**Problem:** During high traffic, the cron job competes with user-facing requests (album/artist detail pages) for the same rate limit budget.
-
-### Option A: Use Secondary App for Cron
-
-Reuse the existing secondary app credentials for the cron job:
+**Implemented 2025-12-14:** The cron job now uses `SPOTIFY_STREAMING_*` credentials if configured, isolating it from user-facing requests.
 
 ```typescript
 // In apps/web/src/index.tsx scheduled() function
@@ -1077,18 +1073,9 @@ const spotify = new SpotifyService({
 });
 ```
 
-**Pros:**
-- No new Spotify app needed
-- Isolates cron from user-facing requests
-- Falls back to primary if secondary not configured
+### Option B: Create Third App for Background Jobs (Future)
 
-**Cons:**
-- Cron now shares budget with streaming-links (40+ parallel requests)
-- May need to monitor if streaming-links + cron exhaust secondary app
-
-### Option B: Create Third App for Background Jobs
-
-Create a dedicated Spotify app for background jobs (cron, future async tasks):
+If streaming-links + cron exhaust the secondary app budget, create a dedicated Spotify app for background jobs:
 
 **Environment variables:**
 - `SPOTIFY_BACKGROUND_CLIENT_ID`
@@ -1106,9 +1093,8 @@ Create a dedicated Spotify app for background jobs (cron, future async tasks):
 
 ### Recommendation
 
-**Now (< 50 users):** Keep current setup (cron uses primary)
-**50-100 users:** Use Option A (cron → secondary app)
-**100+ users:** Use Option B (dedicated background app)
+**Now (< 50 users):** ✅ Using Option A (cron → secondary app)
+**100+ users:** Consider Option B (dedicated background app)
 
 ---
 
