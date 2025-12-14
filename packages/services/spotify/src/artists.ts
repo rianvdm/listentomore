@@ -1,9 +1,10 @@
 // ABOUTME: Spotify artist operations - details, albums, and related artists.
-// ABOUTME: Includes caching with configurable TTLs.
+// ABOUTME: Includes caching with configurable TTLs and distributed rate limiting.
 
 import { CACHE_CONFIG } from '@listentomore/config';
-import { fetchWithTimeout } from '@listentomore/shared';
 import type { SpotifyAuth } from './auth';
+import type { SpotifyRateLimiter } from './rate-limit';
+import { spotifyFetch } from './fetch';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
@@ -30,7 +31,8 @@ interface SpotifyArtistResponse {
 export class SpotifyArtists {
   constructor(
     private auth: SpotifyAuth,
-    private cache: KVNamespace
+    private cache: KVNamespace,
+    private rateLimiter: SpotifyRateLimiter
   ) {}
 
   async getArtist(artistId: string): Promise<ArtistDetails> {
@@ -46,10 +48,14 @@ export class SpotifyArtists {
     console.log(`[Spotify] Cache miss, fetching artist ${artistId} from API`);
     const accessToken = await this.auth.getAccessToken();
 
-    const response = await fetchWithTimeout(`${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      timeout: 'fast',
-    });
+    const response = await spotifyFetch(
+      `${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 'fast',
+      },
+      this.rateLimiter
+    );
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -131,12 +137,13 @@ export class SpotifyArtists {
       market: 'US',
     });
 
-    const response = await fetchWithTimeout(
+    const response = await spotifyFetch(
       `${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}/albums?${params}`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
         timeout: 'fast',
-      }
+      },
+      this.rateLimiter
     );
 
     if (!response.ok) {
@@ -177,12 +184,13 @@ export class SpotifyArtists {
 
     const accessToken = await this.auth.getAccessToken();
 
-    const response = await fetchWithTimeout(
+    const response = await spotifyFetch(
       `${SPOTIFY_API_BASE}/artists/${artistId}/related-artists`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
         timeout: 'fast',
-      }
+      },
+      this.rateLimiter
     );
 
     if (!response.ok) {

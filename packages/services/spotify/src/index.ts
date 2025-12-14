@@ -4,6 +4,7 @@ import { SpotifyAuth } from './auth';
 import { SpotifySearch } from './search';
 import { SpotifyAlbums } from './albums';
 import { SpotifyArtists } from './artists';
+import { SpotifyRateLimiter } from './rate-limit';
 
 export { SpotifyAuth } from './auth';
 export type { SpotifyAuthConfig, SpotifyTokenData } from './auth';
@@ -23,12 +24,16 @@ export type { AlbumDetails, AlbumTrack } from './albums';
 export { SpotifyArtists } from './artists';
 export type { ArtistDetails } from './artists';
 
+export { SpotifyRateLimiter } from './rate-limit';
+export type { RateLimitState } from './rate-limit';
+
 // Convenience class that combines all Spotify functionality
 export class SpotifyService {
   public readonly auth: SpotifyAuth;
   public readonly search: SpotifySearch;
   public readonly albums: SpotifyAlbums;
   public readonly artists: SpotifyArtists;
+  public readonly rateLimiter: SpotifyRateLimiter;
   /** First 8 chars of client ID for logging/debugging */
   public readonly clientIdPrefix: string;
 
@@ -40,6 +45,9 @@ export class SpotifyService {
   }) {
     this.clientIdPrefix = config.clientId.substring(0, 8);
 
+    // Create shared rate limiter for all Spotify API calls
+    this.rateLimiter = new SpotifyRateLimiter(config.cache);
+
     this.auth = new SpotifyAuth(
       {
         clientId: config.clientId,
@@ -49,9 +57,9 @@ export class SpotifyService {
       config.cache
     );
 
-    this.search = new SpotifySearch(this.auth, config.cache);
-    this.albums = new SpotifyAlbums(this.auth, config.cache);
-    this.artists = new SpotifyArtists(this.auth, config.cache);
+    this.search = new SpotifySearch(this.auth, config.cache, this.rateLimiter);
+    this.albums = new SpotifyAlbums(this.auth, config.cache, this.rateLimiter);
+    this.artists = new SpotifyArtists(this.auth, config.cache, this.rateLimiter);
   }
 
   // Convenience methods

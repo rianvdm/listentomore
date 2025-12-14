@@ -1,9 +1,10 @@
 // ABOUTME: Spotify album operations - fetching album details and track lists.
-// ABOUTME: Includes caching with configurable TTLs.
+// ABOUTME: Includes caching with configurable TTLs and distributed rate limiting.
 
 import { CACHE_CONFIG } from '@listentomore/config';
-import { fetchWithTimeout } from '@listentomore/shared';
 import type { SpotifyAuth } from './auth';
+import type { SpotifyRateLimiter } from './rate-limit';
+import { spotifyFetch } from './fetch';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
@@ -62,7 +63,8 @@ interface SpotifyAlbumResponse {
 export class SpotifyAlbums {
   constructor(
     private auth: SpotifyAuth,
-    private cache: KVNamespace
+    private cache: KVNamespace,
+    private rateLimiter: SpotifyRateLimiter
   ) {}
 
   async getAlbum(albumId: string): Promise<AlbumDetails> {
@@ -79,10 +81,14 @@ export class SpotifyAlbums {
     console.log(`[Spotify] Cache miss, fetching album ${albumId} from API`);
     const accessToken = await this.auth.getAccessToken();
 
-    const response = await fetchWithTimeout(`${SPOTIFY_API_BASE}/albums/${encodeURIComponent(albumId)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      timeout: 'fast',
-    });
+    const response = await spotifyFetch(
+      `${SPOTIFY_API_BASE}/albums/${encodeURIComponent(albumId)}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 'fast',
+      },
+      this.rateLimiter
+    );
 
     if (!response.ok) {
       if (response.status === 404) {

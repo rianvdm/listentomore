@@ -1,9 +1,10 @@
 // ABOUTME: Spotify search functionality for tracks, albums, and artists.
-// ABOUTME: Includes caching and prefers full albums over singles/EPs.
+// ABOUTME: Includes caching, prefers full albums over singles/EPs, and distributed rate limiting.
 
 import { CACHE_CONFIG } from '@listentomore/config';
-import { fetchWithTimeout } from '@listentomore/shared';
 import type { SpotifyAuth } from './auth';
+import type { SpotifyRateLimiter } from './rate-limit';
+import { spotifyFetch } from './fetch';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
@@ -96,7 +97,8 @@ interface SpotifyImage {
 export class SpotifySearch {
   constructor(
     private auth: SpotifyAuth,
-    private cache: KVNamespace
+    private cache: KVNamespace,
+    private rateLimiter: SpotifyRateLimiter
   ) {}
 
   async search<T extends SearchType>(
@@ -116,10 +118,14 @@ export class SpotifySearch {
     const accessToken = await this.auth.getAccessToken();
 
     const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
-    const response = await fetchWithTimeout(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      timeout: 'fast',
-    });
+    const response = await spotifyFetch(
+      url,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 'fast',
+      },
+      this.rateLimiter
+    );
 
     if (!response.ok) {
       if (response.status === 429) {
