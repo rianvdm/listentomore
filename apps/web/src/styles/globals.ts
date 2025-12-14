@@ -431,6 +431,48 @@ h4 {
   }
 }
 
+/* User Profile Subnavigation */
+.profile-nav {
+  display: flex;
+  gap: 2rem;
+  border-bottom: 2px solid rgba(var(--c-base-rgb), 0.1);
+  margin: 0 auto 2rem;
+  max-width: 800px;
+  padding: 0 1rem;
+}
+
+.profile-nav-link {
+  padding: 0.75rem 0;
+  color: var(--c-base);
+  opacity: 0.6;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 16px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s ease;
+}
+
+.profile-nav-link:hover {
+  opacity: 0.9;
+}
+
+.profile-nav-link.active {
+  opacity: 1;
+  border-bottom-color: var(--c-accent);
+  color: var(--c-accent);
+}
+
+@media (max-width: 600px) {
+  .profile-nav {
+    gap: 1.5rem;
+  }
+
+  .profile-nav-link {
+    font-size: 15px;
+  }
+}
+
 /* Inputs */
 .input {
   background-color: var(--c-bg);

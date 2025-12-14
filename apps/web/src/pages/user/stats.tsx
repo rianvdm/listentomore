@@ -3,6 +3,7 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
+import { UserProfileNav } from '../../components/layout/UserProfileNav';
 import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database, User } from '@listentomore/db';
 import { LastfmService } from '@listentomore/lastfm';
@@ -25,6 +26,8 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
       internalToken={internalToken}
       currentUser={currentUser}
     >
+      <UserProfileNav username={username} activePage="stats" />
+
       <header>
         <h1>
           Real-time listening stats for{' '}
@@ -59,13 +62,6 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
               <span class="loading-inline">Loading recent tracks...</span>
             </p>
           </div>
-
-          {/* Recommendations Link */}
-          <p class="text-center" style={{ marginTop: '2em' }}>
-            <a href={`/u/${username}/recommendations`} class="button">
-              View Recommendations →
-            </a>
-          </p>
 
           {/* Time Range Toggle */}
           <div class="time-toggle-container">

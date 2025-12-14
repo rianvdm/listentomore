@@ -3,6 +3,7 @@
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
+import { UserProfileNav } from '../../components/layout/UserProfileNav';
 import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database, User } from '@listentomore/db';
 import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
@@ -38,6 +39,8 @@ export function UserRecommendationsPage({
       internalToken={internalToken}
       currentUser={currentUser}
     >
+      <UserProfileNav username={username} activePage="recommendations" />
+
       <header>
         <h1>
           Recommendations from{' '}
@@ -116,11 +119,6 @@ export function UserRecommendationsPage({
               and check back later!
             </p>
           )}
-
-          {/* Back to Stats */}
-          <p class="text-center" style={{ marginTop: '3em' }}>
-            <a href={`/u/${username}`} class="button">← Back to Stats</a>
-          </p>
         </section>
       </main>
 
