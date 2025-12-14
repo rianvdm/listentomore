@@ -16,6 +16,8 @@ interface UserLikesPageProps {
   topArtists: TopArtist[];
   internalToken?: string;
   currentUser?: User | null;
+  isOwner?: boolean;
+  profileVisibility?: 'public' | 'private';
 }
 
 export function UserLikesPage({
@@ -25,6 +27,8 @@ export function UserLikesPage({
   topArtists,
   internalToken,
   currentUser,
+  isOwner,
+  profileVisibility,
 }: UserLikesPageProps) {
   const hasLovedTracks = lovedTracks.length > 0;
   const hasTopArtists = topArtists.length > 0;
@@ -42,6 +46,12 @@ export function UserLikesPage({
     >
       <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
       <UserProfileNav username={username} activePage="likes" />
+
+      {isOwner && profileVisibility === 'private' && (
+        <div class="notice notice-info" style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(var(--c-accent-rgb), 0.1)', borderRadius: '8px', textAlign: 'center' }}>
+          🔒 Only you can see your profile. Go to <a href="/account">Account Settings</a> to make it public.
+        </div>
+      )}
 
       <main>
         <section id="likes">
@@ -221,6 +231,28 @@ export function UserLikesPage({
   );
 }
 
+// Private profile page - shown when profile is private and viewer is not owner
+function PrivateProfile({ username, currentUser }: { username: string; currentUser?: User | null }) {
+  return (
+    <Layout
+      title="Private Profile"
+      currentUser={currentUser}
+    >
+      <div class="text-center" style={{ paddingTop: '4rem' }}>
+        <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🔒 Private Profile</h1>
+        <p>
+          <strong>{username}</strong> has chosen to keep their listening stats private.
+        </p>
+        {!currentUser && (
+          <p style={{ marginTop: '1.5rem' }}>
+            <a href="/login" class="button">Sign In</a>
+          </p>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
 // 404 page for user not found
 function UserNotFound({ username }: { username: string }) {
   return (
@@ -259,6 +291,15 @@ export async function handleUserLikes(c: Context) {
     return c.html(<UserNotFound username={username} />, 404);
   }
 
+  const isOwner = currentUser?.id === user.id;
+
+  // Check privacy - if private and not the owner, show private profile page
+  if (user.profile_visibility === 'private' && !isOwner) {
+    return c.html(
+      <PrivateProfile username={user.lastfm_username} currentUser={currentUser} />
+    );
+  }
+
   // Create a LastfmService for this user's Last.fm account
   const { LastfmService } = await import('@listentomore/lastfm');
   const lastfm = new LastfmService({
@@ -281,6 +322,8 @@ export async function handleUserLikes(c: Context) {
       topArtists={topArtists}
       internalToken={internalToken}
       currentUser={currentUser}
+      isOwner={isOwner}
+      profileVisibility={user.profile_visibility}
     />
   );
 }

@@ -15,9 +15,11 @@ interface UserStatsPageProps {
   profileImage?: string;
   internalToken?: string;
   currentUser?: User | null;
+  isOwner?: boolean;
+  profileVisibility?: 'public' | 'private';
 }
 
-export function UserStatsPage({ username, lastfmUsername, profileImage, internalToken, currentUser }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, profileImage, internalToken, currentUser, isOwner, profileVisibility }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
@@ -29,6 +31,12 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
     >
       <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
       <UserProfileNav username={username} activePage="stats" />
+
+      {isOwner && profileVisibility === 'private' && (
+        <div class="notice notice-info" style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(var(--c-accent-rgb), 0.1)', borderRadius: '8px', textAlign: 'center' }}>
+          🔒 Only you can see your profile. Go to <a href="/account">Account Settings</a> to make it public.
+        </div>
+      )}
 
       <main>
         <section id="lastfm-stats">
@@ -419,6 +427,8 @@ export async function handleUserStats(c: Context) {
     // Continue without profile image - will use default
   }
 
+  const isOwner = currentUser?.id === user.id;
+
   // Return shell immediately - data loaded via /api/internal/user-stats
   return c.html(
     <UserStatsPage
@@ -427,6 +437,8 @@ export async function handleUserStats(c: Context) {
       profileImage={profileImage}
       internalToken={internalToken}
       currentUser={currentUser}
+      isOwner={isOwner}
+      profileVisibility={user.profile_visibility}
     />
   );
 }

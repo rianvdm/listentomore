@@ -14,6 +14,7 @@ interface UserInsightsPageProps {
   internalToken?: string;
   currentUser?: User | null;
   isOwner: boolean;
+  profileVisibility?: 'public' | 'private';
 }
 
 export function UserInsightsPage({
@@ -22,6 +23,7 @@ export function UserInsightsPage({
   internalToken,
   currentUser,
   isOwner,
+  profileVisibility,
 }: UserInsightsPageProps) {
   return (
     <Layout
@@ -33,6 +35,12 @@ export function UserInsightsPage({
     >
       <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
       <UserProfileNav username={username} activePage="insights" />
+
+      {isOwner && profileVisibility === 'private' && (
+        <div class="notice notice-info" style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(var(--c-accent-rgb), 0.1)', borderRadius: '8px', textAlign: 'center' }}>
+          🔒 Only you can see your profile. Go to <a href="/account">Account Settings</a> to make it public.
+        </div>
+      )}
 
       <main>
         <section id="insights">
@@ -469,6 +477,7 @@ export async function handleUserInsights(c: Context) {
       internalToken={internalToken}
       currentUser={currentUser}
       isOwner={isOwner}
+      profileVisibility={user.profile_visibility}
     />
   );
 }
