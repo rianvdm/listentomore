@@ -2,9 +2,18 @@
 
 > **For LLMs:** This document outlines how to implement application-level rate limiting for Spotify API calls. The goal is to prevent 429 errors from Spotify's API by proactively throttling requests before hitting their limits. This protects the application from external traffic spikes (bots, crawlers, viral traffic) and ensures reliable service for legitimate users.
 
-**Status:** 🔴 Not Implemented (Priority: Critical)
+**Status:** ✅ Implemented (2025-12-14)
 **Related:** See [SCALING_PLAN.md](./SCALING_PLAN.md) Phase 1.1 for overall scaling context.
 **Estimated Effort:** Phase 1-2: 8 hours | Phase 3: 6 hours | Full implementation: ~20 hours
+
+### Implementation Summary
+
+**Completed 2025-12-14:**
+- `packages/services/spotify/src/rate-limit.ts` - `SpotifyRateLimiter` class using KV storage
+- `packages/services/spotify/src/fetch.ts` - `spotifyFetch` wrapper with retry logic
+- Updated `SpotifyAlbums`, `SpotifyArtists`, `SpotifySearch` to use rate-limited fetch
+- Rate limits configured in `packages/config/src/ai.ts`: 120 req/min (conservative)
+- Logs warnings at 80% capacity, respects Retry-After headers on 429
 
 ---
 
@@ -426,25 +435,25 @@ async function checkCircuit(cache: KVNamespace): Promise<boolean> {
 
 ## Recommended Implementation
 
-### Phase 1: Immediate (Low Effort)
+### Phase 1: Immediate (Low Effort) - ✅ DONE
 
-1. **Add retry with backoff** to all Spotify API calls
-2. **Add config** for Spotify rate limits in `packages/config/src/ai.ts`
+1. ✅ **Add retry with backoff** to all Spotify API calls - `spotifyFetch` in `fetch.ts`
+2. ✅ **Add config** for Spotify rate limits in `packages/config/src/ai.ts`
 
-### Phase 2: Near-term (Medium Effort)
+### Phase 2: Near-term (Medium Effort) - ✅ DONE
 
-1. **Implement KV-based rate limiting** in a new `packages/services/spotify/src/rate-limit.ts`
-2. **Integrate into SpotifyService** as a shared rate limiter
-3. **Log rate limit events** for monitoring
+1. ✅ **Implement KV-based rate limiting** in `packages/services/spotify/src/rate-limit.ts`
+2. ✅ **Integrate into SpotifyService** as a shared rate limiter
+3. ✅ **Log rate limit events** for monitoring (80% warning, cooldown logs)
 
-### Phase 3: Batch API Optimization (Medium Effort)
+### Phase 3: Batch API Optimization (Medium Effort) - 🔴 Not Started
 
 1. **Add batch album fetching** - `getAlbums(ids: string[])` using `/albums?ids=`
 2. **Add batch artist fetching** - `getArtists(ids: string[])` using `/artists?ids=`
 3. **Update cron job** to use batch endpoints for Spotify image enrichment
 4. **Update internal APIs** that fetch multiple items to batch requests
 
-### Phase 4: Future (Higher Effort)
+### Phase 4: Future (Higher Effort) - 🔴 Not Started
 
 1. **Circuit breaker** for complete Spotify outages
 2. **Metrics/alerting** on rate limit frequency
