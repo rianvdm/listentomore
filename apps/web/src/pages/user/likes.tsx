@@ -1,5 +1,5 @@
-// User recommendations page - loved tracks and personalized artist recommendations
-// URL: /u/:username/recommendations
+// User likes page - loved tracks and personalized artist recommendations
+// URL: /u/:username/likes
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
@@ -9,7 +9,7 @@ import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database, User } from '@listentomore/db';
 import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
 
-interface UserRecommendationsPageProps {
+interface UserLikesPageProps {
   username: string;
   lastfmUsername: string;
   lovedTracks: LovedTrack[];
@@ -18,14 +18,14 @@ interface UserRecommendationsPageProps {
   currentUser?: User | null;
 }
 
-export function UserRecommendationsPage({
+export function UserLikesPage({
   username,
   lastfmUsername,
   lovedTracks,
   topArtists,
   internalToken,
   currentUser,
-}: UserRecommendationsPageProps) {
+}: UserLikesPageProps) {
   const hasLovedTracks = lovedTracks.length > 0;
   const hasTopArtists = topArtists.length > 0;
 
@@ -34,17 +34,17 @@ export function UserRecommendationsPage({
 
   return (
     <Layout
-      title={`Recommendations from ${username}`}
-      description={`Music recommendations from ${username} - loved tracks and artist discoveries`}
-      url={`https://listentomore.com/u/${username}/recommendations`}
+      title={`Likes from ${username}`}
+      description={`Music likes from ${username} - loved tracks and artist discoveries`}
+      url={`https://listentomore.com/u/${username}/likes`}
       internalToken={internalToken}
       currentUser={currentUser}
     >
       <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
-      <UserProfileNav username={username} activePage="recommendations" />
+      <UserProfileNav username={username} activePage="likes" />
 
       <main>
-        <section id="recommendations">
+        <section id="likes">
           {/* Loved Tracks Section */}
           <h2>❤️ Recent Favorites</h2>
           <p class="text-center">
@@ -243,7 +243,7 @@ function UserNotFound({ username }: { username: string }) {
 }
 
 // Route handler
-export async function handleUserRecommendations(c: Context) {
+export async function handleUserLikes(c: Context) {
   const username = c.req.param('username');
   const db = c.get('db') as Database;
   const internalToken = c.get('internalToken') as string;
@@ -274,7 +274,7 @@ export async function handleUserRecommendations(c: Context) {
   ]);
 
   return c.html(
-    <UserRecommendationsPage
+    <UserLikesPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
       lovedTracks={lovedTracks}

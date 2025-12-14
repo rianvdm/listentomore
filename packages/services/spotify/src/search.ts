@@ -191,22 +191,52 @@ export class SpotifySearch {
   /**
    * Search for an album using Spotify field filters for more precise matching.
    * Use this when you have structured artist/album data (e.g., from Last.fm).
+   * Fetches 3 results and picks the best match by album name similarity.
    */
   async searchAlbumByArtist(artist: string, album: string): Promise<AlbumSearchResult | null> {
     // Use Spotify's field filters for precise matching
     const query = `artist:"${artist}" album:"${album}"`;
     console.log(`[Spotify] Searching with field filters: ${query}`);
-    const results = await this.search(query, 'album', 1);
+    const results = await this.search(query, 'album', 3);
     
     // If field filter search fails, fall back to natural query
     if (!results.length) {
       const fallbackQuery = `${artist} ${album}`;
       console.log(`[Spotify] Field filter failed, falling back to: ${fallbackQuery}`);
-      const fallbackResults = await this.search(fallbackQuery, 'album', 1);
-      return fallbackResults[0] || null;
+      const fallbackResults = await this.search(fallbackQuery, 'album', 3);
+      return this.pickBestAlbumMatch(fallbackResults, album);
     }
     
-    return results[0] || null;
+    return this.pickBestAlbumMatch(results, album);
+  }
+
+  /**
+   * Pick the best album match from results by comparing album names.
+   * Prefers exact match, then closest match by length similarity.
+   */
+  private pickBestAlbumMatch(results: AlbumSearchResult[], targetAlbum: string): AlbumSearchResult | null {
+    if (!results.length) return null;
+    if (results.length === 1) return results[0];
+
+    const targetLower = targetAlbum.toLowerCase();
+    
+    // Exact match wins
+    const exactMatch = results.find(r => r.name.toLowerCase() === targetLower);
+    if (exactMatch) return exactMatch;
+
+    // Prefer album name that starts with target (handles "Voices" vs "Voices 2")
+    const startsWithMatch = results.find(r => r.name.toLowerCase().startsWith(targetLower));
+    if (startsWithMatch) return startsWithMatch;
+
+    // Prefer shorter names when target is contained (avoids "Deluxe Edition" variants)
+    const containsMatches = results.filter(r => r.name.toLowerCase().includes(targetLower));
+    if (containsMatches.length) {
+      containsMatches.sort((a, b) => a.name.length - b.name.length);
+      return containsMatches[0];
+    }
+
+    // Fall back to first result
+    return results[0];
   }
 
   async searchArtist(query: string): Promise<ArtistSearchResult | null> {

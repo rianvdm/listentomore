@@ -33,7 +33,7 @@ import { handleArtistDetail } from './pages/artist/detail';
 import { handleGenreDetail } from './pages/genre/detail';
 import { handleGenreSearch } from './pages/genre/search';
 import { handleUserStats } from './pages/user/stats';
-import { handleUserRecommendations } from './pages/user/recommendations';
+import { handleUserLikes } from './pages/user/likes';
 import { handleUserInsights } from './pages/user/insights';
 import { handleStatsLookup } from './pages/stats/entry';
 import { handleLogin } from './pages/auth/login';
@@ -222,19 +222,189 @@ Sitemap: https://listentomore.com/sitemap.xml
   });
 });
 
-// Home page - matches original my-music-next structure
+// Home page - different experience for logged-in vs logged-out users
 app.get('/', async (c) => {
   const ai = c.get('ai');
   const internalToken = c.get('internalToken');
   const currentUser = c.get('currentUser');
 
-  // Get day greeting (e.g., "Happy Friday, friend!") using user's timezone
+  // Get day greeting for logged-in users
   const userTimezone = (c.req.raw.cf as { timezone?: string } | undefined)?.timezone || 'UTC';
   const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: userTimezone }).format(new Date());
 
   // Fetch random fact (cached hourly)
   const randomFact = await ai.getRandomFact().catch(() => null);
 
+  // Logged-in user experience
+  if (currentUser) {
+    const username = currentUser.username || currentUser.lastfm_username;
+    return c.html(
+      <Layout
+        title="Home"
+        description="Discover music, explore albums, and track your listening habits"
+        url="https://listentomore.com/"
+        internalToken={internalToken}
+        currentUser={currentUser}
+      >
+        <header class="hero" style={{ paddingBottom: '1rem' }}>
+          <h1>Happy {dayName}, {currentUser.display_name || username}!</h1>
+          {randomFact?.fact && (
+            <p class="hero-subtitle" style={{ marginBottom: '1rem' }}>{randomFact.fact}</p>
+          )}
+        </header>
+
+        <nav class="quick-links">
+          <a href={`/u/${username}`} class="quick-link">📊 Your Stats</a>
+          <a href={`/u/${username}/insights`} class="quick-link">🎯 Insights</a>
+          <a href={`/u/${username}/recommendations`} class="quick-link">💿 Recommendations</a>
+        </nav>
+
+        <main>
+          {/* Album Search */}
+          <h2 style={{ marginBottom: 0, marginTop: '1em' }}>Explore an album</h2>
+          <form id="search-form" action="/album" method="get">
+            <input
+              type="text"
+              name="q"
+              placeholder="Search for an album..."
+              class="input"
+              style={{ maxWidth: '300px' }}
+            />
+            <button type="submit" class="button">Search</button>
+          </form>
+
+          {/* Community Feed */}
+          <h2>What the community is listening to</h2>
+          <p id="user-listens-updated" class="text-muted text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>Loading...</p>
+          <div id="user-listens-container">
+            <div class="loading-container">
+              <span class="spinner">↻</span>
+              <span class="loading-text">Loading...</span>
+            </div>
+          </div>
+
+          {/* Progressive loading script */}
+          <script dangerouslySetInnerHTML={{
+            __html: `
+              ${enrichLinksScript}
+
+              (function() {
+                var MAX_ITEMS = 8;
+
+                internalFetch('/api/internal/user-listens')
+                  .then(function(res) { return res.json(); })
+                  .then(function(result) {
+                    var container = document.getElementById('user-listens-container');
+                    if (!container) return;
+
+                    if (result.error || !result.data || result.data.length === 0) {
+                      container.innerHTML = '<p class="text-center text-muted">No recent listens available.</p>';
+                      document.getElementById('user-listens-updated').textContent = '';
+                      return;
+                    }
+
+                    var updatedEl = document.getElementById('user-listens-updated');
+                    if (updatedEl && result.lastUpdated) {
+                      var date = new Date(result.lastUpdated);
+                      var timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                      updatedEl.textContent = 'Last updated ' + timeStr;
+                    } else if (updatedEl) {
+                      updatedEl.textContent = '';
+                    }
+
+                    var listens = result.data.slice(0, MAX_ITEMS);
+                    var html = '<div class="track-list" id="user-listens-list">';
+                    listens.forEach(function(listen, index) {
+                      var albumName = listen.album || listen.track;
+                      var nowPlayingBadge = listen.nowPlaying ? ' <span style="color: var(--accent-color);">▶ Now</span>' : '';
+                      html += '<div class="track-item" data-index="' + index + '">';
+                      html += '<div class="track-item-image" id="listen-image-' + index + '">';
+                      html += '<a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">';
+                      if (listen.image) {
+                        html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
+                      } else {
+                        html += '<div class="placeholder-image"><span class="spinner">↻</span></div>';
+                      }
+                      html += '</a></div>';
+                      html += '<div class="track-item-content">';
+                      html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
+                      html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + listen.artist + '</a></p>';
+                      html += '<p id="listen-sentence-' + index + '" class="text-muted"><span class="loading-inline">Loading...</span></p>';
+                      html += '<p id="listen-links-' + index + '"><a href="/u/' + listen.username + '">' + listen.username + "'s page →</a></p>";
+                      html += '</div></div>';
+                    });
+                    html += '</div>';
+                    container.innerHTML = html;
+                    enrichLinks('user-listens-list');
+
+                    listens.forEach(function(listen, index) {
+                      internalFetch('/api/internal/artist-sentence?name=' + encodeURIComponent(listen.artist))
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                          var el = document.getElementById('listen-sentence-' + index);
+                          if (el && data.data && data.data.sentence) {
+                            el.innerHTML = data.data.sentence;
+                            el.className = 'text-muted';
+                          } else if (el) {
+                            el.innerHTML = '';
+                          }
+                        })
+                        .catch(function() {
+                          var el = document.getElementById('listen-sentence-' + index);
+                          if (el) el.innerHTML = '';
+                        });
+
+                      if (listen.album && listen.artist) {
+                        internalFetch('/api/internal/search-album-by-artist?artist=' + encodeURIComponent(listen.artist) + '&album=' + encodeURIComponent(listen.album))
+                          .then(function(r) { return r.json(); })
+                          .then(function(data) {
+                            if (data.data && data.data[0] && data.data[0].id) {
+                              var albumId = data.data[0].id;
+                              var spotifyUrl = data.data[0].url;
+                              internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(albumId) + '&type=album')
+                                .then(function(r) { return r.json(); })
+                                .then(function(linkData) {
+                                  var linksEl = document.getElementById('listen-links-' + index);
+                                  if (linksEl) {
+                                    var existingContent = linksEl.innerHTML;
+                                    var links = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
+                                    if (linkData.data && linkData.data.appleUrl) {
+                                      links += ' • <a href="' + linkData.data.appleUrl + '" target="_blank" rel="noopener noreferrer">Apple Music ↗</a>';
+                                    }
+                                    linksEl.innerHTML = links + ' • ' + existingContent;
+                                  }
+                                })
+                                .catch(function() {
+                                  var linksEl = document.getElementById('listen-links-' + index);
+                                  if (linksEl) {
+                                    var existingContent = linksEl.innerHTML;
+                                    linksEl.innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a> • ' + existingContent;
+                                  }
+                                });
+                            }
+                          })
+                          .catch(function(err) {
+                            console.error('Error fetching Spotify data:', err);
+                          });
+                      }
+                    });
+                  })
+                  .catch(function(err) {
+                    console.error('Failed to load user listens:', err);
+                    var container = document.getElementById('user-listens-container');
+                    if (container) {
+                      container.innerHTML = '<p class="text-center text-muted">Failed to load recent listens.</p>';
+                    }
+                  });
+              })();
+            `
+          }} />
+        </main>
+      </Layout>
+    );
+  }
+
+  // Logged-out user experience - conversion-focused
   return c.html(
     <Layout
       title="Home"
@@ -243,20 +413,51 @@ app.get('/', async (c) => {
       internalToken={internalToken}
       currentUser={currentUser}
     >
-      <header>
-        <h1>Happy {dayName}, friend!</h1>
-      </header>
+      {/* Hero Section */}
+      <section class="hero">
+        <div class="hero-illustration">
+          <span class="hero-vinyl">💿</span>
+        </div>
+        <h1>Discover your music story</h1>
+        <p class="hero-subtitle">
+          AI-powered insights into your listening habits. See your stats, get personalized recommendations, and share your taste with the world.
+        </p>
+        <div class="hero-cta">
+          <a href="/login" class="button">Get Started with Last.fm</a>
+          <a href="/u/bordesak" class="hero-secondary-link">See an example profile →</a>
+        </div>
+      </section>
+
+      {/* Feature Cards */}
+      <section class="features">
+        <h2>What you can do</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-card-icon">📊</div>
+            <h3>Your Stats</h3>
+            <p>See your top artists, albums, and tracks across different time periods.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon">🎯</div>
+            <h3>Weekly Insights</h3>
+            <p>AI-powered analysis of your listening patterns with personalized observations.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon">💿</div>
+            <h3>Album Discovery</h3>
+            <p>Search any album for AI summaries, reviews, and streaming links.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon">🤖</div>
+            <h3>Discord Bot</h3>
+            <p>Share album details and streaming links in any Discord server.</p>
+          </div>
+        </div>
+      </section>
 
       <main>
-        {/* Welcome Section */}
-        <section id="lastfm-stats">
-          <p>
-            {randomFact?.fact || ''}
-          </p>
-        </section>
-
-        {/* Album Search */}
-        <h2 style={{ marginBottom: 0, marginTop: '2em' }}>Learn more about an album</h2>
+        {/* Album Search - available to everyone */}
+        <h2 style={{ marginBottom: 0 }}>Explore any album</h2>
         <form id="search-form" action="/album" method="get">
           <input
             type="text"
@@ -268,13 +469,8 @@ app.get('/', async (c) => {
           <button type="submit" class="button">Search</button>
         </form>
 
-        {/* Recently Listened by Users - Progressive Loading */}
-        <h2>What users are listening to</h2>
-        {!currentUser && (
-          <p class="text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>
-            Want your own user page? <a href="/login">Sign up with Last.fm now!</a>
-          </p>
-        )}
+        {/* Community Feed */}
+        <h2>What the community is listening to</h2>
         <p id="user-listens-updated" class="text-muted text-center" style={{ marginTop: '-0.5em', marginBottom: '1em' }}>Loading...</p>
         <div id="user-listens-container">
           <div class="loading-container">
@@ -411,6 +607,12 @@ app.get('/', async (c) => {
             })();
           `
         }} />
+
+        {/* Final CTA */}
+        <div class="cta-box">
+          <p><strong>Want to see your music here?</strong></p>
+          <a href="/login" class="button">Get Started with Last.fm</a>
+        </div>
       </main>
     </Layout>
   );
@@ -446,7 +648,7 @@ app.get('/stats/lookup', handleStatsLookup);
 
 // User routes
 app.get('/u/:username', handleUserStats);
-app.get('/u/:username/recommendations', handleUserRecommendations);
+app.get('/u/:username/likes', handleUserLikes);
 app.get('/u/:username/insights', handleUserInsights);
 
 // About, Tools, Discord, and legal pages
