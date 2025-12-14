@@ -2,18 +2,20 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SpotifyAlbums, SpotifyArtists, SpotifySearch } from '@listentomore/spotify';
-import { createMockKV, setupFetchMock, createMockSpotifyAuth } from '../utils/mocks';
+import { createMockKV, setupFetchMock, createMockSpotifyAuth, createMockSpotifyRateLimiter } from '../utils/mocks';
 import { spotifyFixtures } from '../utils/fixtures';
 
 describe('SpotifyAlbums', () => {
   let mockKV: KVNamespace;
   let mockAuth: ReturnType<typeof createMockSpotifyAuth>;
+  let mockRateLimiter: ReturnType<typeof createMockSpotifyRateLimiter>;
   let albums: SpotifyAlbums;
 
   beforeEach(() => {
     mockKV = createMockKV();
     mockAuth = createMockSpotifyAuth();
-    albums = new SpotifyAlbums(mockAuth as any, mockKV);
+    mockRateLimiter = createMockSpotifyRateLimiter();
+    albums = new SpotifyAlbums(mockAuth as any, mockKV, mockRateLimiter as any);
   });
 
   describe('getAlbum', () => {
@@ -92,12 +94,14 @@ describe('SpotifyAlbums', () => {
 describe('SpotifyArtists', () => {
   let mockKV: KVNamespace;
   let mockAuth: ReturnType<typeof createMockSpotifyAuth>;
+  let mockRateLimiter: ReturnType<typeof createMockSpotifyRateLimiter>;
   let artists: SpotifyArtists;
 
   beforeEach(() => {
     mockKV = createMockKV();
     mockAuth = createMockSpotifyAuth();
-    artists = new SpotifyArtists(mockAuth as any, mockKV);
+    mockRateLimiter = createMockSpotifyRateLimiter();
+    artists = new SpotifyArtists(mockAuth as any, mockKV, mockRateLimiter as any);
   });
 
   describe('getArtist', () => {
@@ -178,12 +182,14 @@ describe('SpotifyArtists', () => {
 describe('SpotifySearch', () => {
   let mockKV: KVNamespace;
   let mockAuth: ReturnType<typeof createMockSpotifyAuth>;
+  let mockRateLimiter: ReturnType<typeof createMockSpotifyRateLimiter>;
   let search: SpotifySearch;
 
   beforeEach(() => {
     mockKV = createMockKV();
     mockAuth = createMockSpotifyAuth();
-    search = new SpotifySearch(mockAuth as any, mockKV);
+    mockRateLimiter = createMockSpotifyRateLimiter();
+    search = new SpotifySearch(mockAuth as any, mockKV, mockRateLimiter as any);
   });
 
   describe('searchAlbum', () => {

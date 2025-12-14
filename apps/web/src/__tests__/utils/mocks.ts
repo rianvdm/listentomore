@@ -81,3 +81,20 @@ export function createMockSpotifyAuth() {
     getAccessToken: vi.fn().mockResolvedValue('mock-access-token'),
   };
 }
+
+/**
+ * Creates a mock SpotifyRateLimiter for testing
+ * The mock immediately resolves acquire() without any rate limiting
+ */
+export function createMockSpotifyRateLimiter() {
+  return {
+    acquire: vi.fn().mockResolvedValue(undefined),
+    recordRateLimitResponse: vi.fn().mockResolvedValue(undefined),
+    getStats: vi.fn().mockResolvedValue({
+      requestCount: 0,
+      maxRequests: 120,
+      windowRemainingMs: 60000,
+      inCooldown: false,
+    }),
+  };
+}
