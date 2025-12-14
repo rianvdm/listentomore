@@ -38,17 +38,26 @@ These help but don't protect against:
 
 Application-level rate limiting is the safety net that protects regardless of traffic source. It ensures we never exceed Spotify's limits, even if all other mitigations fail.
 
-### Alternative: Multiple Spotify Apps
+### Current State: Multiple Spotify Apps
 
-Another immediate mitigation is using **separate Spotify developer apps** for different services. Each app has its own rate limit budget, effectively multiplying available quota.
+**Status:** ✅ Partially Implemented
 
-**Recommended split:**
-| App | Used For | Why |
-|-----|----------|-----|
-| Primary app | Album/artist detail pages, search | User-facing, needs to be responsive |
-| Secondary app | Streaming-links service | High parallelism from home page (40+ requests) |
+We currently use **two separate Spotify developer apps** to isolate rate limit budgets:
 
-This isolates the streaming-links cascade from affecting the main user experience.
+| App | Environment Variable | Used For | Status |
+|-----|---------------------|----------|--------|
+| **Primary** | `SPOTIFY_CLIENT_ID`<br>`SPOTIFY_CLIENT_SECRET`<br>`SPOTIFY_REFRESH_TOKEN` | • Album/artist detail pages<br>• Search functionality<br>• **Cron job (user_listens)** | ✅ Configured |
+| **Secondary** | `SPOTIFY_STREAMING_CLIENT_ID`<br>`SPOTIFY_STREAMING_CLIENT_SECRET`<br>`SPOTIFY_STREAMING_REFRESH_TOKEN` | • Streaming-links service<br>• `/api/internal/streaming-links`<br>• `/api/v1/links` endpoint | ✅ Configured |
+
+**Implementation details:**
+- **Location:** `apps/web/src/index.tsx` lines 75-94
+- **Fallback:** If secondary credentials not configured, falls back to primary
+- **Isolation:** Streaming-links (40+ parallel requests from home page) cannot exhaust primary app's rate limit
+
+**Current gap:** The **cron job** (runs every 5 minutes) uses the **primary app** for Spotify image enrichment. This means:
+- Cron job shares rate limit budget with album/artist detail pages
+- During high traffic, cron job could contribute to rate limit exhaustion
+- Consider: Move cron job to secondary app OR create third app for background jobs
 
 See **Appendix: Setting Up a Secondary Spotify App** for implementation details.
 
@@ -736,16 +745,19 @@ After deployment, monitor:
 
 When Spotify rate limits occur, users experience:
 
-| Page/Feature | Cached Data | Uncached Data |
-|--------------|-------------|---------------|
-| **Album detail page** | Works normally | Shows "Temporarily Unavailable" (503) |
-| **Artist detail page** | Works normally | Shows "Temporarily Unavailable" (503) |
-| **Home page** | Partial - cached listens show | Some streaming links may fail silently |
-| **Search** | Cached searches work | New searches fail with error |
-| **AI summaries** | Work (separate service) | Work (separate service) |
-| **Streaming links** | Cached links show | Fail silently (Spotify link only) |
+| Page/Feature | Cached Data | Uncached Data (Primary App) | Uncached Data (Secondary App) |
+|--------------|-------------|----------------------------|------------------------------|
+| **Album detail page** | Works normally | Shows "Temporarily Unavailable" (503) | N/A (uses primary) |
+| **Artist detail page** | Works normally | Shows "Temporarily Unavailable" (503) | N/A (uses primary) |
+| **Search** | Cached searches work | Shows error on failure | N/A (uses primary) |
+| **Home page listens** | Cached listens show | Cron job fails → stale data shown | N/A (cron uses primary) |
+| **Streaming links** | Cached links show | N/A (doesn't use primary) | **Protected:** Uses secondary app, continues working |
+| **AI summaries** | Cached summaries | Works (separate OpenAI/Perplexity service) | N/A |
 
-**Key insight:** The site degrades gracefully—cached content continues to work. Only uncached Spotify requests fail.
+**Key insights:**
+- **Graceful degradation:** Cached content continues to work. Only uncached Spotify requests fail.
+- **Rate limit isolation:** Streaming links (secondary app) continue working even if primary app is rate limited.
+- **Cron job vulnerability:** If primary app hits 429 during cron run, user_listens won't update (shows stale cached data).
 
 ### During Viral Traffic (Hypothetical)
 
@@ -769,13 +781,25 @@ If ListenToMore goes viral and 1000 users simultaneously visit unique album page
 
 ### Graceful Degradation Strategy
 
-The "Temporarily Unavailable" page (`RateLimitedPage` component) provides:
-- Clear message: "We're experiencing high traffic"
-- Retry suggestion: "Please try again in a minute or two"
-- Navigation: Link to search page
-- HTTP 503 status: Tells crawlers the issue is temporary
+**What users see when rate limited:**
+
+When Spotify returns a 429 error, the application catches it and displays a user-friendly error page instead of a generic error.
+
+**Implementation:**
+1. **Detection:** Album/artist detail handlers catch errors containing '429' (`apps/web/src/pages/{album,artist}/detail.tsx`)
+2. **Logging:** Service logs: `[Spotify] 429 Rate Limited for {resource}, Retry-After: {seconds}s`
+3. **User Experience:** Shows `RateLimitedPage` component with HTTP 503 status
+
+**Error page content** (`RateLimitedPage` component):
+- **Title:** "Temporarily Unavailable"
+- **Message:** "We're experiencing high traffic and can't load this {album/artist} right now."
+- **Suggestion:** "Please try again in a minute or two."
+- **Navigation:** Link to search page (e.g., "Search Albums")
+- **HTTP Status:** 503 (tells crawlers the issue is temporary, not permanent)
 
 **File:** `apps/web/src/components/ui/ErrorPage.tsx`
+
+**Key benefit:** Users see a helpful message instead of a technical error, and search engines understand it's temporary.
 
 ### Monitoring During High Traffic
 
@@ -1021,6 +1045,61 @@ The `SpotifyAuth` class in `packages/services/spotify/src/auth.ts` handles token
 1. **Token cache key includes client ID** - Each app has its own cached token
 2. **URL encoding** - The refresh token is URL-encoded using `URLSearchParams` to handle special characters
 3. **Logging** - Token refresh logs include client ID prefix (first 8 chars) for debugging
+
+---
+
+## Option: Move Cron Job to Secondary App
+
+**Current state:** The cron job (`scheduled()` in `apps/web/src/index.tsx`) uses the **primary** Spotify app for album image enrichment.
+
+**Problem:** During high traffic, the cron job competes with user-facing requests (album/artist detail pages) for the same rate limit budget.
+
+### Option A: Use Secondary App for Cron
+
+Reuse the existing secondary app credentials for the cron job:
+
+```typescript
+// In apps/web/src/index.tsx scheduled() function
+const spotify = new SpotifyService({
+  clientId: env.SPOTIFY_STREAMING_CLIENT_ID || env.SPOTIFY_CLIENT_ID,
+  clientSecret: env.SPOTIFY_STREAMING_CLIENT_SECRET || env.SPOTIFY_CLIENT_SECRET,
+  refreshToken: env.SPOTIFY_STREAMING_REFRESH_TOKEN || env.SPOTIFY_REFRESH_TOKEN,
+  cache: env.CACHE,
+});
+```
+
+**Pros:**
+- No new Spotify app needed
+- Isolates cron from user-facing requests
+- Falls back to primary if secondary not configured
+
+**Cons:**
+- Cron now shares budget with streaming-links (40+ parallel requests)
+- May need to monitor if streaming-links + cron exhaust secondary app
+
+### Option B: Create Third App for Background Jobs
+
+Create a dedicated Spotify app for background jobs (cron, future async tasks):
+
+**Environment variables:**
+- `SPOTIFY_BACKGROUND_CLIENT_ID`
+- `SPOTIFY_BACKGROUND_CLIENT_SECRET`
+- `SPOTIFY_BACKGROUND_REFRESH_TOKEN`
+
+**Pros:**
+- Complete isolation: user requests, streaming-links, background jobs all separate
+- Triples effective rate limit budget
+- Best for scaling to 100+ users
+
+**Cons:**
+- More Spotify apps to manage
+- Additional secrets to configure
+
+### Recommendation
+
+**Now (< 50 users):** Keep current setup (cron uses primary)
+**50-100 users:** Use Option A (cron → secondary app)
+**100+ users:** Use Option B (dedicated background app)
 
 ---
 

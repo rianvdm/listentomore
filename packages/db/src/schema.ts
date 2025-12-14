@@ -29,26 +29,6 @@ export interface Session {
   last_active_at: string;
 }
 
-export interface Search {
-  id: string;
-  user_id: string;
-  search_type: 'album' | 'artist';
-  query: string;
-  result_id: string | null;
-  result_name: string | null;
-  result_artist: string | null;
-  searched_at: string;
-}
-
-export interface RecentSearch {
-  id: string;
-  spotify_id: string;
-  album_name: string;
-  artist_name: string;
-  image_url: string | null;
-  searched_at: string;
-}
-
 export type DiscogsSyncStatus = 'idle' | 'syncing' | 'enriching' | 'error';
 
 export interface DiscogsSyncState {

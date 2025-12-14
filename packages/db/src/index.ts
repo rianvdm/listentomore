@@ -5,8 +5,6 @@ export * from './schema';
 import type {
   User,
   Session,
-  Search,
-  RecentSearch,
   DiscogsSyncState,
   DiscogsRelease,
   RateLimit,
@@ -241,89 +239,6 @@ export class Database {
       .prepare('DELETE FROM sessions WHERE user_id = ?')
       .bind(userId)
       .run();
-  }
-
-  // Search history queries
-  async recordSearch(data: {
-    userId?: string;
-    searchType: 'album' | 'artist';
-    query: string;
-    resultId?: string;
-    resultName?: string;
-    resultArtist?: string;
-  }): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO searches (user_id, search_type, query, result_id, result_name, result_artist)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .bind(
-        data.userId || 'default',
-        data.searchType,
-        data.query,
-        data.resultId || null,
-        data.resultName || null,
-        data.resultArtist || null
-      )
-      .run();
-  }
-
-  async getSearchHistory(userId: string = 'default', limit: number = 20): Promise<Search[]> {
-    const result = await this.db
-      .prepare(
-        `SELECT * FROM searches WHERE user_id = ? ORDER BY searched_at DESC LIMIT ?`
-      )
-      .bind(userId, limit)
-      .all<Search>();
-    return result.results;
-  }
-
-  // Recent searches (community)
-  async addRecentSearch(data: {
-    spotifyId: string;
-    albumName: string;
-    artistName: string;
-    imageUrl?: string;
-  }): Promise<void> {
-    // Check if album already exists
-    const existing = await this.db
-      .prepare('SELECT id FROM recent_searches WHERE spotify_id = ?')
-      .bind(data.spotifyId)
-      .first<{ id: string }>();
-
-    if (existing) {
-      // Update timestamp
-      await this.db
-        .prepare("UPDATE recent_searches SET searched_at = datetime('now') WHERE spotify_id = ?")
-        .bind(data.spotifyId)
-        .run();
-    } else {
-      // Insert new
-      await this.db
-        .prepare(
-          `INSERT INTO recent_searches (spotify_id, album_name, artist_name, image_url)
-           VALUES (?, ?, ?, ?)`
-        )
-        .bind(data.spotifyId, data.albumName, data.artistName, data.imageUrl || null)
-        .run();
-
-      // Keep only the last 9
-      await this.db
-        .prepare(
-          `DELETE FROM recent_searches WHERE id NOT IN (
-            SELECT id FROM recent_searches ORDER BY searched_at DESC LIMIT 9
-          )`
-        )
-        .run();
-    }
-  }
-
-  async getRecentSearches(limit: number = 9): Promise<RecentSearch[]> {
-    const result = await this.db
-      .prepare('SELECT * FROM recent_searches ORDER BY searched_at DESC LIMIT ?')
-      .bind(limit)
-      .all<RecentSearch>();
-    return result.results;
   }
 
   // Discogs sync state

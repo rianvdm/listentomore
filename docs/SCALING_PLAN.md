@@ -222,28 +222,26 @@ This counter resets on every Worker instance = broken.
 ### 1.3 Database Cleanup & Indexes ⚠️ **CRITICAL**
 
 **Problem:**
-- **Searches table:** No cleanup mechanism = unbounded growth
 - **Sessions table:** Manual cleanup only (shown in CLAUDE.md docs)
-- **D1 limit:** 10GB total - searches could fill this over time
+- **API usage log:** Comment mentions 30-day cleanup but never implemented
+- **D1 limit:** 10GB total - logs could fill this over time
 - **Security risk:** Old sessions linger indefinitely (before expiry)
 
 **Current State:**
 ```sql
--- From migrations/001_initial.sql
-CREATE TABLE IF NOT EXISTS searches (
-  id TEXT PRIMARY KEY,
-  user_id TEXT REFERENCES users(id),
-  search_type TEXT NOT NULL,
-  query TEXT NOT NULL,
-  searched_at TEXT DEFAULT (datetime('now'))
-);
--- NO cleanup mechanism!
-
 -- From migrations/006_sessions.sql
 CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 -- No automated cleanup!
+
+-- From migrations/002_api_keys.sql
+CREATE TABLE IF NOT EXISTS api_usage_log (
+  created_at TEXT DEFAULT (datetime('now'))
+);
+-- Cleanup old usage logs (keep 30 days) - run periodically
+-- DELETE FROM api_usage_log WHERE created_at < datetime('now', '-30 days');
+-- ^^^ This comment was never implemented!
 ```
 
 **Solution:** Add automated cleanup via cron job
@@ -275,13 +273,9 @@ async function cleanupDatabase(db: Database) {
     const sessionsDeleted = await db.deleteExpiredSessions();
     console.log(`[CRON] Deleted ${sessionsDeleted} expired sessions`);
 
-    // Clean up old searches (keep last 90 days)
-    const searchesDeleted = await db.deleteOldSearches(90);
-    console.log(`[CRON] Deleted ${searchesDeleted} searches older than 90 days`);
-
-    // Clean up old recent_searches (keep last 30 days)
-    const recentSearchesDeleted = await db.deleteOldRecentSearches(30);
-    console.log(`[CRON] Deleted ${recentSearchesDeleted} recent searches older than 30 days`);
+    // Clean up old API usage logs (keep last 30 days)
+    const apiLogsDeleted = await db.deleteOldApiUsageLogs(30);
+    console.log(`[CRON] Deleted ${apiLogsDeleted} API usage logs older than 30 days`);
 
   } catch (error) {
     console.error('[CRON] Database cleanup failed:', error);
@@ -299,22 +293,11 @@ async deleteExpiredSessions(): Promise<number> {
   return result.meta.changes;
 }
 
-async deleteOldSearches(daysToKeep: number): Promise<number> {
+async deleteOldApiUsageLogs(daysToKeep: number): Promise<number> {
   const result = await this.db
     .prepare(
-      `DELETE FROM searches
-       WHERE searched_at < datetime('now', '-' || ? || ' days')`
-    )
-    .bind(daysToKeep)
-    .run();
-  return result.meta.changes;
-}
-
-async deleteOldRecentSearches(daysToKeep: number): Promise<number> {
-  const result = await this.db
-    .prepare(
-      `DELETE FROM recent_searches
-       WHERE searched_at < datetime('now', '-' || ? || ' days')`
+      `DELETE FROM api_usage_log
+       WHERE created_at < datetime('now', '-' || ? || ' days')`
     )
     .bind(daysToKeep)
     .run();
@@ -346,12 +329,13 @@ async getDatabaseStats(): Promise<{ size: number; rowCount: number }> {
 }
 ```
 
-4. **Add index for searches cleanup** (migration `008_cleanup_indexes.sql`):
+4. **Add index for API usage log cleanup** (migration `009_cleanup_indexes.sql`):
 
 ```sql
 -- Speed up cleanup queries
-CREATE INDEX IF NOT EXISTS idx_searches_cleanup ON searches(searched_at);
-CREATE INDEX IF NOT EXISTS idx_recent_searches_cleanup ON recent_searches(searched_at);
+-- Note: api_usage_log already has idx_usage_time index on created_at from migration 002
+-- Sessions already has idx_sessions_expires index from migration 006
+-- No additional indexes needed
 ```
 
 **Testing:**
