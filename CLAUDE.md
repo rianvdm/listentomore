@@ -573,4 +573,4 @@ curl -X DELETE "https://listentomore.com/api/cache?type=albumDetail&artist=radio
   -H "X-API-Key: YOUR_PREMIUM_KEY"
 ```
 
-Supported types: `albumDetail`, `artistSummary`, `genreSummary`, `spotify:album`, `spotify:artist`
+Supported types: `albumDetail`, `artistSummary`, `genreSummary`, `spotify:album`, `spotify:artist`, `artistSentence`
