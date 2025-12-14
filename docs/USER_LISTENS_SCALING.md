@@ -1,5 +1,9 @@
 # User Listens Scaling Analysis
 
+**Status:** 🟡 Partially Implemented (Phase 1 batching done, Phase 2-3 needed at 100+ users)
+**Related:** See [SCALING_PLAN.md](./SCALING_PLAN.md) Phase 2.2 for overall scaling context.
+**Current Capacity:** ~150 users before 30s timeout
+
 This document analyzes the scalability of the "What we're listening to" feature on the home page and outlines implementation options when user growth requires optimization.
 
 ## Why We Poll All Users

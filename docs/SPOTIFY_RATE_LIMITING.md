@@ -2,6 +2,10 @@
 
 > **For LLMs:** This document outlines how to implement application-level rate limiting for Spotify API calls. The goal is to prevent 429 errors from Spotify's API by proactively throttling requests before hitting their limits. This protects the application from external traffic spikes (bots, crawlers, viral traffic) and ensures reliable service for legitimate users.
 
+**Status:** 🔴 Not Implemented (Priority: Critical)
+**Related:** See [SCALING_PLAN.md](./SCALING_PLAN.md) Phase 1.1 for overall scaling context.
+**Estimated Effort:** Phase 1-2: 8 hours | Phase 3: 6 hours | Full implementation: ~20 hours
+
 ---
 
 ## Background
