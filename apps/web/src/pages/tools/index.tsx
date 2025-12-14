@@ -12,10 +12,6 @@ export function ToolsPage({ currentUser }: ToolsPageProps) {
     <Layout title="Tools" description="Tools and integrations for Listen To More" currentUser={currentUser}>
       <h1>Tools & Integrations</h1>
 
-      <p>
-        Extend your music discovery experience with these tools and integrations.
-      </p>
-
       {/* Discord Bot */}
       <section style={{ marginTop: '2rem' }}>
         <h2>🤖 Discord Bot</h2>
@@ -53,22 +49,6 @@ export function ToolsPage({ currentUser }: ToolsPageProps) {
             Learn More
           </a>
         </div>
-
-        <h3>Features</h3>
-        <ul>
-          <li>
-            <strong>Recent Tracks</strong> - See what you've been listening to
-          </li>
-          <li>
-            <strong>Top Artists & Albums</strong> - Your most-played music over various time periods
-          </li>
-          <li>
-            <strong>Loved Tracks</strong> - Your favorite songs on Last.fm
-          </li>
-          <li>
-            <strong>Similar Artists</strong> - Discover new music based on your tastes
-          </li>
-        </ul>
       </section>
     </Layout>
   );
