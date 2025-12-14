@@ -60,7 +60,8 @@ pnpm run deploy       # Deploy to Cloudflare
 | Albums | `/album/{spotifyId}` | `/album/4LH4d3cOWNNsVw41Gqt2kv` |
 | Artists | `/artist/{spotifyId}` | `/artist/0k17h0D3J5VfsdmQ1iZtE9` |
 | Genres | `/genre/{slug}` | `/genre/indie-rock` |
-| User profiles | `/u/{lastfm-username}` | `/u/bordesak` |
+| User profile - Stats | `/u/{username}` | `/u/bordesak` |
+| User profile - Recommendations | `/u/{username}/recommendations` | `/u/bordesak/recommendations` |
 | Account settings | `/account` | `/account` |
 | Login | `/login` | `/login?next=/account` |
 | Tools | `/tools` | `/tools` |
@@ -225,6 +226,118 @@ import { requireAuth } from './middleware/session';
 app.get('/account', requireAuth, handleAccount);
 ```
 
+### Adding User Profile Pages
+
+User profile pages use a shared tab navigation component for consistent UX and easy scalability.
+
+**Current user profile pages:**
+- `/u/:username` - Stats (top artists, albums, recent listening)
+- `/u/:username/recommendations` - Recommendations (loved tracks, similar artists)
+
+**To add a new user profile page:**
+
+1. **Create the page component** in `apps/web/src/pages/user/`
+
+```typescript
+// pages/user/insights.tsx
+import type { Context } from 'hono';
+import { Layout } from '../../components/layout';
+import { UserProfileNav } from '../../components/layout/UserProfileNav';
+import type { User } from '@listentomore/db';
+
+interface UserInsightsPageProps {
+  username: string;
+  internalToken?: string;
+  currentUser?: User | null;
+}
+
+export function UserInsightsPage({ username, internalToken, currentUser }: UserInsightsPageProps) {
+  return (
+    <Layout
+      title={`Insights for ${username}`}
+      description={`AI-powered listening insights for ${username}`}
+      internalToken={internalToken}
+      currentUser={currentUser}
+    >
+      {/* Navigation must be ABOVE header for consistent placement */}
+      <UserProfileNav username={username} activePage="insights" />
+
+      <header>
+        <h1>AI Insights for {username}</h1>
+      </header>
+
+      <main>
+        {/* Page content */}
+      </main>
+    </Layout>
+  );
+}
+
+export async function handleUserInsights(c: Context) {
+  const username = c.req.param('username');
+  const db = c.get('db') as Database;
+  const internalToken = c.get('internalToken') as string;
+  const currentUser = c.get('currentUser') as User | null;
+
+  // Get user and check privacy (copy from stats.tsx)
+  let user = await db.getUserByLastfmUsername(username);
+  if (!user) user = await db.getUserByUsername(username);
+  if (!user) return c.html(<UserNotFound username={username} />, 404);
+
+  // Privacy check
+  if (user.profile_visibility === 'private' && (!currentUser || currentUser.id !== user.id)) {
+    return c.html(<PrivateProfile username={username} currentUser={currentUser} />);
+  }
+
+  return c.html(
+    <UserInsightsPage
+      username={user.username || user.lastfm_username}
+      internalToken={internalToken}
+      currentUser={currentUser}
+    />
+  );
+}
+```
+
+2. **Update UserProfileNav component** to include the new tab:
+
+```typescript
+// components/layout/UserProfileNav.tsx
+interface UserProfileNavProps {
+  username: string;
+  activePage: 'stats' | 'recommendations' | 'insights'; // Add new page
+}
+
+export function UserProfileNav({ username, activePage }: UserProfileNavProps) {
+  return (
+    <nav class="profile-nav">
+      <a href={`/u/${username}`} class={`profile-nav-link${activePage === 'stats' ? ' active' : ''}`}>
+        Stats
+      </a>
+      <a href={`/u/${username}/recommendations`} class={`profile-nav-link${activePage === 'recommendations' ? ' active' : ''}`}>
+        Recommendations
+      </a>
+      <a href={`/u/${username}/insights`} class={`profile-nav-link${activePage === 'insights' ? ' active' : ''}`}>
+        Insights
+      </a>
+    </nav>
+  );
+}
+```
+
+3. **Register the route** in `apps/web/src/index.tsx`:
+
+```typescript
+import { handleUserInsights } from './pages/user/insights';
+app.get('/u/:username/insights', handleUserInsights);
+```
+
+**Key requirements:**
+- Navigation MUST be placed **above** the header for consistent positioning
+- All user pages must check `profile_visibility` before showing data
+- Use `UserNotFound` and `PrivateProfile` components for error states
+- Pass `internalToken` to Layout if using internal APIs for progressive loading
+
 ### Adding New API Routes
 
 API routes are organized in `apps/web/src/api/` using Hono's sub-app pattern:
@@ -369,13 +482,19 @@ await db.updateSessionActivity(sessionId);
 
 ### UI Components
 
-Located in `apps/web/src/components/ui/`. Check for existing components before creating new ones:
+Located in `apps/web/src/components/ui/` and `apps/web/src/components/layout/`. Check for existing components before creating new ones:
 
+**UI Components:**
 - **Button** - `variant: 'primary' | 'secondary'`, `size: 'small' | 'medium' | 'large'`
 - **Input** - Text input with consistent styling
 - **LoadingSpinner** - `text?: string`, `size: 'small' | 'medium' | 'large'`
 - **FilterDropdown** - Dropdown select component
 - **TrackCard** - Display track/album with image
+
+**Layout Components:**
+- **Layout** - Main page wrapper with navigation and footer
+- **NavBar** - Top navigation bar with site-wide links
+- **UserProfileNav** - Tab navigation for user profile pages (`username: string`, `activePage: 'stats' | 'recommendations'`)
 
 ---
 
