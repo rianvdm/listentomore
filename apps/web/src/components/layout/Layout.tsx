@@ -114,6 +114,10 @@ export function Layout({ children, title, description, image, url, internalToken
               Submit a bug
             </a>
             {' | '}
+            <a href="https://github.com/rianvdm/listentomore/releases" target="_blank" rel="noopener noreferrer">
+              Release notes
+            </a>
+            {' | '}
             <a href="/privacy">Privacy</a>
             {' | '}
             <a href="/terms">Terms</a>
