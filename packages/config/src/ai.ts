@@ -176,7 +176,7 @@ export const AI_TASKS = {
   userInsightsSummary: {
     provider: 'openai',
     model: 'gpt-5.2',
-    maxTokens: 800,
+    maxTokens: 1000,
     temperature: 1,
     cacheTtlDays: 1,
     reasoning: 'low',
@@ -185,12 +185,12 @@ export const AI_TASKS = {
 
   userInsightsRecommendations: {
     provider: 'openai',
-    model: 'gpt-5-mini', // gpt-5.2 Responses API times out even without webSearch
-    maxTokens: 1500,
+    model: 'gpt-5.2',
+    maxTokens: 4000, // Increased from 1500 to avoid timeout
     temperature: 1,
     cacheTtlDays: 1,
-    reasoning: 'low',
-    verbosity: 'medium',
+    reasoning: 'none',
+    verbosity: 'low', // Changed from medium to low for faster response
   },
 } as const satisfies Record<string, AITaskConfig>;
 

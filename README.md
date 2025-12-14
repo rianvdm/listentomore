@@ -26,6 +26,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Top Artists & Albums** - View your most-played music over different time periods (7 days, 30 days, etc.)
 - **Personalized Recommendations** - Discover new artists based on your listening habits and similar artist connections
 - **Loved Tracks** - See your favorite tracks with AI-generated artist insights
+- **Weekly Insights** - AI-powered analysis of your 7-day listening patterns with personalized album recommendations (GPT-5.2)
 
 ### Home Feed
 - **Community Listening** - See what registered users are listening to in real-time (updates every 5 minutes)

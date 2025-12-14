@@ -6,7 +6,7 @@
 
 Music discovery web app built with **Hono on Cloudflare Workers**. Monorepo managed by **Turborepo** and **pnpm**.
 
-**Version:** 1.0.1 (Released 2025-12-14)
+**Version:** 1.1.0 (Released 2025-12-14)
 
 **Key constraint:** Single Worker architecture. Do NOT create new workers or separate API services.
 
@@ -62,6 +62,7 @@ pnpm run deploy       # Deploy to Cloudflare
 | Genres | `/genre/{slug}` | `/genre/indie-rock` |
 | User profile - Stats | `/u/{username}` | `/u/bordesak` |
 | User profile - Recommendations | `/u/{username}/recommendations` | `/u/bordesak/recommendations` |
+| User profile - Insights | `/u/{username}/insights` | `/u/bordesak/insights` |
 | Account settings | `/account` | `/account` |
 | Login | `/login` | `/login?next=/account` |
 | Tools | `/tools` | `/tools` |
@@ -233,6 +234,7 @@ User profile pages use a shared tab navigation component for consistent UX and e
 **Current user profile pages:**
 - `/u/:username` - Stats (top artists, albums, recent listening)
 - `/u/:username/recommendations` - Recommendations (loved tracks, similar artists)
+- `/u/:username/insights` - AI-powered 7-day listening analysis and album recommendations
 
 **To add a new user profile page:**
 
@@ -499,7 +501,7 @@ Located in `apps/web/src/components/ui/` and `apps/web/src/components/layout/`. 
 - **Layout** - Main page wrapper with navigation and footer
 - **NavBar** - Top navigation bar with site-wide links
 - **UserProfileHeader** - Static header for user profile pages (`username: string`, `lastfmUsername: string`)
-- **UserProfileNav** - Tab navigation for user profile pages (`username: string`, `activePage: 'stats' | 'recommendations'`)
+- **UserProfileNav** - Tab navigation for user profile pages (`username: string`, `activePage: 'stats' | 'recommendations' | 'insights'`)
 
 ---
 
@@ -651,7 +653,8 @@ api/
 │   ├── genre.ts          # /genre-summary
 │   ├── search.ts         # /search
 │   ├── streaming.ts      # /streaming-links
-│   └── user.ts           # /user-stats, /user-top-*, /user-recent-tracks
+│   ├── user.ts           # /user-stats, /user-top-*, /user-recent-tracks
+│   ├── insights.ts       # /user-insights-summary, /user-insights-recommendations, /user-insights-cooldown
 └── admin/                # Admin operations
     ├── index.ts          # Exports authRoutes and cacheRoutes
     ├── keys.ts           # POST /api/auth/keys (admin secret)
