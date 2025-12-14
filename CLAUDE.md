@@ -6,7 +6,7 @@
 
 Music discovery web app built with **Hono on Cloudflare Workers**. Monorepo managed by **Turborepo** and **pnpm**.
 
-**Version:** 1.0.0 (Released 2025-12-13)
+**Version:** 1.0.1 (Released 2025-12-14)
 
 **Key constraint:** Single Worker architecture. Do NOT create new workers or separate API services.
 
@@ -242,16 +242,18 @@ User profile pages use a shared tab navigation component for consistent UX and e
 // pages/user/insights.tsx
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
+import { UserProfileHeader } from '../../components/layout/UserProfileHeader';
 import { UserProfileNav } from '../../components/layout/UserProfileNav';
 import type { User } from '@listentomore/db';
 
 interface UserInsightsPageProps {
   username: string;
+  lastfmUsername: string;
   internalToken?: string;
   currentUser?: User | null;
 }
 
-export function UserInsightsPage({ username, internalToken, currentUser }: UserInsightsPageProps) {
+export function UserInsightsPage({ username, lastfmUsername, internalToken, currentUser }: UserInsightsPageProps) {
   return (
     <Layout
       title={`Insights for ${username}`}
@@ -259,15 +261,14 @@ export function UserInsightsPage({ username, internalToken, currentUser }: UserI
       internalToken={internalToken}
       currentUser={currentUser}
     >
-      {/* Navigation must be ABOVE header for consistent placement */}
+      {/* Static header establishes identity - same on all profile pages */}
+      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
+
+      {/* Tab navigation below static header */}
       <UserProfileNav username={username} activePage="insights" />
 
-      <header>
-        <h1>AI Insights for {username}</h1>
-      </header>
-
       <main>
-        {/* Page content */}
+        {/* Page content - no changing h1 headlines */}
       </main>
     </Layout>
   );
@@ -292,6 +293,7 @@ export async function handleUserInsights(c: Context) {
   return c.html(
     <UserInsightsPage
       username={user.username || user.lastfm_username}
+      lastfmUsername={user.lastfm_username}
       internalToken={internalToken}
       currentUser={currentUser}
     />
@@ -333,10 +335,12 @@ app.get('/u/:username/insights', handleUserInsights);
 ```
 
 **Key requirements:**
-- Navigation MUST be placed **above** the header for consistent positioning
+- Use **UserProfileHeader** above **UserProfileNav** for consistent visual hierarchy (Static Header → Tabs → Content)
+- No changing `<h1>` headlines below tabs - the static header provides identity
 - All user pages must check `profile_visibility` before showing data
 - Use `UserNotFound` and `PrivateProfile` components for error states
 - Pass `internalToken` to Layout if using internal APIs for progressive loading
+- Pass both `username` and `lastfmUsername` to UserProfileHeader
 
 ### Adding New API Routes
 
@@ -494,6 +498,7 @@ Located in `apps/web/src/components/ui/` and `apps/web/src/components/layout/`. 
 **Layout Components:**
 - **Layout** - Main page wrapper with navigation and footer
 - **NavBar** - Top navigation bar with site-wide links
+- **UserProfileHeader** - Static header for user profile pages (`username: string`, `lastfmUsername: string`)
 - **UserProfileNav** - Tab navigation for user profile pages (`username: string`, `activePage: 'stats' | 'recommendations'`)
 
 ---
