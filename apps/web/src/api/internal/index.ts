@@ -10,6 +10,7 @@ import { genreInternalRoutes } from './genre';
 import { searchInternalRoutes } from './search';
 import { streamingInternalRoutes } from './streaming';
 import { userInternalRoutes } from './user';
+import { insightsInternalRoutes } from './insights';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -21,5 +22,6 @@ app.route('/', genreInternalRoutes);
 app.route('/', searchInternalRoutes);
 app.route('/', streamingInternalRoutes);
 app.route('/', userInternalRoutes);
+app.route('/', insightsInternalRoutes);
 
 export const internalRoutes = app;

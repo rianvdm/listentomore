@@ -23,6 +23,10 @@ export const CACHE_CONFIG = {
     userInfo: { ttlDays: 30 }, // User profile info (avatar, playcount, etc)
   },
 
+  userInsights: {
+    refreshCooldown: { ttlMinutes: 5 }, // Rate limit for refresh button
+  },
+
   discogs: {
     collection: { ttlHours: 8 },
     master: { ttlDays: 90 },

@@ -34,3 +34,15 @@ export {
   generateAlbumRecommendations,
   type AlbumRecommendationsResult,
 } from './album-recommendations';
+
+export {
+  generateUserInsightsSummary,
+  type UserInsightsSummaryResult,
+  type ListeningData as InsightsListeningData,
+} from './user-insights-summary';
+
+export {
+  generateUserInsightsRecommendations,
+  type UserInsightsRecommendationsResult,
+  type AlbumRecommendation,
+} from './user-insights-recommendations';

@@ -172,6 +172,26 @@ export const AI_TASKS = {
     temperature: 0.5,
     cacheTtlDays: 30,
   },
+
+  userInsightsSummary: {
+    provider: 'openai',
+    model: 'gpt-5.2',
+    maxTokens: 800,
+    temperature: 1,
+    cacheTtlDays: 1,
+    reasoning: 'low',
+    verbosity: 'low',
+  },
+
+  userInsightsRecommendations: {
+    provider: 'openai',
+    model: 'gpt-5-mini', // gpt-5.2 Responses API times out even without webSearch
+    maxTokens: 1500,
+    temperature: 1,
+    cacheTtlDays: 1,
+    reasoning: 'low',
+    verbosity: 'medium',
+  },
 } as const satisfies Record<string, AITaskConfig>;
 
 export type AITask = keyof typeof AI_TASKS;

@@ -34,6 +34,7 @@ import { handleGenreDetail } from './pages/genre/detail';
 import { handleGenreSearch } from './pages/genre/search';
 import { handleUserStats } from './pages/user/stats';
 import { handleUserRecommendations } from './pages/user/recommendations';
+import { handleUserInsights } from './pages/user/insights';
 import { handleStatsLookup } from './pages/stats/entry';
 import { handleLogin } from './pages/auth/login';
 import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
@@ -446,6 +447,7 @@ app.get('/stats/lookup', handleStatsLookup);
 // User routes
 app.get('/u/:username', handleUserStats);
 app.get('/u/:username/recommendations', handleUserRecommendations);
+app.get('/u/:username/insights', handleUserInsights);
 
 // About, Tools, Discord, and legal pages
 app.get('/about', (c) => c.html(<AboutPage currentUser={c.get('currentUser')} />));

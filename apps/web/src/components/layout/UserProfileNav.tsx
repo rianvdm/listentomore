@@ -3,7 +3,7 @@
 
 interface UserProfileNavProps {
   username: string;
-  activePage: 'stats' | 'recommendations';
+  activePage: 'stats' | 'recommendations' | 'insights';
 }
 
 export function UserProfileNav({ username, activePage }: UserProfileNavProps) {
@@ -20,6 +20,12 @@ export function UserProfileNav({ username, activePage }: UserProfileNavProps) {
         class={`profile-nav-link${activePage === 'recommendations' ? ' active' : ''}`}
       >
         Recommendations
+      </a>
+      <a
+        href={`/u/${username}/insights`}
+        class={`profile-nav-link${activePage === 'insights' ? ' active' : ''}`}
+      >
+        Insights
       </a>
     </nav>
   );

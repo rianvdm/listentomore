@@ -49,6 +49,8 @@ export {
   generatePlaylistCoverImage,
   generateListenAIResponse,
   generateAlbumRecommendations,
+  generateUserInsightsSummary,
+  generateUserInsightsRecommendations,
   type ArtistSummaryResult,
   type AlbumDetailResult,
   type GenreSummaryResult,
@@ -58,6 +60,10 @@ export {
   type PlaylistCoverImageResult,
   type ListenAIResult,
   type AlbumRecommendationsResult,
+  type UserInsightsSummaryResult,
+  type UserInsightsRecommendationsResult,
+  type AlbumRecommendation,
+  type InsightsListeningData,
 } from './prompts';
 
 export interface AIServiceConfig {
@@ -183,5 +189,40 @@ export class AIService {
     );
     const client = this.getClientForTask('albumRecommendations');
     return generateAlbumRecommendations(artistName, albumName, client, this.cache);
+  }
+
+  /**
+   * Generate user insights summary (provider determined by config)
+   */
+  async getUserInsightsSummary(
+    username: string,
+    listeningData: {
+      topArtists: Array<{ name: string; playcount: number }>;
+      topAlbums: Array<{ name: string; artist: string; playcount: number }>;
+      recentTracks: Array<{ name: string; artist: string }>;
+    }
+  ) {
+    const { generateUserInsightsSummary } = await import(
+      './prompts/user-insights-summary'
+    );
+    const client = this.getClientForTask('userInsightsSummary');
+    return generateUserInsightsSummary(username, listeningData, client, this.cache);
+  }
+
+  /**
+   * Generate user insights recommendations (provider determined by config)
+   */
+  async getUserInsightsRecommendations(
+    username: string,
+    listeningData: {
+      topArtists: Array<{ name: string; playcount: number }>;
+      topAlbums: Array<{ name: string; artist: string; playcount: number }>;
+    }
+  ) {
+    const { generateUserInsightsRecommendations } = await import(
+      './prompts/user-insights-recommendations'
+    );
+    const client = this.getClientForTask('userInsightsRecommendations');
+    return generateUserInsightsRecommendations(username, listeningData, client, this.cache);
   }
 }
