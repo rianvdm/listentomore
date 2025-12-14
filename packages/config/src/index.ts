@@ -8,7 +8,7 @@ export const SITE_CONFIG = {
   name: 'Listen To More',
   domain: 'listentomore.com',
   url: 'https://listentomore.com',
-  description: 'Discover and explore music through a personal lens',
+  description: 'AI-powered insights into your listening habits. See your stats, discover your favorite tracks, and share your taste with the world.',
   twitterHandle: '@listentomore',
   defaultImage: 'https://listentomore.com/og-image.png',
 } as const;

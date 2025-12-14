@@ -256,7 +256,7 @@ app.get('/', async (c) => {
         <nav class="quick-links">
           <a href={`/u/${username}`} class="quick-link">📊 Your Stats</a>
           <a href={`/u/${username}/insights`} class="quick-link">🎯 Insights</a>
-          <a href={`/u/${username}/recommendations`} class="quick-link">💿 Recommendations</a>
+          <a href={`/u/${username}/likes`} class="quick-link">❤️ Likes</a>
         </nav>
 
         <main>
@@ -420,7 +420,7 @@ app.get('/', async (c) => {
         </div>
         <h1>Discover your music story</h1>
         <p class="hero-subtitle">
-          AI-powered insights into your listening habits. See your stats, get personalized recommendations, and share your taste with the world.
+          AI-powered insights into your listening habits. See your stats, discover your favorite tracks, and share your taste with the world.
         </p>
         <div class="hero-cta">
           <a href="/login" class="button">Get Started with Last.fm</a>
