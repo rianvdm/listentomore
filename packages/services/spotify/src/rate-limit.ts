@@ -26,8 +26,10 @@ export class SpotifyRateLimiter {
 
     // Check cooldown from previous 429
     if (state.retryAfter && now < state.retryAfter) {
-      const waitMs = Math.min(state.retryAfter - now, 10000);
-      console.log(`[Spotify] Rate limit cooldown, waiting ${waitMs}ms`);
+      const baseWait = Math.min(state.retryAfter - now, 10000);
+      const jitter = Math.random() * 2000; // Add 0-2s jitter
+      const waitMs = baseWait + jitter;
+      console.log(`[Spotify] Rate limit cooldown, waiting ${Math.round(waitMs)}ms`);
       await this.sleep(waitMs);
       return this.acquire(); // Retry after wait
     }
@@ -43,8 +45,12 @@ export class SpotifyRateLimiter {
 
     // Check if over limit
     if (state.requestCount >= this.maxRequests) {
-      const waitMs = Math.min(this.windowMs - (now - state.windowStart), 10000);
-      console.log(`[Spotify] Local rate limit reached (${state.requestCount}/${this.maxRequests}), waiting ${waitMs}ms`);
+      const baseWait = Math.min(this.windowMs - (now - state.windowStart), 10000);
+      // Add jitter (20-50% of wait time) to prevent thundering herd
+      const jitterPercent = 0.2 + Math.random() * 0.3; // 20-50%
+      const jitter = baseWait * jitterPercent;
+      const waitMs = baseWait + jitter;
+      console.log(`[Spotify] Local rate limit reached (${state.requestCount}/${this.maxRequests}), waiting ${Math.round(waitMs)}ms (with jitter)`);
       await this.sleep(waitMs);
       return this.acquire(); // Retry after wait
     }

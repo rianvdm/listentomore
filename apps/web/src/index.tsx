@@ -770,16 +770,7 @@ async function scheduled(
     const users = await db.getPublicUsersWithLastfm();
     console.log(`[CRON] Found ${users.length} public users with Last.fm usernames`);
 
-    // Create Spotify service for image lookups
-    // Use secondary app if configured to isolate cron from user-facing requests
-    const spotify = new SpotifyService({
-      clientId: env.SPOTIFY_STREAMING_CLIENT_ID || env.SPOTIFY_CLIENT_ID,
-      clientSecret: env.SPOTIFY_STREAMING_CLIENT_SECRET || env.SPOTIFY_CLIENT_SECRET,
-      refreshToken: env.SPOTIFY_STREAMING_REFRESH_TOKEN || env.SPOTIFY_REFRESH_TOKEN,
-      cache: env.CACHE,
-    });
-
-    // ===== PHASE 1: Fetch Last.fm data (batched, rate-limited) =====
+    // ===== Fetch Last.fm data (batched, rate-limited) =====
     const BATCH_SIZE = 4;
     const BATCH_DELAY_MS = 1000;
     const startTime = Date.now();
@@ -837,38 +828,8 @@ async function scheduled(
       }
     }
 
-    const phase1Duration = Date.now() - startTime;
-    console.log(`[CRON] Phase 1 complete: ${lastfmSuccessCount} tracks, ${lastfmErrorCount} errors in ${phase1Duration}ms`);
-
-    // ===== PHASE 2: Enrich with Spotify images (parallel) =====
-    const phase2Start = Date.now();
-    const tracksNeedingImages = userTracks.filter((t): t is TrackData => t !== null && !!t.artist && !!t.album);
-    let spotifySuccessCount = 0;
-    let spotifySkipCount = 0;
-
-    console.log(`[CRON] Phase 2: Fetching Spotify images for ${tracksNeedingImages.length} tracks (parallel)`);
-
-    await Promise.all(
-      tracksNeedingImages.map(async (track) => {
-        try {
-          const spotifyAlbum = await spotify.searchAlbumByArtist(track.artist, track.album);
-          if (spotifyAlbum?.image) {
-            track.image = spotifyAlbum.image;
-            spotifySuccessCount++;
-          } else {
-            spotifySkipCount++;
-          }
-        } catch (err) {
-          // Keep Last.fm image as fallback
-          spotifySkipCount++;
-        }
-      })
-    );
-
-    const phase2Duration = Date.now() - phase2Start;
     const totalDuration = Date.now() - startTime;
-    console.log(`[CRON] Phase 2 complete: ${spotifySuccessCount} enriched, ${spotifySkipCount} kept Last.fm image in ${phase2Duration}ms`);
-    console.log(`[CRON] Total processing time: ${totalDuration}ms`);
+    console.log(`[CRON] Last.fm fetch complete: ${lastfmSuccessCount} tracks, ${lastfmErrorCount} errors in ${totalDuration}ms`);
 
     // Filter and sort
     const nullCount = userTracks.filter(t => t === null).length;
