@@ -214,7 +214,7 @@ export const RATE_LIMITS = {
     requestsPerMinute: 30,
   },
   spotify: {
-    requestsPerMinute: 100, // Conservative limit (Spotify allows ~180, but be safer to avoid 502/503)
+    requestsPerMinute: 150, // (Spotify allows ~180)
     maxRetries: 2,
     retryDelayMs: 1000,
   },
