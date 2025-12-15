@@ -151,7 +151,7 @@ export const AI_TASKS = {
     provider: 'openai',
     model: 'gpt-5-nano',
     maxTokens: 10000,
-    temperature: 1, 
+    temperature: 1,
     cacheTtlDays: 0,
   },
 
@@ -214,7 +214,7 @@ export const RATE_LIMITS = {
     requestsPerMinute: 30,
   },
   spotify: {
-    requestsPerMinute: 120, // Conservative limit (Spotify allows ~180)
+    requestsPerMinute: 160, // (Spotify allows ~180)
     maxRetries: 2,
     retryDelayMs: 1000,
   },
