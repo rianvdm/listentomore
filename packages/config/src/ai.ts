@@ -134,7 +134,7 @@ export const AI_TASKS = {
   artistSentence: {
     provider: 'perplexity',
     model: 'sonar',
-    maxTokens: 100,
+    maxTokens: 150,
     temperature: 0.5,
     cacheTtlDays: 180,
   },
