@@ -1,5 +1,6 @@
 // Main layout component that wraps all pages
 // Provides consistent structure, navigation, and styling
+// Updated: 2024-12-19 - Removed Mixpanel analytics
 
 import type { Child } from 'hono/jsx';
 import { SITE_CONFIG } from '@listentomore/config';
