@@ -131,7 +131,7 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
     // Send Discord notification for new signups
     if (c.env.DISCORD_WEBHOOK_URL) {
       const webhookPayload = {
-        content: `🎉 New signup: **${username}** (Last.fm: ${lastfmUsername})`
+        content: `🎉 New signup: **${username}** — https://listentomore.com/u/${username}`
       };
       console.log('[DISCORD_WEBHOOK] Sending new signup notification', {
         username,
@@ -210,7 +210,7 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
     if ((user.login_count || 0) === 0 && c.env.DISCORD_WEBHOOK_URL) {
       const username = user.username; // Capture for async callbacks
       const webhookPayload = {
-        content: `🔗 Account claimed: **${username}** (Last.fm: ${lastfmUsername})`
+        content: `🔗 Account claimed: **${username}** — https://listentomore.com/u/${username}`
       };
       console.log('[DISCORD_WEBHOOK] Sending account claim notification', {
         username,
