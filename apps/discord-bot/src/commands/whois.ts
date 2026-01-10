@@ -1,7 +1,7 @@
 // /whois command - Get information about an artist
 
 import type { SpotifyService } from '@listentomore/spotify';
-import type { SonglinkService } from '@listentomore/songlink';
+import type { StreamingLinksService } from '@listentomore/streaming-links';
 import type { AIService } from '@listentomore/ai';
 import type { LastfmService } from '@listentomore/lastfm';
 
@@ -21,7 +21,7 @@ interface Env {
 
 interface Services {
   spotify: SpotifyService;
-  songlink: SonglinkService;
+  streamingLinks: StreamingLinksService;
   ai: AIService;
   lastfm: (username: string) => LastfmService;
 }

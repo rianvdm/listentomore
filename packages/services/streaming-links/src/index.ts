@@ -1,18 +1,22 @@
 // Streaming Links Service - self-hosted alternative to Songlink
+// Designed for extensibility: new providers can be added without changing consumers
 
 import { CACHE_CONFIG } from '@listentomore/config';
 import { AppleMusicProvider, type AppleMusicConfig } from './providers/apple-music';
 import { YouTubeProvider } from './providers/youtube';
 import { extractYear } from './matching';
+import { parseStreamingUrl, type ParsedUrl } from './url-parser';
 import type {
   TrackMetadata,
   AlbumMetadata,
   StreamingLinksResult,
 } from './types';
 
+// Re-export types for consumers
 export type { TrackMetadata, AlbumMetadata, StreamingLinksResult, ProviderResult } from './types';
-export { AppleMusicProvider, type AppleMusicConfig } from './providers/apple-music';
+export { AppleMusicProvider, type AppleMusicConfig, type AppleMusicTrackData, type AppleMusicAlbumData } from './providers/apple-music';
 export { YouTubeProvider } from './providers/youtube';
+export { parseStreamingUrl, isSupportedUrl, type ParsedUrl, type ContentType, type StreamingPlatform } from './url-parser';
 
 // Backward compatibility type matching songlink service
 export interface StreamingLinks {
@@ -49,6 +53,44 @@ interface SpotifyAlbumForMetadata {
   external_urls?: { spotify?: string };
 }
 
+/**
+ * Interface for Spotify lookup operations
+ *
+ * This interface is designed to be compatible with SpotifyService from @listentomore/spotify.
+ * The types match the actual return values from the Spotify service.
+ */
+export interface SpotifyLookupService {
+  // AlbumSearchResult shape from Spotify service
+  searchAlbumByArtist(artist: string, album: string): Promise<{
+    id: string;
+    name: string;
+    url: string;
+  } | null>;
+
+  // TrackSearchResult shape - no track ID available, only title
+  searchTrack(query: string): Promise<{
+    title: string;
+    artist: string;
+    url: string;
+  } | null>;
+
+  // AlbumDetails shape from Spotify service (getAlbum returns full details)
+  getAlbum(id: string): Promise<{
+    id: string;
+    name: string;
+    artist: string;
+    artistIds: string[];
+    releaseDate: string;
+    tracks: number;
+    url: string;
+    image: string | null;
+    upc: string | null;
+  } | null>;
+
+  // Full track details (optional - not all Spotify services implement this)
+  getTrack?(id: string): Promise<SpotifyTrackForMetadata | null>;
+}
+
 export class StreamingLinksService {
   private appleMusic: AppleMusicProvider;
   // YouTube provider kept for potential future use but not currently called in getTrackLinks/getAlbumLinks
@@ -63,6 +105,13 @@ export class StreamingLinksService {
   ) {
     this.appleMusic = new AppleMusicProvider(config.appleMusic);
     this.youtubeProvider = new YouTubeProvider(config.youtubeApiKey);
+  }
+
+  /**
+   * Check if Apple Music credentials are configured
+   */
+  get hasAppleMusicCredentials(): boolean {
+    return this.appleMusic.hasCredentials;
   }
 
   /**
@@ -234,6 +283,260 @@ export class StreamingLinksService {
       songlinkUrl: null,
       deezerUrl: null,
       spotifyUrl: spotifyUrl,
+      tidalUrl: null,
+      artistName: 'Unknown Artist',
+      title: 'Unknown Title',
+      thumbnailUrl: null,
+      type: 'unknown',
+    };
+  }
+
+  /**
+   * Resolve any supported streaming URL to streaming links.
+   *
+   * Supports:
+   * - Spotify URLs (tracks and albums) - fetches data, gets Apple Music link
+   * - Apple Music URLs (tracks and albums) - reverse lookup via Spotify, gets links
+   *
+   * This is the main entry point for the Discord bot's /listenurl command.
+   *
+   * @param url - Any supported streaming URL
+   * @param spotifyService - Spotify service for lookups (tracks, albums, search)
+   * @returns StreamingLinks object with cross-platform links
+   */
+  async getLinksFromUrl(
+    url: string,
+    spotifyService: SpotifyLookupService
+  ): Promise<StreamingLinks> {
+    const parsed = parseStreamingUrl(url);
+
+    console.log(`[StreamingLinks] Resolving URL: ${parsed.platform}/${parsed.contentType}/${parsed.id}`);
+
+    if (parsed.platform === 'unknown' || !parsed.id) {
+      console.log(`[StreamingLinks] Unsupported URL: ${url}`);
+      return {
+        pageUrl: '',
+        appleUrl: null,
+        songlinkUrl: null,
+        deezerUrl: null,
+        spotifyUrl: null,
+        tidalUrl: null,
+        artistName: 'Unknown Artist',
+        title: 'Unknown Title',
+        thumbnailUrl: null,
+        type: 'unknown',
+      };
+    }
+
+    // Handle Spotify URLs directly
+    if (parsed.platform === 'spotify') {
+      return this.resolveSpotifyUrl(parsed, spotifyService);
+    }
+
+    // Handle Apple Music URLs via reverse lookup
+    if (parsed.platform === 'apple-music') {
+      return this.resolveAppleMusicUrl(parsed, spotifyService);
+    }
+
+    // Shouldn't reach here, but TypeScript needs it
+    throw new Error(`Unsupported platform: ${parsed.platform}`);
+  }
+
+  /**
+   * Resolve a parsed Spotify URL to streaming links
+   */
+  private async resolveSpotifyUrl(
+    parsed: ParsedUrl,
+    spotifyService: SpotifyLookupService
+  ): Promise<StreamingLinks> {
+    const spotifyId = parsed.id!;
+
+    if (parsed.contentType === 'album') {
+      const album = await spotifyService.getAlbum(spotifyId);
+      if (!album) {
+        console.log(`[StreamingLinks] Spotify album not found: ${spotifyId}`);
+        return this.createUnknownResult(parsed.originalUrl, 'spotify');
+      }
+
+      // Convert AlbumDetails shape to SpotifyAlbumForMetadata shape
+      const albumForMetadata = {
+        id: album.id,
+        name: album.name,
+        artists: [{ name: album.artist }],
+        total_tracks: album.tracks,
+        release_date: album.releaseDate,
+        external_ids: album.upc ? { upc: album.upc } : undefined,
+        images: album.image ? [{ url: album.image }] : undefined,
+      };
+
+      return this.getLinksFromSpotifyUrl(parsed.originalUrl, {
+        type: 'album',
+        album: albumForMetadata,
+      });
+    }
+
+    if (parsed.contentType === 'track' && spotifyService.getTrack) {
+      const track = await spotifyService.getTrack(spotifyId);
+      if (!track) {
+        console.log(`[StreamingLinks] Spotify track not found: ${spotifyId}`);
+        return this.createUnknownResult(parsed.originalUrl, 'spotify');
+      }
+
+      return this.getLinksFromSpotifyUrl(parsed.originalUrl, {
+        type: 'track',
+        track,
+      });
+    }
+
+    // Fallback: construct URL without full metadata
+    console.log(`[StreamingLinks] No track getter available, returning basic result`);
+    return this.createUnknownResult(parsed.originalUrl, 'spotify');
+  }
+
+  /**
+   * Resolve a parsed Apple Music URL via reverse lookup to Spotify
+   */
+  private async resolveAppleMusicUrl(
+    parsed: ParsedUrl,
+    spotifyService: SpotifyLookupService
+  ): Promise<StreamingLinks> {
+    const appleId = parsed.id!;
+
+    if (parsed.contentType === 'album') {
+      // Fetch album data from Apple Music
+      const appleAlbum = await this.appleMusic.getAlbumById(appleId);
+      if (!appleAlbum) {
+        console.log(`[StreamingLinks] Apple Music album not found: ${appleId}`);
+        return this.createUnknownResult(parsed.originalUrl, 'apple-music');
+      }
+
+      // Search Spotify for matching album
+      const spotifyResult = await spotifyService.searchAlbumByArtist(
+        appleAlbum.artistName,
+        appleAlbum.name
+      );
+
+      if (!spotifyResult) {
+        console.log(`[StreamingLinks] Could not find Spotify match for Apple album: ${appleAlbum.name}`);
+        // Return Apple data without Spotify link
+        return {
+          pageUrl: '',
+          appleUrl: appleAlbum.url,
+          songlinkUrl: null,
+          deezerUrl: null,
+          spotifyUrl: null,
+          tidalUrl: null,
+          artistName: appleAlbum.artistName,
+          title: appleAlbum.name,
+          thumbnailUrl: null,
+          type: 'album',
+        };
+      }
+
+      // Get full Spotify album data for proper metadata
+      const spotifyAlbum = await spotifyService.getAlbum(spotifyResult.id);
+      if (!spotifyAlbum) {
+        return {
+          pageUrl: '',
+          appleUrl: appleAlbum.url,
+          songlinkUrl: null,
+          deezerUrl: null,
+          spotifyUrl: spotifyResult.url,
+          tidalUrl: null,
+          artistName: appleAlbum.artistName,
+          title: appleAlbum.name,
+          thumbnailUrl: null,
+          type: 'album',
+        };
+      }
+
+      // Convert AlbumDetails shape to SpotifyAlbumForMetadata shape
+      const spotifyAlbumForMetadata = {
+        id: spotifyAlbum.id,
+        name: spotifyAlbum.name,
+        artists: [{ name: spotifyAlbum.artist }],
+        total_tracks: spotifyAlbum.tracks,
+        release_date: spotifyAlbum.releaseDate,
+        external_ids: spotifyAlbum.upc ? { upc: spotifyAlbum.upc } : undefined,
+        images: spotifyAlbum.image ? [{ url: spotifyAlbum.image }] : undefined,
+      };
+
+      // Now get streaming links the normal way (Spotify → providers)
+      const links = await this.getLinksFromSpotifyUrl(spotifyResult.url, {
+        type: 'album',
+        album: spotifyAlbumForMetadata,
+      });
+
+      // Override Apple URL with the one from the original request
+      return {
+        ...links,
+        appleUrl: appleAlbum.url,
+      };
+    }
+
+    if (parsed.contentType === 'track') {
+      // Fetch track data from Apple Music
+      const appleTrack = await this.appleMusic.getTrackById(appleId);
+      if (!appleTrack) {
+        console.log(`[StreamingLinks] Apple Music track not found: ${appleId}`);
+        return this.createUnknownResult(parsed.originalUrl, 'apple-music');
+      }
+
+      // Search Spotify for matching track
+      const query = `${appleTrack.artistName} ${appleTrack.name}`;
+      const spotifyResult = await spotifyService.searchTrack(query);
+
+      if (!spotifyResult) {
+        console.log(`[StreamingLinks] Could not find Spotify match for Apple track: ${appleTrack.name}`);
+        return {
+          pageUrl: '',
+          appleUrl: appleTrack.url,
+          songlinkUrl: null,
+          deezerUrl: null,
+          spotifyUrl: null,
+          tidalUrl: null,
+          artistName: appleTrack.artistName,
+          title: appleTrack.name,
+          thumbnailUrl: null,
+          type: 'song',
+        };
+      }
+
+      // Note: TrackSearchResult doesn't include the track ID, only albumId.
+      // For reverse lookups (Apple → Spotify), we return the basic result without
+      // full track metadata. This is a limitation of the Spotify search API.
+      console.log(`[StreamingLinks] Found Spotify match: "${spotifyResult.title}" by ${spotifyResult.artist}`);
+      return {
+        pageUrl: '',
+        appleUrl: appleTrack.url,
+        songlinkUrl: `https://song.link/${spotifyResult.url}`,
+        deezerUrl: null,
+        spotifyUrl: spotifyResult.url,
+        tidalUrl: null,
+        artistName: spotifyResult.artist,
+        title: spotifyResult.title,
+        thumbnailUrl: null,
+        type: 'song',
+      };
+    }
+
+    // Unsupported content type
+    return this.createUnknownResult(parsed.originalUrl, 'apple-music');
+  }
+
+  /**
+   * Create a result for unknown/failed lookups
+   */
+  private createUnknownResult(
+    originalUrl: string,
+    platform: 'spotify' | 'apple-music'
+  ): StreamingLinks {
+    return {
+      pageUrl: '',
+      appleUrl: platform === 'apple-music' ? originalUrl : null,
+      songlinkUrl: null,
+      deezerUrl: null,
+      spotifyUrl: platform === 'spotify' ? originalUrl : null,
       tidalUrl: null,
       artistName: 'Unknown Artist',
       title: 'Unknown Title',

@@ -1,7 +1,7 @@
 // /listento command - Get details about an album by artist
 
 import type { SpotifyService } from '@listentomore/spotify';
-import type { SonglinkService } from '@listentomore/songlink';
+import { StreamingLinksService } from '@listentomore/streaming-links';
 import type { AIService } from '@listentomore/ai';
 import type { LastfmService } from '@listentomore/lastfm';
 
@@ -22,7 +22,7 @@ interface Env {
 
 interface Services {
   spotify: SpotifyService;
-  songlink: SonglinkService;
+  streamingLinks: StreamingLinksService;
   ai: AIService;
   lastfm: (username: string) => LastfmService;
 }
@@ -58,10 +58,19 @@ export async function handleListento(
       ? spotifyResult.releaseDate.split('-')[0]
       : 'Unknown';
 
+    // Create album metadata for streaming links service
+    const albumMetadata = StreamingLinksService.albumMetadataFromSpotify({
+      id: spotifyResult.id,
+      name: spotifyResult.name,
+      artists: [{ name: spotifyResult.artist }],
+      total_tracks: 0, // Not available from search result
+      release_date: spotifyResult.releaseDate || '',
+    });
+
     // Fetch streaming links and artist sentence in parallel
-    const [songlinkData, artistSentence] = await Promise.all([
-      services.songlink.getLinks(spotifyResult.url).catch((err) => {
-        console.error('Songlink error:', err);
+    const [linksResult, artistSentence] = await Promise.all([
+      services.streamingLinks.getAlbumLinks(albumMetadata).catch((err: unknown) => {
+        console.error('StreamingLinks error:', err);
         return null;
       }),
       services.ai.getArtistSentence(spotifyResult.artist.split(',')[0]).catch((err) => {
@@ -70,14 +79,14 @@ export async function handleListento(
       }),
     ]);
 
-    // Build streaming links - fallback to just Spotify if Songlink fails
-    const streamingLinks = songlinkData
+    // Build streaming links - fallback to just Spotify if service fails
+    const streamingLinks = linksResult
       ? formatStreamingLinks({
-          pageUrl: songlinkData.pageUrl,
-          spotifyUrl: spotifyResult.url,
-          appleUrl: songlinkData.appleUrl || undefined,
-          deezerUrl: songlinkData.deezerUrl || undefined,
-        })
+        pageUrl: linksResult.songlink || '',
+        spotifyUrl: spotifyResult.url,
+        appleUrl: linksResult.appleMusic?.url || undefined,
+        deezerUrl: undefined, // Not implemented yet
+      })
       : `[Spotify](${spotifyResult.url})`;
 
     const username = getUsername(interaction);

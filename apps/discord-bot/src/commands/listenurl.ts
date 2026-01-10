@@ -1,7 +1,8 @@
 // /listenurl command - Get streaming links for a given URL
+// Supports Spotify and Apple Music URLs
 
 import type { SpotifyService } from '@listentomore/spotify';
-import type { SonglinkService } from '@listentomore/songlink';
+import type { StreamingLinksService } from '@listentomore/streaming-links';
 import type { AIService } from '@listentomore/ai';
 import type { LastfmService } from '@listentomore/lastfm';
 
@@ -22,7 +23,7 @@ interface Env {
 
 interface Services {
   spotify: SpotifyService;
-  songlink: SonglinkService;
+  streamingLinks: StreamingLinksService;
   ai: AIService;
   lastfm: (username: string) => LastfmService;
 }
@@ -36,64 +37,61 @@ export async function handleListenurl(
   songUrl: string
 ): Promise<void> {
   try {
-    // Get streaming links from Songlink
-    const songlinkData = await services.songlink.getLinks(songUrl);
+    // Get streaming links using our custom service
+    // This supports both Spotify and Apple Music URLs
+    const linkData = await services.streamingLinks.getLinksFromUrl(songUrl, services.spotify);
 
-    if (!songlinkData.pageUrl) {
+    // Check if we got valid data
+    if (linkData.type === 'unknown' || (!linkData.artistName || linkData.artistName === 'Unknown Artist')) {
       await sendFollowUpMessage(env.DISCORD_APPLICATION_ID, interaction.token, {
-        content: "I couldn't find a streaming link for this URL.",
-        flags: MessageFlags.EPHEMERAL,
-      });
-      return;
-    }
-
-    if (!songlinkData.artistName || !songlinkData.title) {
-      await sendFollowUpMessage(env.DISCORD_APPLICATION_ID, interaction.token, {
-        content: "The streaming service couldn't identify the artist or title for this URL.",
+        content: "I couldn't find streaming links for this URL. Make sure it's a valid Spotify or Apple Music link.",
         flags: MessageFlags.EPHEMERAL,
       });
       return;
     }
 
     // For albums, try to find the Spotify ID for our album page link
-    let embedUrl = songlinkData.pageUrl;
-
-    if (songlinkData.type === 'album' && songlinkData.spotifyUrl) {
-      // Extract Spotify ID from URL (e.g., https://open.spotify.com/album/abc123)
-      const spotifyIdMatch = songlinkData.spotifyUrl.match(/album\/([a-zA-Z0-9]+)/);
+    let embedUrl = '';
+    if (linkData.type === 'album' && linkData.spotifyUrl) {
+      const spotifyIdMatch = linkData.spotifyUrl.match(/album\/([a-zA-Z0-9]+)/);
       if (spotifyIdMatch) {
         embedUrl = albumUrl(spotifyIdMatch[1]);
       }
     }
 
+    // Fallback: use songlink URL if available, or Spotify/Apple URL
+    if (!embedUrl) {
+      embedUrl = linkData.songlinkUrl || linkData.spotifyUrl || linkData.appleUrl || '';
+    }
+
     // Get artist sentence
     const artistSentence = await services.ai
-      .getArtistSentence(songlinkData.artistName)
+      .getArtistSentence(linkData.artistName)
       .catch((err) => {
         console.error('Artist sentence error:', err);
         return { sentence: 'Artist sentence not available' };
       });
 
-    // Build streaming links
+    // Build streaming links for display
     const streamingLinks = formatStreamingLinks({
-      pageUrl: songlinkData.pageUrl,
-      spotifyUrl: songlinkData.spotifyUrl || undefined,
-      appleUrl: songlinkData.appleUrl || undefined,
-      deezerUrl: songlinkData.deezerUrl || undefined,
+      pageUrl: linkData.songlinkUrl || '',
+      spotifyUrl: linkData.spotifyUrl || undefined,
+      appleUrl: linkData.appleUrl || undefined,
+      deezerUrl: linkData.deezerUrl || undefined,
     });
 
     const username = getUsername(interaction);
 
     // Send the info as a public message
     await sendNewMessage(env.DISCORD_TOKEN, interaction.channel_id, {
-      content: `**${username}** requested details about **${songlinkData.title}** by **${songlinkData.artistName}**\n${streamingLinks}`,
+      content: `**${username}** requested details about **${linkData.title}** by **${linkData.artistName}**\n${streamingLinks}`,
       embeds: [
         {
-          title: `${songlinkData.title} by ${songlinkData.artistName}`,
+          title: `${linkData.title} by ${linkData.artistName}`,
           url: embedUrl,
           description: artistSentence.sentence,
           thumbnail: {
-            url: songlinkData.thumbnailUrl || NO_IMAGE_URL,
+            url: linkData.thumbnailUrl || NO_IMAGE_URL,
           },
           footer: {
             text: 'Type /listenurl to fetch another URL.',

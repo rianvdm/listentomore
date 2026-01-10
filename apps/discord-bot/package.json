@@ -14,8 +14,8 @@
     "@listentomore/config": "workspace:*",
     "@listentomore/lastfm": "workspace:*",
     "@listentomore/shared": "workspace:*",
-    "@listentomore/songlink": "workspace:*",
     "@listentomore/spotify": "workspace:*",
+    "@listentomore/streaming-links": "workspace:*",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

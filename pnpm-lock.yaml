@@ -35,12 +35,12 @@ importers:
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@listentomore/songlink':
-        specifier: workspace:*
-        version: link:../../packages/services/songlink
       '@listentomore/spotify':
         specifier: workspace:*
         version: link:../../packages/services/spotify
+      '@listentomore/streaming-links':
+        specifier: workspace:*
+        version: link:../../packages/services/streaming-links
       tweetnacl:
         specifier: ^1.0.3
         version: 1.0.3

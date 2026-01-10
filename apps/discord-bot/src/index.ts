@@ -3,7 +3,7 @@
 
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
-import { SonglinkService } from '@listentomore/songlink';
+import { StreamingLinksService } from '@listentomore/streaming-links';
 import { AIService } from '@listentomore/ai';
 
 import { verifySignature } from './lib/verify';
@@ -34,6 +34,10 @@ interface Env {
   LASTFM_API_KEY: string;
   OPENAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
+  // Apple MusicKit credentials (for streaming links)
+  APPLE_KEY_ID: string;
+  APPLE_TEAM_ID: string;
+  APPLE_PRIVATE_KEY: string;
   // Environment
   ENVIRONMENT?: string;
 }
@@ -42,7 +46,7 @@ interface Env {
 interface Services {
   spotify: SpotifyService;
   lastfm: (username: string) => LastfmService;
-  songlink: SonglinkService;
+  streamingLinks: StreamingLinksService;
   ai: AIService;
 }
 
@@ -61,7 +65,14 @@ function createServices(env: Env): Services {
         apiKey: env.LASTFM_API_KEY,
         username,
       }),
-    songlink: new SonglinkService(env.CACHE),
+    // StreamingLinksService replaces Songlink for cross-platform links
+    streamingLinks: new StreamingLinksService(env.CACHE, {
+      appleMusic: {
+        keyId: env.APPLE_KEY_ID,
+        teamId: env.APPLE_TEAM_ID,
+        privateKey: env.APPLE_PRIVATE_KEY,
+      },
+    }),
     ai: new AIService({
       openaiApiKey: env.OPENAI_API_KEY,
       perplexityApiKey: env.PERPLEXITY_API_KEY,

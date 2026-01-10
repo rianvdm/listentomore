@@ -63,6 +63,34 @@ interface AppleMusicSearchResponse {
   };
 }
 
+/**
+ * Track data returned from Apple Music API lookup
+ * Used for reverse lookup (Apple URL → metadata)
+ */
+export interface AppleMusicTrackData {
+  id: string;
+  name: string;
+  artistName: string;
+  albumName: string;
+  durationMs: number;
+  isrc?: string;
+  url: string;
+}
+
+/**
+ * Album data returned from Apple Music API lookup
+ * Used for reverse lookup (Apple URL → metadata)
+ */
+export interface AppleMusicAlbumData {
+  id: string;
+  name: string;
+  artistName: string;
+  trackCount: number;
+  releaseYear: number;
+  upc?: string;
+  url: string;
+}
+
 export interface AppleMusicConfig {
   teamId: string;
   keyId: string;
@@ -402,6 +430,81 @@ export class AppleMusicProvider implements StreamingProvider {
       url: `https://music.apple.com/search?term=${encodeURIComponent(query)}`,
       confidence: 0,
       fallback: true,
+    };
+  }
+
+  /**
+   * Check if MusicKit credentials are configured
+   */
+  get hasCredentials(): boolean {
+    return this.config !== null;
+  }
+
+  /**
+   * Get track data by Apple Music ID
+   * Used for reverse lookup: Apple Music URL → track metadata
+   */
+  async getTrackById(id: string): Promise<AppleMusicTrackData | null> {
+    if (!this.config) {
+      console.log('[AppleMusic] No credentials configured for track lookup');
+      return null;
+    }
+
+    console.log(`[AppleMusic] Looking up track by ID: ${id}`);
+    const data = await this.apiRequest<AppleMusicResponse<AppleMusicSongAttributes>>(
+      `/catalog/${DEFAULT_STOREFRONT}/songs/${id}`
+    );
+
+    if (!data?.data?.[0]) {
+      console.log(`[AppleMusic] Track not found: ${id}`);
+      return null;
+    }
+
+    const track = data.data[0];
+    console.log(`[AppleMusic] Found track: "${track.attributes.name}" by ${track.attributes.artistName}`);
+
+    return {
+      id: track.id,
+      name: track.attributes.name,
+      artistName: track.attributes.artistName,
+      albumName: track.attributes.albumName,
+      durationMs: track.attributes.durationInMillis,
+      isrc: track.attributes.isrc,
+      url: toGeoAgnosticUrl(track.attributes.url),
+    };
+  }
+
+  /**
+   * Get album data by Apple Music ID
+   * Used for reverse lookup: Apple Music URL → album metadata
+   */
+  async getAlbumById(id: string): Promise<AppleMusicAlbumData | null> {
+    if (!this.config) {
+      console.log('[AppleMusic] No credentials configured for album lookup');
+      return null;
+    }
+
+    console.log(`[AppleMusic] Looking up album by ID: ${id}`);
+    const data = await this.apiRequest<AppleMusicResponse<AppleMusicAlbumAttributes>>(
+      `/catalog/${DEFAULT_STOREFRONT}/albums/${id}`
+    );
+
+    if (!data?.data?.[0]) {
+      console.log(`[AppleMusic] Album not found: ${id}`);
+      return null;
+    }
+
+    const album = data.data[0];
+    console.log(`[AppleMusic] Found album: "${album.attributes.name}" by ${album.attributes.artistName}`);
+
+    return {
+      id: album.id,
+      name: album.attributes.name,
+      artistName: album.attributes.artistName,
+      trackCount: album.attributes.trackCount,
+      releaseYear: extractYear(album.attributes.releaseDate),
+      upc: album.attributes.upc,
+      url: toGeoAgnosticUrl(album.attributes.url),
     };
   }
 }
