@@ -39,7 +39,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 ### Discord Bot Commands
 - `/listento artist:X album:Y` - Get album details with streaming links and AI summary
 - `/listenlast lastfm_user:X` - See what someone is listening to on Last.fm
-- `/listenurl url:X` - Get cross-platform links from a Spotify URL
+- `/listenurl url:X` - Get cross-platform links from a Spotify or Apple Music URL
 - `/whois artist:X` - Quick AI summary of any artist
 - `/whatis genre:X` - AI explanation of a music genre
 - `/ask question:X` - Chat with the Rick Rubin AI personality
@@ -81,7 +81,7 @@ listentomore/
 │   │   ├── lastfm/             # Last.fm API client
 │   │   ├── ai/                 # OpenAI + Perplexity clients
 │   │   ├── songlink/           # Odesli/Songlink API client
-│   │   └── streaming-links/    # Apple Music + YouTube link matching
+│   │   └── streaming-links/    # Cross-platform link service (Apple Music, URL parsing)
 │   ├── db/                     # D1 schema, migrations, queries
 │   ├── config/                 # Centralized config (cache TTLs, AI prompts)
 │   └── shared/                 # Shared types and utilities

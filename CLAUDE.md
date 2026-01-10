@@ -34,7 +34,7 @@ apps/
       components/   # UI components
       middleware/   # Auth, rate limiting, logging, session management
       utils/        # Helpers and utilities (session, internal tokens)
-  discord-bot/      # Discord bot (separate Worker)
+  discord-bot/      # Discord bot (separate Worker, uses StreamingLinksService)
 packages/
   services/         # Backend services (spotify, lastfm, ai, songlink)
   db/               # D1 schema and migrations
@@ -75,6 +75,7 @@ const spotify = c.get('spotify') as SpotifyService;
 const lastfm = c.get('lastfm') as LastfmService;
 const ai = c.get('ai') as AIService;
 const songlink = c.get('songlink') as SonglinkService;
+const streamingLinks = c.get('streamingLinks') as StreamingLinksService;
 const db = c.get('db') as Database;
 
 // User session context (set by sessionMiddleware)
@@ -98,6 +99,23 @@ Required secrets in `apps/web/wrangler.toml`:
 | `INTERNAL_API_SECRET` | Internal API tokens |
 | `ADMIN_SECRET` | Admin endpoints |
 | `DISCORD_WEBHOOK_URL` | Discord notifications (user signups) |
+
+Discord bot secrets in `apps/discord-bot/wrangler.toml`:
+
+| Variable | Purpose |
+|----------|---------|
+| `DISCORD_TOKEN` | Discord bot token |
+| `DISCORD_APPLICATION_ID` | Discord app ID |
+| `DISCORD_PUBLIC_KEY` | Discord interaction verification |
+| `SPOTIFY_CLIENT_ID` | Spotify API |
+| `SPOTIFY_CLIENT_SECRET` | Spotify API |
+| `SPOTIFY_REFRESH_TOKEN` | Spotify API |
+| `LASTFM_API_KEY` | Last.fm API |
+| `OPENAI_API_KEY` | AI summaries |
+| `PERPLEXITY_API_KEY` | AI summaries |
+| `APPLE_KEY_ID` | Apple MusicKit (for StreamingLinksService) |
+| `APPLE_TEAM_ID` | Apple MusicKit |
+| `APPLE_PRIVATE_KEY` | Apple MusicKit (PEM format) |
 
 ---
 
@@ -428,6 +446,7 @@ All cache TTLs in `packages/config/src/cache.ts`. Use `getTtlSeconds()` helper.
 | Last.fm (artist detail) | 30 days |
 | Last.fm (top albums/artists) | 1 hour |
 | Songlink | 30 days |
+| StreamingLinks | 30 days |
 
 ### Internal API Security
 
