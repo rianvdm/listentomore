@@ -72,9 +72,6 @@ importers:
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@listentomore/songlink':
-        specifier: workspace:*
-        version: link:../../packages/services/songlink
       '@listentomore/spotify':
         specifier: workspace:*
         version: link:../../packages/services/spotify
@@ -88,6 +85,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20241127.0
         version: 4.20251128.0
+      '@listentomore/songlink':
+        specifier: workspace:*
+        version: link:../../packages/services/songlink
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

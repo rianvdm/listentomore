@@ -4,7 +4,6 @@
 import type { Database, ParsedApiKey, User } from '@listentomore/db';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { LastfmService } from '@listentomore/lastfm';
-import type { SonglinkService } from '@listentomore/songlink';
 import type { StreamingLinksService } from '@listentomore/streaming-links';
 import type { AIService } from '@listentomore/ai';
 
@@ -43,7 +42,6 @@ export type Variables = {
   spotify: SpotifyService;
   spotifyStreaming: SpotifyService; // Secondary app for streaming-links (rate limit isolation)
   lastfm: LastfmService;
-  songlink: SonglinkService;
   streamingLinks: StreamingLinksService;
   ai: AIService;
   // Auth context (API keys)

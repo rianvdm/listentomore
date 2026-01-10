@@ -74,7 +74,6 @@ pnpm run deploy       # Deploy to Cloudflare
 const spotify = c.get('spotify') as SpotifyService;
 const lastfm = c.get('lastfm') as LastfmService;
 const ai = c.get('ai') as AIService;
-const songlink = c.get('songlink') as SonglinkService;
 const streamingLinks = c.get('streamingLinks') as StreamingLinksService;
 const db = c.get('db') as Database;
 

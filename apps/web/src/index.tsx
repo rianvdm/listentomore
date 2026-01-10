@@ -6,7 +6,6 @@ import { SITE_CONFIG, CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { Database } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
-import { SonglinkService } from '@listentomore/songlink';
 import { StreamingLinksService } from '@listentomore/streaming-links';
 import { AIService } from '@listentomore/ai';
 // Note: CACHE_CONFIG and getTtlSeconds used in scheduled() for cron jobs
@@ -86,11 +85,11 @@ app.use('*', async (c, next) => {
   // Falls back to primary if secondary credentials not configured
   const spotifyStreaming = c.env.SPOTIFY_STREAMING_CLIENT_ID
     ? new SpotifyService({
-        clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID!,
-        clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
-        refreshToken: c.env.SPOTIFY_STREAMING_REFRESH_TOKEN!,
-        cache: c.env.CACHE,
-      })
+      clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID!,
+      clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
+      refreshToken: c.env.SPOTIFY_STREAMING_REFRESH_TOKEN!,
+      cache: c.env.CACHE,
+    })
     : spotify;
   c.set('spotifyStreaming', spotifyStreaming);
 
@@ -103,8 +102,6 @@ app.use('*', async (c, next) => {
     })
   );
 
-  c.set('songlink', new SonglinkService(c.env.CACHE));
-
   c.set(
     'streamingLinks',
     new StreamingLinksService(c.env.CACHE, {
@@ -112,10 +109,10 @@ app.use('*', async (c, next) => {
       appleMusic:
         c.env.APPLE_TEAM_ID && c.env.APPLE_KEY_ID && c.env.APPLE_PRIVATE_KEY
           ? {
-              teamId: c.env.APPLE_TEAM_ID,
-              keyId: c.env.APPLE_KEY_ID,
-              privateKey: c.env.APPLE_PRIVATE_KEY,
-            }
+            teamId: c.env.APPLE_TEAM_ID,
+            keyId: c.env.APPLE_KEY_ID,
+            privateKey: c.env.APPLE_PRIVATE_KEY,
+          }
           : undefined,
     })
   );
