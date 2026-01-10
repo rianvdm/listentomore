@@ -8,7 +8,7 @@ import {
     isSupportedUrl,
     buildSpotifyUrl,
     buildAppleMusicUrl,
-} from '../url-parser';
+} from '../src/url-parser';
 
 describe('parseSpotifyUrl', () => {
     it('parses track URL', () => {
