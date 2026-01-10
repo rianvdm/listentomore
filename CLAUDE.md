@@ -6,7 +6,7 @@
 
 Music discovery web app built with **Hono on Cloudflare Workers**. Monorepo managed by **Turborepo** and **pnpm**.
 
-**Version:** 1.1.0 (Released 2025-12-14)
+**Version:** 1.2.0 (Released 2026-01-10)
 
 **Key constraint:** Single Worker architecture. Do NOT create new workers or separate API services.
 
