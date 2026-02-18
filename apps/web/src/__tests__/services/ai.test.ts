@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, generateArtistSummary } from '@listentomore/ai';
+import { OpenAIClient, AICache, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -284,6 +284,75 @@ describe('generateArtistSummary', () => {
     (mockKV.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(cachedResult);
 
     const result = await generateArtistSummary('Radiohead', mockClient, cache);
+
+    expect(result).toEqual(cachedResult);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateArtistSentence', () => {
+  let mockKV: KVNamespace;
+  let mockClient: OpenAIClient;
+  let cache: AICache;
+
+  beforeEach(() => {
+    mockKV = createMockKV();
+    cache = new AICache(mockKV);
+    mockClient = new OpenAIClient('test-key');
+  });
+
+  it('strips citation markers from response', async () => {
+    // gpt-5-search-api uses Chat Completions API format
+    const response = {
+      model: 'gpt-5-search-api',
+      choices: [
+        {
+          message: {
+            content: 'They are an English alternative rock band [1] known for experimental sounds [2]. Similar artists include Muse and Portishead.',
+            annotations: [
+              { type: 'url_citation', url_citation: { url: 'https://example.com/1' } },
+              { type: 'url_citation', url_citation: { url: 'https://example.com/2' } },
+            ],
+          },
+        },
+      ],
+    };
+    setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+    const result = await generateArtistSentence('Radiohead', mockClient, cache);
+
+    // Citation markers should be stripped
+    expect(result.sentence).not.toContain('[1]');
+    expect(result.sentence).not.toContain('[2]');
+    expect(result.sentence).toBe('They are an English alternative rock band known for experimental sounds. Similar artists include Muse and Portishead.');
+  });
+
+  it('handles Chinese-style citation brackets', async () => {
+    // Chinese brackets typically appear with a space before them, like Western citations
+    const response = {
+      model: 'gpt-5-search-api',
+      choices: [
+        {
+          message: {
+            content: 'They are a rock band 【1】 from Oxford 【2】.',
+          },
+        },
+      ],
+    };
+    setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+    const result = await generateArtistSentence('Radiohead', mockClient, cache);
+
+    expect(result.sentence).not.toContain('【1】');
+    expect(result.sentence).not.toContain('【2】');
+    expect(result.sentence).toBe('They are a rock band from Oxford.');
+  });
+
+  it('returns cached result without API call', async () => {
+    const cachedResult = { sentence: 'Cached artist sentence' };
+    (mockKV.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(cachedResult);
+
+    const result = await generateArtistSentence('Radiohead', mockClient, cache);
 
     expect(result).toEqual(cachedResult);
     expect(globalThis.fetch).not.toHaveBeenCalled();

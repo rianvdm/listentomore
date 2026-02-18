@@ -40,7 +40,8 @@ Include their main genres, and name 2-3 similar artists.
 CRITICAL REQUIREMENTS:
 * In total the response HAS to be less than 38 words.
 * If you don't have information about this musical artist, say "There is no information available about this artist."
-* Use plain text ONLY - NO Markdown formatting (no **bold**, no *italic*, no ### headers, etc.).`;
+* Use plain text ONLY - NO Markdown formatting (no **bold**, no *italic*, no ### headers, etc.).
+* Do NOT include citation markers like [1], [2], etc. - this is a plain text summary with no citations.`;
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -60,8 +61,16 @@ CRITICAL REQUIREMENTS:
     webSearch: config.webSearch,
   });
 
+  // Strip any citation markers that might have been included despite instructions
+  // Handles [1], [2], [1][2], and Chinese brackets【1】
+  const cleanedContent = response.content
+    .replace(/\s*[\[【]\d+[\]】]/g, '')      // Remove citation markers and preceding space
+    .replace(/\s+([.,!?;:])/g, '$1')        // Remove space before punctuation
+    .replace(/\s+/g, ' ')                    // Collapse multiple spaces
+    .trim();
+
   const result: ArtistSentenceResult = {
-    sentence: response.content.trim(),
+    sentence: cleanedContent,
   };
 
   // Cache the result
