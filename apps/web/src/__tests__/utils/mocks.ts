@@ -54,7 +54,8 @@ export function mockFetchResponse(data: unknown, options: { status?: number; ok?
  * Sets up fetch mock to return specific responses based on URL patterns
  */
 export function setupFetchMock(handlers: Array<{ pattern: RegExp | string; response: unknown; options?: { status?: number; ok?: boolean } }>) {
-  const mockFetch = vi.fn(async (url: string | URL | Request) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const mockFetch = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
     const urlString = url instanceof Request ? url.url : url.toString();
 
     for (const handler of handlers) {
@@ -69,7 +70,7 @@ export function setupFetchMock(handlers: Array<{ pattern: RegExp | string; respo
     return mockFetchResponse({ error: 'Not found' }, { status: 404, ok: false });
   });
 
-  globalThis.fetch = mockFetch;
+  globalThis.fetch = mockFetch as typeof fetch;
   return mockFetch;
 }
 

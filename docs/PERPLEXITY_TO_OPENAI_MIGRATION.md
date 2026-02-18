@@ -1,10 +1,21 @@
 # Perplexity to OpenAI Migration Plan
 
-Replace all Perplexity API calls with OpenAI (web search + citations) to consolidate on a single AI provider.
+Replace all Perplexity API calls with OpenAI GPT-5.2 (web search + citations) to consolidate on a single AI provider.
 
 ## Background
 
 Currently, ListenToMore uses **Perplexity** (`sonar` model) for 5 web-grounded tasks that need citations, and **OpenAI** for everything else. Both providers already normalize to the same `{ content: string, citations: string[] }` interface via our `ChatClient` abstraction, making this migration straightforward.
+
+### Target Model: GPT-5.2
+
+We're migrating to **GPT-5.2** (`gpt-5.2`), OpenAI's flagship model with:
+- **Web search support** via the Responses API
+- **Reasoning effort levels:** `none` (default), `low`, `medium`, `high`, `xhigh`
+- **400K context window**, 128K max output tokens
+- **Pricing:** $1.75/1M input, $14/1M output + $10/1K web search calls
+- **Knowledge cutoff:** August 31, 2025
+
+GPT-5.2 with `reasoning: 'none'` provides fast, low-latency responses. For factual web searches where accuracy matters, `reasoning: 'low'` is recommended.
 
 ### Tasks Currently on Perplexity
 
@@ -20,10 +31,16 @@ Currently, ListenToMore uses **Perplexity** (`sonar` model) for 5 web-grounded t
 
 Both `PerplexityClient` and `OpenAIClient` implement the `ChatClient` interface and return `{ content, citations }`. The OpenAI client already handles web search citations by:
 1. Extracting `url_citation` annotations from Responses API output
-2. Deduplicating URLs and assigning sequential `[N]` markers
-3. Returning the same format Perplexity uses
+2. Deduplicating URLs into the `citations[]` array
+3. Returning the same format Perplexity uses (prompts instruct models to use `[N]` markers)
 
 The client-side `transformCitations()` and `renderCitations()` functions are provider-agnostic.
+
+**Verified:** Unit tests in `apps/web/src/__tests__/services/ai.test.ts` confirm:
+- OpenAI Responses API citations are extracted from `url_citation` annotations
+- Duplicate URLs are deduplicated correctly
+- `metadata.features.webSearchUsed` indicates whether search was invoked
+- The `web_search` tool is sent when `webSearch: true` is configured
 
 ---
 
@@ -46,23 +63,97 @@ artistSummary: {
 // AFTER
 artistSummary: {
   provider: 'openai',
-  model: 'gpt-5-mini',      // Cost-effective for factual lookups
+  model: 'gpt-5.2',
   maxTokens: 1500,
-  temperature: 0.5,
+  temperature: 1,
   cacheTtlDays: 180,
-  webSearch: true,            // Replaces Perplexity's built-in search
+  webSearch: true,
+  reasoning: 'low',      // 'low' recommended for factual accuracy; 'none' for speed
+  verbosity: 'medium',   // Controls output length
 },
 ```
 
-Recommended model choices:
+#### GPT-5.2 Parameter Reference
 
-| Task | Recommended Model | Reasoning |
-|------|-------------------|-----------|
-| `artistSummary` | `gpt-5-mini` | Good quality, cost-effective for factual content |
-| `albumDetail` | `gpt-5-mini` | Same rationale |
-| `genreSummary` | `gpt-5-mini` | Same rationale |
-| `artistSentence` | `gpt-5-nano` | Very short output, simple task |
-| `albumRecommendations` | `gpt-5-mini` | Needs web verification of albums |
+| Parameter | GPT-5.2 Values | Notes |
+|-----------|----------------|-------|
+| `reasoning` | `'none'` (default), `'low'`, `'medium'`, `'high'`, `'xhigh'` | Use `'low'` for factual web searches; `'none'` for fastest responses |
+| `verbosity` | `'low'`, `'medium'`, `'high'` | Controls output length; `'medium'` is default |
+| `temperature` | Only works with `reasoning: 'none'` | Ignored when reasoning is set to any other level |
+| `webSearch` | `true` / `false` | Web search is supported at all reasoning levels including `'none'` |
+
+**Model Comparison:**
+
+| Model | Reasoning Levels | Default | Web Search | Best For |
+|-------|------------------|---------|------------|----------|
+| `gpt-5.2` | none, low, medium, high, xhigh | `none` | Yes | Complex reasoning, broad knowledge, tool calling |
+| `gpt-5-mini` | minimal, low, medium, high | `medium` | Yes (requires `low`+) | Cost-optimized, balanced |
+| `gpt-5-nano` | minimal, low, medium, high | `medium` | Limited | High-throughput, simple tasks |
+
+> **Recommendation:** Use `reasoning: 'low'` for web search tasks. This provides a good balance between speed and accuracy for factual lookups. The model will "think" briefly before searching, improving result quality.
+>
+> For `artistSentence` (short descriptions), `reasoning: 'none'` with `verbosity: 'low'` is fine since it's a simple task.
+
+> **Tip:** There's a commented-out `genreSummary` config at line ~123 in `packages/config/src/ai.ts` that can be used for testing a single task before full migration.
+
+**Complete configs for all 5 tasks:**
+
+```typescript
+artistSummary: {
+  provider: 'openai',
+  model: 'gpt-5.2',
+  maxTokens: 1500,
+  temperature: 1,
+  cacheTtlDays: 180,
+  webSearch: true,
+  reasoning: 'low',
+  verbosity: 'medium',
+},
+
+albumDetail: {
+  provider: 'openai',
+  model: 'gpt-5.2',
+  maxTokens: 1500,
+  temperature: 1,
+  cacheTtlDays: 120,
+  webSearch: true,
+  reasoning: 'low',
+  verbosity: 'medium',
+},
+
+genreSummary: {
+  provider: 'openai',
+  model: 'gpt-5.2',
+  maxTokens: 1500,
+  temperature: 1,
+  cacheTtlDays: 180,
+  webSearch: true,
+  reasoning: 'low',
+  verbosity: 'medium',
+},
+
+artistSentence: {
+  provider: 'openai',
+  model: 'gpt-5.2',
+  maxTokens: 150,
+  temperature: 1,
+  cacheTtlDays: 180,
+  webSearch: true,
+  reasoning: 'none',    // Fast, short output - no reasoning needed
+  verbosity: 'low',     // Keep it brief
+},
+
+albumRecommendations: {
+  provider: 'openai',
+  model: 'gpt-5.2',
+  maxTokens: 1000,
+  temperature: 1,
+  cacheTtlDays: 30,
+  webSearch: true,
+  reasoning: 'low',
+  verbosity: 'medium',
+},
+```
 
 ### 2. Update AIService Class (`packages/services/ai/src/index.ts`)
 
@@ -114,8 +205,23 @@ export const RATE_LIMITS = {
 };
 ```
 
-### 5. Clean Up Types (`packages/services/ai/src/types.ts`)
+### 5. Clean Up Types
 
+**`packages/config/src/ai.ts`:**
+```typescript
+// Update ReasoningEffort to include GPT-5.2's 'xhigh' level
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+// Update the comment to document GPT-5.2:
+/**
+ * Reasoning effort levels for GPT-5 models (Responses API only)
+ * - GPT-5.2: 'none' (default) | 'low' | 'medium' | 'high' | 'xhigh'
+ * - GPT-5.1: 'none' (default) | 'low' | 'medium' | 'high'
+ * - GPT-5/gpt-5-mini: 'minimal' | 'low' | 'medium' (default) | 'high'
+ */
+```
+
+**`packages/services/ai/src/types.ts`:**
 ```typescript
 // Optional: narrow provider type
 type AIProvider = 'openai';  // was 'openai' | 'perplexity'
@@ -167,7 +273,13 @@ The seed data in `001_initial.sql` (`INSERT ... ('perplexity', 30)`) is harmless
 
 File: `apps/web/src/__tests__/services/ai.test.ts`
 
-Update any test fixtures/mocks that reference Perplexity client, `sonar` model, or Perplexity-specific response formats.
+**Already done:** OpenAI client tests have been added to verify web search citation handling:
+- `OpenAIClient > Responses API with web search > extracts citations from url_citation annotations`
+- `OpenAIClient > Responses API with web search > deduplicates repeated citation URLs`
+- `OpenAIClient > Responses API with web search > handles response with no web search`
+- `OpenAIClient > Responses API with web search > sends web_search tool when webSearch option is true`
+
+Optional cleanup: Remove or update tests that reference Perplexity-specific behavior if removing the client entirely.
 
 ---
 
@@ -217,13 +329,24 @@ These files need **zero modifications**:
 
 ### Cost
 
+**GPT-5.2 Pricing (per 1M tokens):**
+- Input: $1.75
+- Cached input: $0.175 (10x cheaper)
+- Output: $14.00
+- Web search: $10.00 per 1K tool calls ($0.01/call)
+
 | Scenario | Estimated Cost (per 1K requests) |
 |----------|----------------------------------|
 | Perplexity `sonar` | ~$1-2 (varies by plan) |
-| OpenAI `gpt-5-mini` + web search | ~$0.25 input + $2.00 output + $10 per 1K search calls |
-| OpenAI `gpt-5-nano` + web search | ~$0.05 input + $0.40 output + $10 per 1K search calls |
+| OpenAI `gpt-5.2` + web search | ~$1.75 input + $14 output per 1M tokens + $10 per 1K searches |
 
-The web search tool call cost ($10/1K calls = $0.01/call) adds up. For heavily cached content (120-180 day TTLs), the actual cost impact is low since most requests are served from cache.
+**Example calculation for `artistSummary`:**
+- ~500 input tokens × 1K requests = 500K tokens = $0.875
+- ~1000 output tokens × 1K requests = 1M tokens = $14.00
+- 1K web search calls = $10.00
+- **Total: ~$24.88 per 1K uncached requests**
+
+The web search tool call cost ($0.01/call) is fixed per search. For heavily cached content (120-180 day TTLs), the actual cost impact is much lower since most requests are served from cache with no API calls.
 
 ### Rate Limits
 
