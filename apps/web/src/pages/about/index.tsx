@@ -30,7 +30,7 @@ export function AboutPage({ currentUser }: AboutPageProps) {
 
       <h2>Nerdy details</h2>
       <p>
-        The site uses APIs from Last.fm, Spotify, OpenAI, and Perplexity to get album and artist
+        The site uses APIs from Last.fm, Spotify, and OpenAI to get album and artist
         data and generate some interesting facts about it all. It is built on{' '}
         <a href="https://cloudflare.com/" target="_blank" rel="noopener noreferrer">
           Cloudflare

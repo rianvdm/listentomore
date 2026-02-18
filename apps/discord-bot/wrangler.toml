@@ -37,7 +37,6 @@ vars = { ENVIRONMENT = "production" }
 # - SPOTIFY_REFRESH_TOKEN
 # - LASTFM_API_KEY
 # - OPENAI_API_KEY
-# - PERPLEXITY_API_KEY
 # Apple MusicKit (for streaming links):
 # - APPLE_KEY_ID
 # - APPLE_TEAM_ID

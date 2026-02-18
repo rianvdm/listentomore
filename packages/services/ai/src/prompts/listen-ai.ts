@@ -32,12 +32,9 @@ Keep responses to 4 sentences maximum. Be warm but wise.`,
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
-    // Pass through GPT-5.1 options if configured
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
-    // Pass through Perplexity options if configured
-    searchContextSize: config.searchContextSize,
   });
 
   return {

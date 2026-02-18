@@ -11,7 +11,7 @@ export interface ArtistSentenceResult {
 
 /**
  * Generate a short artist description
- * Provider determined by AI_TASKS config (currently Perplexity)
+ * Provider determined by AI_TASKS config
  */
 export async function generateArtistSentence(
   artistName: string,
@@ -55,12 +55,9 @@ CRITICAL REQUIREMENTS:
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: false,
-    // Pass through GPT-5.1 options if configured
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
-    // Pass through Perplexity options if configured
-    searchContextSize: config.searchContextSize,
   });
 
   const result: ArtistSentenceResult = {

@@ -93,8 +93,7 @@ Required secrets in `apps/web/wrangler.toml`:
 | `SPOTIFY_REFRESH_TOKEN` | Spotify API |
 | `LASTFM_API_KEY` | Last.fm API (read-only) |
 | `LASTFM_SHARED_SECRET` | Last.fm API (for authentication) |
-| `OPENAI_API_KEY` | GPT models |
-| `PERPLEXITY_API_KEY` | Web-grounded AI |
+| `OPENAI_API_KEY` | GPT models (including web search) |
 | `INTERNAL_API_SECRET` | Internal API tokens |
 | `ADMIN_SECRET` | Admin endpoints |
 | `DISCORD_WEBHOOK_URL` | Discord notifications (user signups) |
@@ -110,8 +109,7 @@ Discord bot secrets in `apps/discord-bot/wrangler.toml`:
 | `SPOTIFY_CLIENT_SECRET` | Spotify API |
 | `SPOTIFY_REFRESH_TOKEN` | Spotify API |
 | `LASTFM_API_KEY` | Last.fm API |
-| `OPENAI_API_KEY` | AI summaries |
-| `PERPLEXITY_API_KEY` | AI summaries |
+| `OPENAI_API_KEY` | AI summaries (including web search) |
 | `APPLE_KEY_ID` | Apple MusicKit (for StreamingLinksService) |
 | `APPLE_TEAM_ID` | Apple MusicKit |
 | `APPLE_PRIVATE_KEY` | Apple MusicKit (PEM format) |
@@ -426,8 +424,7 @@ app.route('/', myInternalRoutes);  // Results in /api/internal/my-internal-data
 
 | Provider | Models | Best For |
 |----------|--------|----------|
-| Perplexity | `sonar` | Web-grounded responses with citations |
-| OpenAI | `gpt-5.1`, `gpt-5-mini`, `gpt-5-nano` | Reasoning, creative tasks, coding |
+| OpenAI | `gpt-5-search-api`, `gpt-5.2`, `gpt-5.1`, `gpt-5-mini` | All AI tasks including web search with citations |
 
 Key points:
 - Pass `internalToken` to Layout for pages using internal APIs
@@ -561,8 +558,7 @@ npx wrangler tail --format=json
 
 **AI responses failing:**
 - Check API keys in `.dev.vars` (local) or wrangler secrets (prod)
-- Perplexity rate limit: 30 req/min
-- OpenAI rate limit: 60 req/min
+- OpenAI rate limit: 90 req/min
 
 **Session/authentication issues:**
 - Session cookie not set - check `LASTFM_SHARED_SECRET` is configured

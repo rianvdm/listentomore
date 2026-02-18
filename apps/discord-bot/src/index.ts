@@ -33,7 +33,6 @@ interface Env {
   SPOTIFY_REFRESH_TOKEN: string;
   LASTFM_API_KEY: string;
   OPENAI_API_KEY: string;
-  PERPLEXITY_API_KEY: string;
   // Apple MusicKit credentials (for streaming links)
   APPLE_KEY_ID: string;
   APPLE_TEAM_ID: string;
@@ -75,7 +74,6 @@ function createServices(env: Env): Services {
     }),
     ai: new AIService({
       openaiApiKey: env.OPENAI_API_KEY,
-      perplexityApiKey: env.PERPLEXITY_API_KEY,
       cache: env.CACHE,
     }),
   };

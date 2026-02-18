@@ -51,7 +51,6 @@ crons = ["*/5 * * * *"]  # Run every 5 minutes (random fact only at top of hour)
 # - SPOTIFY_STREAMING_REFRESH_TOKEN
 # - LASTFM_API_KEY
 # - OPENAI_API_KEY
-# - PERPLEXITY_API_KEY
 # - DISCOGS_API_TOKEN
 # - YOUTUBE_API_KEY (for streaming links service)
 # - INTERNAL_API_SECRET (for signing internal API tokens)

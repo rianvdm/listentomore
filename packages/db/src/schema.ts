@@ -69,7 +69,7 @@ export interface DiscogsRelease {
 }
 
 export interface RateLimit {
-  service: 'discogs' | 'spotify' | 'openai' | 'perplexity';
+  service: 'discogs' | 'spotify' | 'openai';
   requests_remaining: number;
   window_reset_at: string | null;
   updated_at: string;

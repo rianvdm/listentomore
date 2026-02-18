@@ -16,7 +16,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Album & Artist Search** - Search the Spotify catalog with instant results
 - **Album Detail Pages** - Rich album pages with release info, track listings, genres, and AI-generated summaries with citations
 - **Artist Detail Pages** - Artist profiles with biography, top albums, similar artists, and genre connections
-- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by Perplexity AI (with source citations)
+- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by OpenAI GPT-5.2 with web search (with source citations)
 - **Genre Exploration** - Discover music by genre with AI-generated descriptions, history, and key artists
 - **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and Songlink (for all other services)
 - **Album Recommendations** - AI-generated "if you like this, try these" recommendations on album pages
@@ -79,7 +79,7 @@ listentomore/
 │   ├── services/               # Backend service modules
 │   │   ├── spotify/            # Spotify Web API client
 │   │   ├── lastfm/             # Last.fm API client
-│   │   ├── ai/                 # OpenAI + Perplexity clients
+│   │   ├── ai/                # OpenAI client
 │   │   ├── songlink/           # Odesli/Songlink API client
 │   │   └── streaming-links/    # Cross-platform link service (Apple Music, URL parsing)
 │   ├── db/                     # D1 schema, migrations, queries
@@ -122,7 +122,6 @@ SPOTIFY_REFRESH_TOKEN=your_spotify_refresh_token
 LASTFM_API_KEY=your_lastfm_api_key
 LASTFM_USERNAME=your_lastfm_username
 OPENAI_API_KEY=your_openai_api_key
-PERPLEXITY_API_KEY=your_perplexity_api_key
 INTERNAL_API_SECRET=your_random_secret_for_internal_apis
 
 # Optional - for admin features
@@ -157,8 +156,7 @@ pnpm deploy
 
 - **[Spotify Web API](https://developer.spotify.com/documentation/web-api)** - Music catalog data
 - **[Last.fm API](https://www.last.fm/api)** - Listening history and scrobbles
-- **[OpenAI API](https://platform.openai.com)** - GPT-5 for chatbot and fact generation
-- **[Perplexity API](https://docs.perplexity.ai)** - Sonar model for grounded, cited summaries
+- **[OpenAI API](https://platform.openai.com)** - GPT-5.2 for AI summaries, web search with citations, chatbot, and fact generation
 - **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
 - **[Songlink/Odesli](https://odesli.co)** - Cross-platform streaming links for all services
 

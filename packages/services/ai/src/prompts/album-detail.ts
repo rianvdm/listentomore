@@ -12,7 +12,7 @@ export interface AlbumDetailResult {
 
 /**
  * Generate an album detail summary
- * Provider determined by AI_TASKS config (currently Perplexity)
+ * Provider determined by AI_TASKS config
  */
 export async function generateAlbumDetail(
   artistName: string,
@@ -58,12 +58,9 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: true,
-    // Pass through GPT-5.1 options if configured
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
-    // Pass through Perplexity options if configured
-    searchContextSize: config.searchContextSize,
   });
 
   const result: AlbumDetailResult = {

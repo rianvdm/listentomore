@@ -4,12 +4,11 @@ This guide covers how to configure AI tasks, switch between providers, and use O
 
 ## Overview
 
-ListenToMore uses two AI providers:
+ListenToMore uses **OpenAI** as its sole AI provider:
 
 | Provider | Best For | Models |
 |----------|----------|--------|
-| **Perplexity** | Web-grounded responses with citations (artist info, album details, genres) | `sonar` |
-| **OpenAI** | Creative tasks, reasoning, web search, coding | `gpt-5.2`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4.1` |
+| **OpenAI** | All AI tasks including web search with citations, reasoning, creative tasks | `gpt-5-search-api`, `gpt-5.2`, `gpt-5.1`, `gpt-5-mini` |
 
 All AI configuration lives in `packages/config/src/ai.ts`.
 
@@ -43,62 +42,82 @@ GPT-5.2 is OpenAI's newest flagship model (released late 2025). Key differences 
 - **Supports web search, file search, code interpreter, image generation** tools
 - **Concise reasoning summaries** via `reasoning.summary` parameter
 
+### Specialized Search Model
+
+| Model | Best For | API | Notes |
+|-------|----------|-----|-------|
+| `gpt-5-search-api` | Web-grounded content with reliable citations | Chat Completions | Always searches the web; returns `url_citation` annotations |
+
+`gpt-5-search-api` is OpenAI's dedicated search model. Unlike using `web_search` as a tool with GPT-5.x via the Responses API, this model **reliably returns `url_citation` annotations** in every response. It uses the Chat Completions API with `web_search_options: {}`.
+
 ### Choosing a Model for ListenToMore Tasks
 
-| Use Case | Recommended Model | Why |
-|----------|-------------------|-----|
-| Web-grounded summaries (artist, album, genre) | `gpt-5-mini` + `webSearch: true` | Good quality at 7x lower cost than gpt-5.2 |
-| Short descriptions (artist sentence) | `gpt-5-nano` + `webSearch: true` | Fastest, cheapest for simple lookups |
-| Complex AI chat (ListenAI) | `gpt-5.2` | Best reasoning for conversational AI |
+| Use Case | Current Model | Why |
+|----------|---------------|-----|
+| Web-grounded summaries (artist, album, genre) | `gpt-5-search-api` | Reliable citations via Chat Completions |
+| Short descriptions (artist sentence) | `gpt-5-search-api` | Web-grounded for accuracy |
+| Album recommendations | `gpt-5-search-api` | Web search for current album data |
+| Complex AI chat (ListenAI) | `gpt-5.1` | Good reasoning for conversational AI |
 | User insights analysis | `gpt-5.2` | Complex multi-step analysis of listening data |
 | Random facts, simple generation | `gpt-5-mini` | No web search needed, cost-effective |
-| Image generation prompts | `gpt-5-nano` | Simple creative task |
 
 ---
 
-## Switching Providers for a Task
+## Switching Models for a Task
 
-To change which provider/model a task uses, edit `AI_TASKS` in `packages/config/src/ai.ts`:
+To change which model a task uses, edit `AI_TASKS` in `packages/config/src/ai.ts`:
 
 ```typescript
 export const AI_TASKS = {
   artistSummary: {
-    provider: 'perplexity',  // Change to 'openai' to switch
-    model: 'sonar',          // Update model accordingly
-    maxTokens: 1000,
-    temperature: 0.5,
+    provider: 'openai',
+    model: 'gpt-5-search-api',  // Dedicated search model
+    maxTokens: 1500,
+    temperature: 1,
     cacheTtlDays: 180,
+    webSearch: true,              // Adds web_search_options to request
   },
   // ...
 };
 ```
 
-### Example: Switch artistSummary to OpenAI with Web Search
+### Example: Web Search Task (Chat Completions)
 
 ```typescript
 artistSummary: {
   provider: 'openai',
-  model: 'gpt-5-mini',       // or 'gpt-5.2' for best quality
-  maxTokens: 1000,
-  temperature: 0.5,           // Only works when reasoning is not set
+  model: 'gpt-5-search-api',  // Uses Chat Completions API
+  maxTokens: 1500,
+  temperature: 1,
   cacheTtlDays: 180,
-  webSearch: true,             // Enable web search (Responses API)
-  // Optional OpenAI-specific options:
-  // reasoning: 'low',         // 'none' | 'low' | 'medium' | 'high' | 'xhigh'
-  // verbosity: 'medium',      // 'low' | 'medium' | 'high'
+  webSearch: true,              // Required for gpt-5-search-api
 },
 ```
 
-### Provider Comparison
+### Example: Non-Search Task (Responses API)
 
-| Feature | Perplexity | OpenAI (Chat Completions) | OpenAI (Responses API) |
-|---------|------------|---------------------------|------------------------|
-| Web search | Always on | Via `gpt-5-search-api` model | Via `web_search` tool |
-| Citations | Built-in (`return_citations`) | Via annotations | Via annotations |
-| Domain filtering | N/A | N/A | `filters.allowed_domains` |
-| Reasoning control | N/A | `reasoning_effort` param | `reasoning.effort` param |
-| Verbosity control | N/A | `verbosity` param | `text.verbosity` param |
-| Temperature | Yes | Yes (some models) | Only when reasoning is `none` |
+```typescript
+userInsightsSummary: {
+  provider: 'openai',
+  model: 'gpt-5.2',            // Uses Responses API
+  maxTokens: 1000,
+  temperature: 1,
+  cacheTtlDays: 1,
+  reasoning: 'low',             // Responses API feature
+  verbosity: 'low',             // Responses API feature
+},
+```
+
+### API Comparison
+
+| Feature | OpenAI (Chat Completions) | OpenAI (Responses API) |
+|---------|---------------------------|------------------------|
+| Web search | Via `gpt-5-search-api` model | Via `web_search` tool |
+| Citations | Via annotations | Via annotations |
+| Domain filtering | N/A | `filters.allowed_domains` |
+| Reasoning control | `reasoning_effort` param | `reasoning.effort` param |
+| Verbosity control | `verbosity` param | `text.verbosity` param |
+| Temperature | Yes (some models) | Only when reasoning is `none` |
 
 ---
 
@@ -154,35 +173,44 @@ Controls output length:
 
 ### Web Search
 
-GPT-5.2 (and other GPT-5 family models) support web search via the **Responses API** using the `web_search` tool.
+ListenToMore uses `gpt-5-search-api` via the **Chat Completions API** for all web-grounded tasks. This is OpenAI's dedicated search model that always performs web search and reliably returns `url_citation` annotations.
 
-To enable, add `webSearch: true` to the task config:
+To enable, set `model: 'gpt-5-search-api'` and `webSearch: true`:
 
 ```typescript
 artistSummary: {
   provider: 'openai',
-  model: 'gpt-5-mini',
-  webSearch: true,        // Enables web_search tool
-  maxTokens: 1000,
+  model: 'gpt-5-search-api',
+  webSearch: true,        // Adds web_search_options: {} to request
+  maxTokens: 1500,
   cacheTtlDays: 180,
 },
 ```
 
 The OpenAI client will automatically:
-1. Use the Responses API instead of Chat Completions
-2. Include the `web_search` tool in the request
-3. Parse citations from response annotations
-4. Normalize citation format to match Perplexity's `{ content, citations }` output
+1. Route to Chat Completions API (not Responses API)
+2. Add `web_search_options: {}` to the request body
+3. Parse `url_citation` annotations from the response
+4. Replace inline markdown citation links with numbered `[1]`, `[2]` markers
+5. Return `{ content, citations }` for client-side rendering
+
+**Why `gpt-5-search-api` instead of GPT-5.x + Responses API `web_search` tool:**
+- GPT-5.x with reasoning enabled uses "agentic search" which returns **empty** `annotations: []`
+- Even with `reasoning: 'none'`, annotations from the Responses API are unreliable
+- `gpt-5-search-api` via Chat Completions **always** returns `url_citation` annotations
+- This is a known issue discussed in the OpenAI developer community
 
 **Web search limitations:**
-- Not supported with `gpt-5` at `minimal` reasoning, or with `gpt-4.1-nano`
-- Limited to 128K context window (even with models that have larger windows)
-- Incurs additional cost: $10.00 per 1K search calls + search content tokens at model rates
+- `gpt-5-search-api` always searches the web (no conditional search)
+- Limited to 128K context window
+- Incurs additional cost: search calls + search content tokens at model rates
 
-**Web search features (Responses API only):**
-- **Domain filtering:** Restrict results to specific domains via `filters.allowed_domains`
-- **User location:** Refine results by geography (country, city, region, timezone)
-- **Sources:** View all URLs consulted via the `sources` field (superset of citations)
+**Citation flow:**
+1. `gpt-5-search-api` returns `message.annotations[]` with `url_citation` objects
+2. `OpenAIClient.chatCompletionViaChatCompletions()` extracts URLs and builds a citation map
+3. Inline markdown links are replaced with `[1]`, `[2]` markers
+4. Client-side `transformCitations(html, citations)` converts markers to clickable superscript links
+5. `renderCitations(citations)` renders the numbered source list
 
 ### API Selection Logic
 
@@ -190,10 +218,13 @@ Our `OpenAIClient` automatically routes requests to the appropriate API:
 
 | Condition | API Used |
 |-----------|----------|
-| `webSearch: true` or GPT-5.x model | Responses API (`POST /v1/responses`) |
-| GPT-4.x model without web search | Chat Completions API (`POST /v1/chat/completions`) |
+| `gpt-5-search-api` model | Chat Completions API (`POST /v1/chat/completions`) with `web_search_options` |
+| GPT-5.x model (or `reasoning`/`verbosity` set) | Responses API (`POST /v1/responses`) |
+| Other models | Chat Completions API (`POST /v1/chat/completions`) |
 
-The Responses API provides better performance with GPT-5 models because it can pass chain-of-thought (CoT) between turns, leading to fewer generated reasoning tokens and higher cache hit rates.
+The `shouldUseResponsesApi()` method in `openai.ts` handles this routing. It explicitly returns `false` for `gpt-5-search-api` since that model requires Chat Completions.
+
+The Responses API provides better performance with GPT-5 models for non-search tasks because it can pass chain-of-thought (CoT) between turns, leading to fewer generated reasoning tokens and higher cache hit rates.
 
 ---
 
@@ -210,11 +241,12 @@ export const AI_TASKS = {
   // ... existing tasks
 
   albumRecommendations: {
-    provider: 'perplexity',  // or 'openai'
-    model: 'sonar',
+    provider: 'openai',
+    model: 'gpt-5-search-api',
     maxTokens: 1000,
-    temperature: 0.5,
+    temperature: 1,
     cacheTtlDays: 30,
+    webSearch: true,
   },
 } as const satisfies Record<string, AITaskConfig>;
 ```
@@ -385,9 +417,8 @@ In your page component:
 Required in `apps/web/wrangler.toml` (secrets):
 
 | Variable | Purpose |
-|----------|---------|
+|----------|--------|
 | `OPENAI_API_KEY` | GPT models, image generation, web search |
-| `PERPLEXITY_API_KEY` | Web-grounded responses (sonar) |
 | `INTERNAL_API_SECRET` | Signing internal API tokens |
 
 ---
@@ -431,13 +462,14 @@ Quick summary:
 1. Update `ai.ts` config:
    ```typescript
    artistSummary: {
-     provider: 'openai',      // was 'perplexity'
-     model: 'gpt-5-mini',     // was 'sonar'
-     webSearch: true,          // replaces Perplexity's built-in search
+     provider: 'openai',            // was 'perplexity'
+     model: 'gpt-5-search-api',     // was 'sonar'
+     webSearch: true,                // adds web_search_options to Chat Completions
      // ... rest unchanged
    },
    ```
 
-2. The prompt files need no changes if using the `ChatClient` abstraction
-3. Citation format is compatible between providers (both normalize to `{ content, citations }`)
-4. No frontend changes needed -- `transformCitations()` and `renderCitations()` work with both
+2. Use `gpt-5-search-api` (not `gpt-5.2`) for web search tasks -- GPT-5.x Responses API has unreliable citation annotations
+3. The prompt files need no changes -- they use the `ChatClient` abstraction
+4. Citation format is compatible (`{ content, citations }`) -- `transformCitations()` and `renderCitations()` work unchanged
+5. `shouldUseResponsesApi()` in `openai.ts` routes `gpt-5-search-api` to Chat Completions

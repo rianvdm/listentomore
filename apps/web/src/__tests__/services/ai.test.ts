@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PerplexityClient, OpenAIClient, AICache, generateArtistSummary } from '@listentomore/ai';
+import { OpenAIClient, AICache, generateArtistSummary } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -159,79 +159,6 @@ describe('OpenAIClient', () => {
   });
 });
 
-describe('PerplexityClient', () => {
-  let client: PerplexityClient;
-
-  beforeEach(() => {
-    client = new PerplexityClient('test-api-key');
-  });
-
-  describe('chatCompletion', () => {
-    it('sends chat completion request and returns response', async () => {
-      const response = {
-        choices: [{ message: { content: 'This is a response about Radiohead.' } }],
-        citations: ['https://en.wikipedia.org/wiki/Radiohead'],
-      };
-      setupFetchMock([{ pattern: /api\.perplexity\.ai/, response }]);
-
-      const result = await client.chatCompletion({
-        model: 'sonar',
-        messages: [{ role: 'user', content: 'Tell me about Radiohead' }],
-      });
-
-      expect(result.content).toBe('This is a response about Radiohead.');
-      expect(result.citations).toEqual(['https://en.wikipedia.org/wiki/Radiohead']);
-    });
-
-    it('preserves citation markers in response', async () => {
-      const response = {
-        choices: [{ message: { content: 'Radiohead [1] formed in 1985 [2] in Oxford.' } }],
-        citations: ['https://example.com', 'https://example2.com'],
-      };
-      setupFetchMock([{ pattern: /api\.perplexity\.ai/, response }]);
-
-      const result = await client.chatCompletion({
-        model: 'sonar',
-        messages: [{ role: 'user', content: 'test' }],
-      });
-
-      // Citation markers are preserved for client-side transformation to superscript links
-      expect(result.content).toBe('Radiohead [1] formed in 1985 [2] in Oxford.');
-      expect(result.citations).toEqual(['https://example.com', 'https://example2.com']);
-    });
-
-    it('throws error on API failure', async () => {
-      setupFetchMock([
-        {
-          pattern: /api\.perplexity\.ai/,
-          response: { error: 'Unauthorized' },
-          options: { status: 401, ok: false },
-        },
-      ]);
-
-      await expect(
-        client.chatCompletion({
-          model: 'sonar',
-          messages: [{ role: 'user', content: 'test' }],
-        })
-      ).rejects.toThrow('Perplexity API error 401');
-    });
-
-    it('handles empty citations', async () => {
-      const response = {
-        choices: [{ message: { content: 'Response without citations' } }],
-      };
-      setupFetchMock([{ pattern: /api\.perplexity\.ai/, response }]);
-
-      const result = await client.chatCompletion({
-        model: 'sonar',
-        messages: [{ role: 'user', content: 'test' }],
-      });
-
-      expect(result.citations).toEqual([]);
-    });
-  });
-});
 
 describe('AICache', () => {
   let mockKV: KVNamespace;
@@ -303,28 +230,37 @@ describe('AICache', () => {
 
 describe('generateArtistSummary', () => {
   let mockKV: KVNamespace;
-  let mockClient: PerplexityClient;
+  let mockClient: OpenAIClient;
   let cache: AICache;
 
   beforeEach(() => {
     mockKV = createMockKV();
     cache = new AICache(mockKV);
-    mockClient = new PerplexityClient('test-key');
+    mockClient = new OpenAIClient('test-key');
   });
 
   it('generates artist summary and caches result', async () => {
     const response = {
+      model: 'gpt-5-search-api',
       choices: [
         {
           message: {
-            content:
-              'Radiohead is an English rock band. Their album {{OK Computer}} is considered a masterpiece. Similar artists include [[Portishead]].',
+            content: 'Radiohead is an English rock band. Their album {{OK Computer}} is considered a masterpiece. Similar artists include [[Portishead]].',
+            annotations: [
+              {
+                type: 'url_citation',
+                url_citation: {
+                  url: 'https://en.wikipedia.org/wiki/Radiohead',
+                  title: 'Radiohead - Wikipedia',
+                },
+              },
+            ],
           },
         },
       ],
-      citations: ['https://en.wikipedia.org/wiki/Radiohead'],
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
     };
-    setupFetchMock([{ pattern: /api\.perplexity\.ai/, response }]);
+    setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
 
     const result = await generateArtistSummary('Radiohead', mockClient, cache);
 

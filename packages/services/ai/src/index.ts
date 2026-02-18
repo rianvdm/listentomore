@@ -1,8 +1,7 @@
 // AI service - consolidated AI functionality for text and image generation
 
-import { AI_TASKS, type AITask } from '@listentomore/config';
+import type { AITask } from '@listentomore/config';
 import { OpenAIClient } from './openai';
-import { PerplexityClient } from './perplexity';
 import { AICache } from './cache';
 import { AIRateLimiter } from './rate-limit';
 import type { ChatClient } from './types';
@@ -27,12 +26,6 @@ export type {
   ResponsesOptions,
   ResponsesResult,
 } from './openai';
-
-export { PerplexityClient } from './perplexity';
-export type {
-  ChatCompletionOptions as PerplexityChatOptions,
-  ChatCompletionResponse as PerplexityChatResponse,
-} from './perplexity';
 
 export { AICache } from './cache';
 export type { CacheOptions } from './cache';
@@ -72,7 +65,6 @@ export {
 
 export interface AIServiceConfig {
   openaiApiKey: string;
-  perplexityApiKey: string;
   cache: KVNamespace;
 }
 
@@ -81,31 +73,25 @@ export interface AIServiceConfig {
  */
 export class AIService {
   public readonly openai: OpenAIClient;
-  public readonly perplexity: PerplexityClient;
   public readonly cache: AICache;
   public readonly kv: KVNamespace;
   public readonly openaiRateLimiter: AIRateLimiter;
-  public readonly perplexityRateLimiter: AIRateLimiter;
 
   constructor(config: AIServiceConfig) {
-    // Create distributed rate limiters for each provider
+    // Create distributed rate limiter for OpenAI
     this.openaiRateLimiter = new AIRateLimiter(config.cache, 'openai');
-    this.perplexityRateLimiter = new AIRateLimiter(config.cache, 'perplexity');
 
-    // Create clients with rate limiters
+    // Create client with rate limiter
     this.openai = new OpenAIClient(config.openaiApiKey, this.openaiRateLimiter);
-    this.perplexity = new PerplexityClient(config.perplexityApiKey, this.perplexityRateLimiter);
     this.cache = new AICache(config.cache);
     this.kv = config.cache;
   }
 
   /**
    * Get the appropriate client for a task based on config.
-   * Enables one-line provider switching via ai.ts config.
    */
-  getClientForTask(task: AITask): ChatClient {
-    const config = AI_TASKS[task];
-    return config.provider === 'openai' ? this.openai : this.perplexity;
+  getClientForTask(_task: AITask): ChatClient {
+    return this.openai;
   }
 
   // Convenience methods that use the appropriate client based on config

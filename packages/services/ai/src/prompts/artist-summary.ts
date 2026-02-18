@@ -40,7 +40,7 @@ function replacePlaceholders(summary: string, artistName: string): string {
     return `<a href="/album?q=${query}" data-artist="${escapeHtml(artistName)}" data-album="${escapeHtml(album)}">${album}</a>`;
   });
 
-  // Fix missing spaces before placeholder markers (capital letters handled in perplexity.ts)
+  // Fix missing spaces before placeholder markers
   result = result.replace(/\.(\[{1,2}|\{{1,2})/g, '. $1');
 
   return result;
@@ -48,7 +48,7 @@ function replacePlaceholders(summary: string, artistName: string): string {
 
 /**
  * Generate an artist summary
- * Provider determined by AI_TASKS config (currently Perplexity)
+ * Provider determined by AI_TASKS config
  */
 export async function generateArtistSummary(
   artistName: string,
@@ -87,12 +87,9 @@ IMPORTANT: If you cannot find sufficient verifiable information about this artis
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: true,
-    // Pass through GPT-5.1 options if configured
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
-    // Pass through Perplexity options if configured
-    searchContextSize: config.searchContextSize,
   });
 
   // Process the response to replace placeholders with links

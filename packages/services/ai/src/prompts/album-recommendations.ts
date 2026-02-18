@@ -59,7 +59,7 @@ function replacePlaceholders(content: string): string {
 
 /**
  * Generate album recommendations
- * Provider determined by AI_TASKS config (currently Perplexity)
+ * Provider determined by AI_TASKS config
  */
 export async function generateAlbumRecommendations(
   artistName: string,
@@ -113,12 +113,9 @@ IMPORTANT:
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     returnCitations: true,
-    // Pass through GPT-5.1 options if configured
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
-    // Pass through Perplexity options if configured
-    searchContextSize: config.searchContextSize,
   });
 
   // Process the response to replace placeholders with links

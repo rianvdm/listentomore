@@ -1,5 +1,5 @@
 // ABOUTME: Distributed rate limiting for AI APIs using KV storage.
-// ABOUTME: Coordinates rate limits across Worker instances for OpenAI and Perplexity.
+// ABOUTME: Coordinates rate limits across Worker instances for OpenAI.
 
 import { RATE_LIMITS } from '@listentomore/config';
 
@@ -9,7 +9,7 @@ export interface AIRateLimitState {
   retryAfter?: number;
 }
 
-export type AIProvider = 'openai' | 'perplexity';
+export type AIProvider = 'openai';
 
 export class AIRateLimiter {
   private readonly cacheKey: string;
@@ -21,10 +21,7 @@ export class AIRateLimiter {
     private provider: AIProvider
   ) {
     this.cacheKey = `ai:ratelimit:${provider}`;
-    this.maxRequests =
-      provider === 'openai'
-        ? RATE_LIMITS.openai.requestsPerMinute
-        : RATE_LIMITS.perplexity.requestsPerMinute;
+    this.maxRequests = RATE_LIMITS.openai.requestsPerMinute;
   }
 
   /**

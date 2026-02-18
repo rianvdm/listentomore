@@ -104,6 +104,9 @@ export class OpenAIClient implements ChatClient {
     model: string,
     options: ChatCompletionOptions
   ): boolean {
+    // gpt-5-search-api uses Chat Completions with web_search_options
+    if (model === 'gpt-5-search-api') return false;
+
     const isGpt5 = model.startsWith('gpt-5');
     const hasResponsesFeatures = Boolean(
       options.webSearch || options.reasoning || options.verbosity
@@ -213,6 +216,11 @@ export class OpenAIClient implements ChatClient {
     // Only add temperature if explicitly provided and not the default
     if (options.temperature !== undefined && options.temperature !== 1) {
       requestBody.temperature = options.temperature;
+    }
+
+    // Add web_search_options for search models (gpt-5-search-api, etc.)
+    if (options.webSearch) {
+      requestBody.web_search_options = {};
     }
 
     const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
@@ -467,6 +475,23 @@ export class OpenAIClient implements ChatClient {
           }
         }
       }
+    }
+
+    // Replace inline citation links with numbered markers [1], [2], etc.
+    // OpenAI Responses API embeds citations as markdown links in output_text
+    // but our client-side transformCitations() expects [N] markers + a citations array.
+    if (result.citations.length > 0 && result.content) {
+      const citationMap = new Map<string, number>();
+      result.citations.forEach((url, i) => citationMap.set(url, i + 1));
+
+      // Replace markdown links whose URL matches a citation
+      result.content = result.content.replace(
+        /\(?\[([^\]]+)\]\(([^)]+)\)\)?/g,
+        (match, _text, url) => {
+          const num = citationMap.get(url);
+          return num ? `[${num}]` : match;
+        }
+      );
     }
 
     // Build metadata from actual API response

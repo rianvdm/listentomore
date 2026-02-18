@@ -52,7 +52,7 @@ function replacePlaceholders(content: string): string {
     return `[${artist}](/artist?q=${query})`;
   });
 
-  // Fix missing spaces before placeholder markers (capital letters handled in perplexity.ts)
+  // Fix missing spaces before placeholder markers
   result = result.replace(/\.(\[{1,2}|\{{1,2})/g, '. $1');
 
   return result;
@@ -60,7 +60,7 @@ function replacePlaceholders(content: string): string {
 
 /**
  * Generate a genre summary
- * Provider determined by AI_TASKS config (currently Perplexity)
+ * Provider determined by AI_TASKS config
  */
 export async function generateGenreSummary(
   genreName: string,
@@ -112,12 +112,9 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
         maxTokens: config.maxTokens,
         temperature: config.temperature,
         returnCitations: true,
-        // Pass through GPT-5.1 options if configured
         reasoning: config.reasoning,
         verbosity: config.verbosity,
         webSearch: config.webSearch,
-        // Pass through Perplexity options if configured
-        searchContextSize: config.searchContextSize,
       });
 
       // Process the response to replace placeholders with links

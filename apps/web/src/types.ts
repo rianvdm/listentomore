@@ -25,7 +25,6 @@ export type Bindings = {
   LASTFM_SHARED_SECRET?: string;
   LASTFM_USERNAME: string;
   OPENAI_API_KEY: string;
-  PERPLEXITY_API_KEY: string;
   YOUTUBE_API_KEY?: string;
   APPLE_TEAM_ID?: string;
   APPLE_KEY_ID?: string;

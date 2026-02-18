@@ -1,10 +1,10 @@
 // ABOUTME: Common types and interfaces for AI clients.
 // ABOUTME: Enables switching between providers with a common ChatClient interface.
 
-import type { ReasoningEffort, Verbosity, SearchContextSize } from '@listentomore/config';
+import type { ReasoningEffort, Verbosity } from '@listentomore/config';
 
 // Re-export types from config for consistency
-export type { ReasoningEffort, Verbosity, SearchContextSize } from '@listentomore/config';
+export type { ReasoningEffort, Verbosity } from '@listentomore/config';
 
 /**
  * Common message format for both providers
@@ -24,16 +24,14 @@ export interface ChatCompletionOptions {
   temperature?: number;
 
   // Provider-specific options (ignored if not supported)
-  /** Request citations from Perplexity or web search models */
+  /** Request citations from web search models */
   returnCitations?: boolean;
-  /** Reasoning effort for GPT-5.1 (Responses API) */
+  /** Reasoning effort for GPT-5 models (Responses API) */
   reasoning?: ReasoningEffort;
-  /** Output verbosity for GPT-5.1 (Responses API) */
+  /** Output verbosity for GPT-5 models (Responses API) */
   verbosity?: Verbosity;
   /** Enable web search tool (Responses API) */
   webSearch?: boolean;
-  /** Search context size for Perplexity web search (Perplexity only) */
-  searchContextSize?: SearchContextSize;
 }
 
 /**
@@ -42,7 +40,7 @@ export interface ChatCompletionOptions {
  */
 export interface AIResponseMetadata {
   /** Provider that handled the request */
-  provider: 'openai' | 'perplexity';
+  provider: 'openai';
   /** Actual model used (from API response) */
   model: string;
   /** Which API was used (OpenAI has multiple) */
@@ -78,7 +76,7 @@ export interface ChatCompletionResponse {
 }
 
 /**
- * Common interface that both OpenAI and Perplexity clients implement
+ * Common interface for AI clients
  */
 export interface ChatClient {
   chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse>;

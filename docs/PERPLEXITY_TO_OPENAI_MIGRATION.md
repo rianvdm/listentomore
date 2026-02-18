@@ -1,21 +1,25 @@
 # Perplexity to OpenAI Migration Plan
 
-Replace all Perplexity API calls with OpenAI GPT-5.2 (web search + citations) to consolidate on a single AI provider.
+Replace all Perplexity API calls with OpenAI to consolidate on a single AI provider.
+
+> **Status: COMPLETED.** Web search tasks use `gpt-5-search-api` via Chat Completions API (not GPT-5.2 Responses API) for reliable citation annotations.
 
 ## Background
 
-Currently, ListenToMore uses **Perplexity** (`sonar` model) for 5 web-grounded tasks that need citations, and **OpenAI** for everything else. Both providers already normalize to the same `{ content: string, citations: string[] }` interface via our `ChatClient` abstraction, making this migration straightforward.
+ListenToMore previously used **Perplexity** (`sonar` model) for 5 web-grounded tasks that need citations, and **OpenAI** for everything else. Both providers normalized to the same `{ content: string, citations: string[] }` interface via our `ChatClient` abstraction, making this migration straightforward.
 
-### Target Model: GPT-5.2
+### Target Model: gpt-5-search-api
 
-We're migrating to **GPT-5.2** (`gpt-5.2`), OpenAI's flagship model with:
-- **Web search support** via the Responses API
-- **Reasoning effort levels:** `none` (default), `low`, `medium`, `high`, `xhigh`
-- **400K context window**, 128K max output tokens
-- **Pricing:** $1.75/1M input, $14/1M output + $10/1K web search calls
-- **Knowledge cutoff:** August 31, 2025
+We migrated to **`gpt-5-search-api`** via the Chat Completions API:
+- **Always performs web search** and returns `url_citation` annotations reliably
+- **Uses Chat Completions API** with `web_search_options: {}` (not Responses API)
+- **Pricing:** Same as GPT-5 family + search call costs
 
-GPT-5.2 with `reasoning: 'none'` provides fast, low-latency responses. For factual web searches where accuracy matters, `reasoning: 'low'` is recommended.
+**Why not GPT-5.2 with Responses API `web_search` tool:**
+- GPT-5.2 with any reasoning level uses "agentic search" which returns **empty** `annotations: []`
+- Even with `reasoning: 'none'`, Responses API annotations were unreliable
+- This is a known issue in the OpenAI developer community
+- `gpt-5-search-api` via Chat Completions is the reliable path for citations
 
 ### Tasks Currently on Perplexity
 
