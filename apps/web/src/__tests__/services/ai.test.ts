@@ -157,6 +157,141 @@ describe('OpenAIClient', () => {
       expect(requestBody.tools).toEqual([{ type: 'web_search' }]);
     });
   });
+
+  describe('Chat Completions API with web search (gpt-5-search-api)', () => {
+    it('extracts citations from nested url_citation format', async () => {
+      const response = {
+        model: 'gpt-5-search-api',
+        choices: [{
+          message: {
+            content: 'Radiohead is a band [1] from Oxford [2].',
+            annotations: [
+              { type: 'url_citation', url_citation: { url: 'https://example.com/1' } },
+              { type: 'url_citation', url_citation: { url: 'https://example.com/2' } },
+            ],
+          },
+        }],
+      };
+      setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+      const result = await client.chatCompletion({
+        model: 'gpt-5-search-api',
+        messages: [{ role: 'user', content: 'test' }],
+        webSearch: true,
+      });
+
+      expect(result.citations).toEqual(['https://example.com/1', 'https://example.com/2']);
+      expect(result.content).toContain('[1]');
+    });
+
+    it('extracts citations from flat annotation format (url on annotation)', async () => {
+      const response = {
+        model: 'gpt-5-search-api',
+        choices: [{
+          message: {
+            content: 'Radiohead is a band [1] from Oxford [2].',
+            annotations: [
+              { type: 'url_citation', url: 'https://example.com/1', title: 'Source 1' },
+              { type: 'url_citation', url: 'https://example.com/2', title: 'Source 2' },
+            ],
+          },
+        }],
+      };
+      setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+      const result = await client.chatCompletion({
+        model: 'gpt-5-search-api',
+        messages: [{ role: 'user', content: 'test' }],
+        webSearch: true,
+      });
+
+      expect(result.citations).toEqual(['https://example.com/1', 'https://example.com/2']);
+      expect(result.content).toContain('[1]');
+    });
+
+    it('replaces markdown citation links with numbered markers', async () => {
+      const response = {
+        model: 'gpt-5-search-api',
+        choices: [{
+          message: {
+            content: 'Radiohead is a band ([Wikipedia](https://en.wikipedia.org/wiki/Radiohead)) from Oxford.',
+            annotations: [
+              { type: 'url_citation', url: 'https://en.wikipedia.org/wiki/Radiohead', title: 'Radiohead' },
+            ],
+          },
+        }],
+      };
+      setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+      const result = await client.chatCompletion({
+        model: 'gpt-5-search-api',
+        messages: [{ role: 'user', content: 'test' }],
+        webSearch: true,
+      });
+
+      expect(result.content).toBe('Radiohead is a band [1] from Oxford.');
+      expect(result.citations).toEqual(['https://en.wikipedia.org/wiki/Radiohead']);
+    });
+
+    it('extracts citations from content when annotations are missing', async () => {
+      const response = {
+        model: 'gpt-5-search-api',
+        choices: [{
+          message: {
+            content: 'Mercury Rev is a band ([reference.org](https://reference.org/facts/Mercury_Rev?utm_source=openai)). Their album was popular ([AllMusic](https://www.allmusic.com/artist/mercury-rev?utm_source=openai)).',
+          },
+        }],
+      };
+      setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+      const result = await client.chatCompletion({
+        model: 'gpt-5-search-api',
+        messages: [{ role: 'user', content: 'test' }],
+        webSearch: true,
+      });
+
+      expect(result.content).toBe('Mercury Rev is a band [1]. Their album was popular [2].');
+      expect(result.citations).toEqual([
+        'https://reference.org/facts/Mercury_Rev?utm_source=openai',
+        'https://www.allmusic.com/artist/mercury-rev?utm_source=openai',
+      ]);
+    });
+
+    it('extracts citations from annotations when content has [N] markers (no markdown links)', async () => {
+      // This is the primary gpt-5-search-api format: [N] markers in text, URLs in annotations only
+      const response = {
+        model: 'gpt-5-search-api',
+        choices: [{
+          message: {
+            content: 'Midtown is an American pop-punk band [1] formed in 1998 [2]. They released three studio albums [3].',
+            annotations: [
+              { type: 'url_citation', url_citation: { url: 'https://en.wikipedia.org/wiki/Midtown_(band)', title: 'Midtown (band)' } },
+              { type: 'url_citation', url_citation: { url: 'https://www.allmusic.com/artist/midtown', title: 'Midtown' } },
+              { type: 'url_citation', url_citation: { url: 'https://www.discogs.com/artist/midtown', title: 'Midtown Discography' } },
+            ],
+          },
+        }],
+      };
+      setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+      const result = await client.chatCompletion({
+        model: 'gpt-5-search-api',
+        messages: [{ role: 'user', content: 'test' }],
+        webSearch: true,
+      });
+
+      // Content should be preserved with [N] markers
+      expect(result.content).toContain('[1]');
+      expect(result.content).toContain('[2]');
+      expect(result.content).toContain('[3]');
+      // Citations should be extracted from annotations
+      expect(result.citations).toEqual([
+        'https://en.wikipedia.org/wiki/Midtown_(band)',
+        'https://www.allmusic.com/artist/midtown',
+        'https://www.discogs.com/artist/midtown',
+      ]);
+    });
+  });
 });
 
 
@@ -274,6 +409,41 @@ describe('generateArtistSummary', () => {
       expect.any(String),
       expect.any(Object)
     );
+  });
+
+  it('handles flat annotation format (url directly on annotation)', async () => {
+    const response = {
+      model: 'gpt-5-search-api',
+      choices: [
+        {
+          message: {
+            content: 'Radiohead is an English rock band [1]. Their album {{OK Computer}} [2] is considered a masterpiece.',
+            annotations: [
+              {
+                type: 'url_citation',
+                url: 'https://en.wikipedia.org/wiki/Radiohead',
+                title: 'Radiohead - Wikipedia',
+              },
+              {
+                type: 'url_citation',
+                url: 'https://en.wikipedia.org/wiki/OK_Computer',
+                title: 'OK Computer - Wikipedia',
+              },
+            ],
+          },
+        },
+      ],
+    };
+    setupFetchMock([{ pattern: /api\.openai\.com/, response }]);
+
+    const result = await generateArtistSummary('Radiohead', mockClient, cache);
+
+    expect(result.citations).toEqual([
+      'https://en.wikipedia.org/wiki/Radiohead',
+      'https://en.wikipedia.org/wiki/OK_Computer',
+    ]);
+    expect(result.summary).toContain('[1]');
+    expect(result.summary).toContain('[2]');
   });
 
   it('returns cached result without API call', async () => {
