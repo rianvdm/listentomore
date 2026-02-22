@@ -134,7 +134,7 @@ app.get('/user-insights-summary', async (c) => {
         data: null,
         sparse: true,
         message:
-          "Looks like you've been taking a break from music this week! 🎧 Get back to listening and check back soon for personalized insights.",
+          "Looks like you've been taking a break from music lately! 🎧 Get back to listening and check back soon for personalized insights.",
       });
     }
 

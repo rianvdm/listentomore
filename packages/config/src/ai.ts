@@ -136,10 +136,9 @@ export const AI_TASKS = {
   userInsightsSummary: {
     provider: 'openai',
     model: 'gpt-5.2',
-    maxTokens: 1000,
-    temperature: 1,
+    maxTokens: 1500,
+    temperature: 0.7,
     cacheTtlDays: 1,
-    reasoning: 'low',
     verbosity: 'low',
   },
 

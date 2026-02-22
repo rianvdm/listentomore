@@ -39,7 +39,7 @@ export async function generateUserInsightsSummary(
 
   const { topArtists, topAlbums, recentTracks } = listeningData;
 
-  const prompt = `Analyze this user's listening activity from the past 7 days and write a brief, engaging summary (2-3 sentences max).
+  const prompt = `Analyze this user's recent listening activity from the past few days. Write 4-5 sentences summarizing what they've been into.
 
 Top Artists (by play count):
 ${topArtists.map((a) => `- ${a.name}: ${a.playcount} plays`).join('\n')}
@@ -50,11 +50,15 @@ ${topAlbums.map((a) => `- ${a.name} by ${a.artist}: ${a.playcount} plays`).join(
 Recent Tracks:
 ${recentTracks.slice(0, 10).map((t) => `- ${t.name} by ${t.artist}`).join('\n')}
 
-Write in second person ("You've been..."). Be conversational and deeply personal.
-Mention SPECIFIC artists and albums by name - make it feel like you really know their taste.
-Note any interesting patterns (genre shifts, artist deep-dives, mood patterns).
-Do NOT recommend anything - just summarize patterns.
-Do NOT start with a preamble like "Based on your listening..." - jump straight into the insight.`;
+Rules:
+- Write in second person ("You've been...")
+- Use 2-3 short paragraphs. Each paragraph should cover a distinct thread or pattern. Do NOT write everything as one long block of text.
+- Mention specific artists and albums by name
+- Point out patterns you notice: repeated artists, genre shifts, deep-dives into one artist, etc.
+- Use clear, polished language. No invented compound adjectives, no forced metaphors, no flowery descriptions.
+- Do NOT recommend anything - only describe what they listened to and what patterns stand out.
+- Do NOT start with "Based on your listening..." - jump straight into the summary.
+- Each sentence should say something distinct. Don't repeat the same observation in different words.`;
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -62,7 +66,7 @@ Do NOT start with a preamble like "Based on your listening..." - jump straight i
       {
         role: 'system',
         content:
-          'You are a music-savvy friend who notices interesting patterns in listening habits. You speak casually and make insightful observations. Keep it brief and personal.',
+          'You are a music journalist writing a short, polished editorial about someone\'s listening week. You are knowledgeable and specific but never flashy. Write in clear paragraphs, not run-on sentences. Never use forced metaphors, hyphenated adjective chains, or overly creative phrasing.',
       },
       { role: 'user', content: prompt },
     ],
