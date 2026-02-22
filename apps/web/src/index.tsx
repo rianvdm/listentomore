@@ -636,7 +636,7 @@ app.get('/auth/logout', handleLogout);
 app.get('/account', handleAccount);
 app.post('/account/profile', handleAccountProfile);
 app.post('/account/privacy', handleAccountPrivacy);
-app.get('/account/delete', handleAccountDelete);
+app.post('/account/delete', handleAccountDelete);
 
 // Stats routes (legacy - redirect to login)
 app.get('/stats', (c) => c.redirect('/login'));

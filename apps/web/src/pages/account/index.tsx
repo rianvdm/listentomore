@@ -191,7 +191,16 @@ function AccountPage({ user }: AccountPageProps) {
                 if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
                   var input = prompt('Type DELETE to confirm account deletion:');
                   if (input === 'DELETE') {
-                    window.location.href = '/account/delete';
+                    var form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/account/delete';
+                    var field = document.createElement('input');
+                    field.type = 'hidden';
+                    field.name = 'confirmation';
+                    field.value = 'DELETE';
+                    form.appendChild(field);
+                    document.body.appendChild(form);
+                    form.submit();
                   }
                 }
               });
@@ -258,6 +267,25 @@ export async function handleAccountDelete(c: Context<{ Bindings: Bindings; Varia
 
   if (!currentUser) {
     return c.redirect('/login');
+  }
+
+  // Require server-side confirmation to prevent CSRF
+  const formData = await c.req.formData();
+  const confirmation = formData.get('confirmation');
+
+  if (confirmation !== 'DELETE') {
+    return c.html(
+      <Layout title="Error" currentUser={currentUser}>
+        <div style={{ maxWidth: '600px', margin: '2rem auto', padding: '0 1rem' }}>
+          <h1 style={{ color: '#c00' }}>Invalid Request</h1>
+          <p>Account deletion requires confirmation. Please use the delete button on your account settings page.</p>
+          <a href="/account" class="button" style={{ marginTop: '1rem', display: 'inline-block' }}>
+            Back to Account Settings
+          </a>
+        </div>
+      </Layout>,
+      400
+    );
   }
 
   const db = c.get('db');
