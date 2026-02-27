@@ -359,6 +359,7 @@ export class AppleMusicProvider implements StreamingProvider {
       if (metadata.isrc) {
         const isrcMatch = await this.searchByIsrc(metadata.isrc);
         if (isrcMatch) {
+          console.log(`[AppleMusic] Track matched via ISRC: ${metadata.isrc}`);
           return {
             url: toGeoAgnosticUrl(isrcMatch.attributes.url),
             confidence: ISRC_CONFIDENCE,
@@ -374,6 +375,7 @@ export class AppleMusicProvider implements StreamingProvider {
 
       // Fall back to text search via API
       const query = `${metadata.artists[0] || ''} ${metadata.name}`;
+      console.log(`[AppleMusic] Track falling back to text search (no ISRC match): ${query}`);
       const textResult = await this.searchTrackByText(query, metadata);
       if (textResult) {
         return textResult;
@@ -391,6 +393,7 @@ export class AppleMusicProvider implements StreamingProvider {
       if (metadata.upc) {
         const upcMatch = await this.searchByUpc(metadata.upc);
         if (upcMatch) {
+          console.log(`[AppleMusic] Album matched via UPC: ${metadata.upc}`);
           return {
             url: toGeoAgnosticUrl(upcMatch.attributes.url),
             confidence: UPC_CONFIDENCE,
@@ -405,6 +408,7 @@ export class AppleMusicProvider implements StreamingProvider {
 
       // Fall back to text search via API
       const query = `${metadata.artists[0] || ''} ${metadata.name}`;
+      console.log(`[AppleMusic] Album falling back to text search (no UPC match): ${query}`);
       const textResult = await this.searchAlbumByText(query, metadata);
       if (textResult) {
         return textResult;

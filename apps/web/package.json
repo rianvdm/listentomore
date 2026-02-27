@@ -15,6 +15,7 @@
     "@listentomore/config": "workspace:*",
     "@listentomore/db": "workspace:*",
     "@listentomore/lastfm": "workspace:*",
+    "@listentomore/musicbrainz": "workspace:*",
     "@listentomore/shared": "workspace:*",
     "@listentomore/spotify": "workspace:*",
     "@listentomore/streaming-links": "workspace:*",

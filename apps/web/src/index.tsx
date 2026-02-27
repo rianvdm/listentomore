@@ -7,6 +7,7 @@ import { Database } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { StreamingLinksService } from '@listentomore/streaming-links';
+import { MusicBrainzService } from '@listentomore/musicbrainz';
 import { AIService } from '@listentomore/ai';
 // Note: CACHE_CONFIG and getTtlSeconds used in scheduled() for cron jobs
 import {
@@ -114,6 +115,7 @@ app.use('*', async (c, next) => {
             privateKey: c.env.APPLE_PRIVATE_KEY,
           }
           : undefined,
+      musicbrainz: new MusicBrainzService(c.env.CACHE),
     })
   );
 

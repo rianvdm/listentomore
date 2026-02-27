@@ -69,6 +69,9 @@ importers:
       '@listentomore/lastfm':
         specifier: workspace:*
         version: link:../../packages/services/lastfm
+      '@listentomore/musicbrainz':
+        specifier: workspace:*
+        version: link:../../packages/services/musicbrainz
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -140,6 +143,22 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/services/musicbrainz:
+    dependencies:
+      '@listentomore/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@listentomore/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.4
+
   packages/services/songlink:
     dependencies:
       '@listentomore/config':
@@ -171,6 +190,9 @@ importers:
       '@listentomore/config':
         specifier: workspace:*
         version: link:../../config
+      '@listentomore/musicbrainz':
+        specifier: workspace:*
+        version: link:../musicbrainz
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../../shared

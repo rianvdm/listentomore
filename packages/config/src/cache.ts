@@ -40,6 +40,10 @@ export const CACHE_CONFIG = {
     links: { ttlDays: 30 }, // Music metadata rarely changes
   },
 
+  musicbrainz: {
+    lookup: { ttlDays: 30 }, // ISRCs/UPCs never change once assigned
+  },
+
   // HTTP cache headers for responses
   http: {
     static: { maxAge: 86400, staleWhileRevalidate: 43200 }, // 1 day

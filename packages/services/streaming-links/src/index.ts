@@ -2,6 +2,7 @@
 // Designed for extensibility: new providers can be added without changing consumers
 
 import { CACHE_CONFIG } from '@listentomore/config';
+import type { MusicBrainzService } from '@listentomore/musicbrainz';
 import { AppleMusicProvider, type AppleMusicConfig } from './providers/apple-music';
 import { YouTubeProvider } from './providers/youtube';
 import { extractYear } from './matching';
@@ -95,16 +96,19 @@ export class StreamingLinksService {
   private appleMusic: AppleMusicProvider;
   // YouTube provider kept for potential future use but not currently called in getTrackLinks/getAlbumLinks
   private youtubeProvider: YouTubeProvider;
+  private musicbrainz: MusicBrainzService | null;
 
   constructor(
     private cache: KVNamespace,
     config: {
       youtubeApiKey?: string;
       appleMusic?: AppleMusicConfig;
+      musicbrainz?: MusicBrainzService;
     } = {}
   ) {
     this.appleMusic = new AppleMusicProvider(config.appleMusic);
     this.youtubeProvider = new YouTubeProvider(config.youtubeApiKey);
+    this.musicbrainz = config.musicbrainz ?? null;
   }
 
   /**
@@ -122,6 +126,46 @@ export class StreamingLinksService {
   }
 
   /**
+   * Enrich album metadata with UPC from MusicBrainz when not available from Spotify.
+   */
+  private async enrichAlbumMetadata(metadata: AlbumMetadata): Promise<AlbumMetadata> {
+    if (metadata.upc || !this.musicbrainz) return metadata;
+
+    const upc = await this.musicbrainz.getAlbumUpc(
+      metadata.artists[0],
+      metadata.name
+    );
+
+    if (upc) {
+      console.log(`[StreamingLinks] Enriched album UPC from MusicBrainz: ${upc}`);
+      return { ...metadata, upc };
+    }
+
+    console.log(`[StreamingLinks] No UPC found in MusicBrainz for: ${metadata.artists[0]} - ${metadata.name}`);
+    return metadata;
+  }
+
+  /**
+   * Enrich track metadata with ISRC from MusicBrainz when not available from Spotify.
+   */
+  private async enrichTrackMetadata(metadata: TrackMetadata): Promise<TrackMetadata> {
+    if (metadata.isrc || !this.musicbrainz) return metadata;
+
+    const isrc = await this.musicbrainz.getTrackIsrc(
+      metadata.artists[0],
+      metadata.name
+    );
+
+    if (isrc) {
+      console.log(`[StreamingLinks] Enriched track ISRC from MusicBrainz: ${isrc}`);
+      return { ...metadata, isrc };
+    }
+
+    console.log(`[StreamingLinks] No ISRC found in MusicBrainz for: ${metadata.artists[0]} - ${metadata.name}`);
+    return metadata;
+  }
+
+  /**
    * Get streaming links for a track
    */
   async getTrackLinks(metadata: TrackMetadata): Promise<StreamingLinksResult> {
@@ -134,10 +178,13 @@ export class StreamingLinksService {
       return { ...cached, cached: true };
     }
 
-    console.log(`[StreamingLinks] Fetching links for track: ${metadata.name} by ${metadata.artists.join(', ')}`);
+    // Enrich with MusicBrainz ISRC if needed (Spotify may no longer provide it)
+    const enrichedMetadata = await this.enrichTrackMetadata(metadata);
+
+    console.log(`[StreamingLinks] Fetching links for track: ${enrichedMetadata.name} by ${enrichedMetadata.artists.join(', ')}`);
 
     // Query Apple Music (YouTube provider kept but not called - use songlink instead)
-    const appleResult = await this.appleMusic.searchTrack(metadata);
+    const appleResult = await this.appleMusic.searchTrack(enrichedMetadata);
 
     // Generate songlink URL from Spotify ID
     const spotifyUrl = `https://open.spotify.com/track/${metadata.id}`;
@@ -147,7 +194,7 @@ export class StreamingLinksService {
       appleMusic: appleResult,
       youtube: null, // YouTube provider available but not used; songlink provides more services
       songlink: songlinkUrl,
-      source: metadata,
+      source: enrichedMetadata,
       cached: false,
     };
 
@@ -172,10 +219,13 @@ export class StreamingLinksService {
       return { ...cached, cached: true };
     }
 
-    console.log(`[StreamingLinks] Fetching links for album: ${metadata.name} by ${metadata.artists.join(', ')}`);
+    // Enrich with MusicBrainz UPC if needed (Spotify may no longer provide it)
+    const enrichedMetadata = await this.enrichAlbumMetadata(metadata);
+
+    console.log(`[StreamingLinks] Fetching links for album: ${enrichedMetadata.name} by ${enrichedMetadata.artists.join(', ')}`);
 
     // Query Apple Music (YouTube provider kept but not called - use songlink instead)
-    const appleResult = await this.appleMusic.searchAlbum(metadata);
+    const appleResult = await this.appleMusic.searchAlbum(enrichedMetadata);
 
     // Generate songlink URL from Spotify ID
     const spotifyUrl = `https://open.spotify.com/album/${metadata.id}`;
@@ -185,7 +235,7 @@ export class StreamingLinksService {
       appleMusic: appleResult,
       youtube: null, // YouTube provider available but not used; songlink provides more services
       songlink: songlinkUrl,
-      source: metadata,
+      source: enrichedMetadata,
       cached: false,
     };
 
@@ -199,12 +249,17 @@ export class StreamingLinksService {
 
   /**
    * Convert a Spotify track response to TrackMetadata
+   *
+   * Note: ISRC is intentionally zeroed out to force MusicBrainz enrichment.
+   * Spotify is removing external_ids from Development Mode API responses
+   * on March 9, 2026. We're cutting over early to validate the MusicBrainz
+   * pipeline in production. To revert, restore: isrc: track.external_ids?.isrc || '',
    */
   static trackMetadataFromSpotify(track: SpotifyTrackForMetadata): TrackMetadata {
     return {
       type: 'track',
       id: track.id,
-      isrc: track.external_ids?.isrc || '',
+      isrc: '', // Forced MusicBrainz enrichment - see comment above
       name: track.name,
       artists: track.artists.map((a) => a.name),
       album: track.album?.name || '',
@@ -215,12 +270,17 @@ export class StreamingLinksService {
 
   /**
    * Convert a Spotify album response to AlbumMetadata
+   *
+   * Note: UPC is intentionally zeroed out to force MusicBrainz enrichment.
+   * Spotify is removing external_ids from Development Mode API responses
+   * on March 9, 2026. We're cutting over early to validate the MusicBrainz
+   * pipeline in production. To revert, restore: upc: album.external_ids?.upc,
    */
   static albumMetadataFromSpotify(album: SpotifyAlbumForMetadata): AlbumMetadata {
     return {
       type: 'album',
       id: album.id,
-      upc: album.external_ids?.upc,
+      upc: undefined, // Forced MusicBrainz enrichment - see comment above
       name: album.name,
       artists: album.artists.map((a) => a.name),
       totalTracks: album.total_tracks,

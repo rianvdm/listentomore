@@ -18,8 +18,10 @@ export interface AlbumDetails {
   genres: string[];
   url: string;
   image: string | null;
-  label: string | null;
-  popularity: number;
+  /** May be undefined after Spotify Feb 2026 API changes */
+  label?: string | null;
+  /** May be undefined after Spotify Feb 2026 API changes */
+  popularity?: number;
   copyrights: string[];
   trackList: AlbumTrack[];
   /** Universal Product Code - used for Apple Music lookups */
@@ -44,10 +46,13 @@ interface SpotifyAlbumResponse {
   total_tracks: number;
   genres: string[];
   external_urls: { spotify: string };
+  /** Removed in Spotify Feb 2026 API changes for Development Mode apps */
   external_ids?: { upc?: string; ean?: string };
   images: Array<{ url: string }>;
-  label: string;
-  popularity: number;
+  /** May be removed in Spotify Feb 2026 API changes */
+  label?: string;
+  /** May be removed in Spotify Feb 2026 API changes */
+  popularity?: number;
   copyrights: Array<{ text: string }>;
   tracks: {
     items: Array<{
@@ -114,8 +119,8 @@ export class SpotifyAlbums {
       genres: data.genres || [],
       url: data.external_urls.spotify,
       image: data.images[0]?.url || null,
-      label: data.label || null,
-      popularity: data.popularity,
+      label: data.label ?? null,
+      popularity: data.popularity ?? undefined,
       copyrights: data.copyrights.map((c) => c.text),
       upc: data.external_ids?.upc || null,
       ean: data.external_ids?.ean || null,

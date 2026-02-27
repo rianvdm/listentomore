@@ -1,5 +1,5 @@
 {
-  "name": "@listentomore/streaming-links",
+  "name": "@listentomore/musicbrainz",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -10,10 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@listentomore/config": "workspace:*",
-    "@listentomore/musicbrainz": "workspace:*",
     "@listentomore/shared": "workspace:*",
-    "jose": "^6.1.3"
+    "@listentomore/config": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

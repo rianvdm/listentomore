@@ -35,7 +35,7 @@ describe('SpotifyAlbums', () => {
         url: 'https://open.spotify.com/album/4LH4d3cOWNNsVw41Gqt2kv',
         image: 'https://i.scdn.co/image/ab67616d0000b273abc123',
         label: 'XL Recordings',
-        popularity: 82,
+        popularity: 82, // Optional after Feb 2026 Spotify API changes
         copyrights: ['2007 XL Recordings Ltd'],
         upc: null,
         ean: null,
@@ -77,6 +77,24 @@ describe('SpotifyAlbums', () => {
 
       await expect(albums.getAlbum('test')).rejects.toThrow('Failed to fetch album: 500');
     });
+
+    it('handles missing external_ids, popularity, and label (Feb 2026 API changes)', async () => {
+      // Simulate post-migration Spotify response without removed fields
+      const postMigrationAlbum = {
+        ...spotifyFixtures.album,
+        external_ids: undefined,
+        popularity: undefined,
+        label: undefined,
+      };
+      setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/albums\//, response: postMigrationAlbum }]);
+
+      const result = await albums.getAlbum('4LH4d3cOWNNsVw41Gqt2kv');
+
+      expect(result.upc).toBeNull();
+      expect(result.ean).toBeNull();
+      expect(result.popularity).toBeUndefined();
+      expect(result.label).toBeNull();
+    });
   });
 
   describe('getAlbums', () => {
@@ -114,8 +132,8 @@ describe('SpotifyArtists', () => {
         id: '4Z8W4fKeB5YxbusRsdQVPb',
         name: 'Radiohead',
         genres: ['Alternative Rock', 'Art Rock', 'Permanent Wave'], // Note: capitalized
-        followers: 8500000,
-        popularity: 82,
+        followers: 8500000, // Optional after Feb 2026 Spotify API changes
+        popularity: 82, // Optional after Feb 2026 Spotify API changes
         url: 'https://open.spotify.com/artist/4Z8W4fKeB5YxbusRsdQVPb',
         image: 'https://i.scdn.co/image/ab67616d0000b273artist123',
       });
@@ -137,6 +155,21 @@ describe('SpotifyArtists', () => {
       setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/artists\//, response: { error: 'Not found' }, options: { status: 404, ok: false } }]);
 
       await expect(artists.getArtist('nonexistent')).rejects.toThrow('Artist not found: nonexistent');
+    });
+
+    it('handles missing followers and popularity (Feb 2026 API changes)', async () => {
+      const postMigrationArtist = {
+        ...spotifyFixtures.artist,
+        followers: undefined,
+        popularity: undefined,
+      };
+      setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/artists\/[^/]+$/, response: postMigrationArtist }]);
+
+      const result = await artists.getArtist('4Z8W4fKeB5YxbusRsdQVPb');
+
+      expect(result.followers).toBeUndefined();
+      expect(result.popularity).toBeUndefined();
+      expect(result.name).toBe('Radiohead');
     });
   });
 

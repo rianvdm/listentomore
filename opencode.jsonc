@@ -17,4 +17,27 @@
   "plugin": [
     "opencode-websearch-cited@1.2.0"
   ],
+  "mcp": {
+    "cloudflare-docs": {
+      "type": "remote",
+      "url": "https://docs.mcp.cloudflare.com/mcp",
+      "enabled": true
+    },
+    "cloudflare-bindings": {
+      "type": "remote",
+      "url": "https://bindings.mcp.cloudflare.com/mcp",
+      "enabled": true,
+      "oauth": {
+        "scope": "tools:read"
+      }
+    },
+    "cloudflare-builds": {
+      "type": "remote",
+      "url": "https://builds.mcp.cloudflare.com/mcp",
+      "enabled": true,
+      "oauth": {
+        "scope": "tools:read"
+      }
+    }
+  }
 }

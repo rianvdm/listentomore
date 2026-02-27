@@ -12,8 +12,10 @@ export interface ArtistDetails {
   id: string;
   name: string;
   genres: string[];
-  followers: number;
-  popularity: number;
+  /** May be undefined after Spotify Feb 2026 API changes */
+  followers?: number;
+  /** May be undefined after Spotify Feb 2026 API changes */
+  popularity?: number;
   url: string;
   image: string | null;
 }
@@ -22,8 +24,10 @@ interface SpotifyArtistResponse {
   id: string;
   name: string;
   genres: string[];
-  followers: { total: number };
-  popularity: number;
+  /** May be removed in Spotify Feb 2026 API changes */
+  followers?: { total: number };
+  /** May be removed in Spotify Feb 2026 API changes */
+  popularity?: number;
   external_urls: { spotify: string };
   images: Array<{ url: string }>;
 }
@@ -83,8 +87,8 @@ export class SpotifyArtists {
       id: data.id,
       name: data.name,
       genres: capitalizedGenres,
-      followers: data.followers.total,
-      popularity: data.popularity,
+      followers: data.followers?.total,
+      popularity: data.popularity,  
       url: data.external_urls.spotify,
       image: data.images[0]?.url || null,
     };
