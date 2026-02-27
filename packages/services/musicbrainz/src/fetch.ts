@@ -40,7 +40,7 @@ export async function musicbrainzFetch(
   await cache.put(
     cacheKey,
     JSON.stringify({ lastRequestTime: Date.now() }),
-    { expirationTtl: 10 } // Short TTL - only need to coordinate recent requests
+    { expirationTtl: 60 } // KV minimum is 60s; only need to coordinate recent requests
   );
 
   const url = `${MUSICBRAINZ_API_BASE}${endpoint}`;
