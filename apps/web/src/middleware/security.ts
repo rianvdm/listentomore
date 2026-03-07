@@ -31,7 +31,7 @@ export function corsMiddleware(env: { ENVIRONMENT?: string }): MiddlewareHandler
   return cors({
     origin: origins,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
     maxAge: 86400, // 24 hours
     credentials: false,
   });
@@ -141,22 +141,18 @@ export function originValidationMiddleware(env: {
 
     // In production, require valid origin/referer for API requests
     if (env.ENVIRONMENT === 'production') {
-      // Allow same-origin requests (no Origin header for same-origin in some browsers)
+      // Allow same-origin requests (no Origin header for same-origin in some browsers).
+      // Note: CF-Ray is NOT used as a trust signal — it is a standard header any client
+      // can set. Scheduled Workers use the scheduled() export, not the fetch handler,
+      // so there is no legitimate case for bypassing origin checks via CF-Ray.
       if (!origin && !referer) {
-        // Could be a direct API call - check if it's from Cloudflare Worker context
-        const cfRay = c.req.header('CF-Ray');
-        if (!cfRay) {
-          // Not a Cloudflare request and no origin - block it
-          return c.json(
-            {
-              error: 'Forbidden',
-              message: 'API access requires valid origin',
-            },
-            403
-          );
-        }
-        // Allow Cloudflare internal requests (e.g., scheduled workers)
-        return next();
+        return c.json(
+          {
+            error: 'Forbidden',
+            message: 'API access requires valid origin',
+          },
+          403
+        );
       }
 
       // Validate origin

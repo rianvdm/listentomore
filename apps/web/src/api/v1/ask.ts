@@ -28,7 +28,9 @@ app.post('/', async (c) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('v1 ask error:', errorMessage, error);
-    return c.json({ error: 'Failed to generate response', details: errorMessage }, 500);
+    // Do not include error details in the response — they may contain internal info
+    // such as API key fragments or model names from upstream services.
+    return c.json({ error: 'Failed to generate response' }, 500);
   }
 });
 

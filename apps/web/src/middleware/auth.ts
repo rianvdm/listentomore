@@ -135,7 +135,12 @@ export function userRateLimitMiddleware(): MiddlewareHandler {
         );
       }
 
-      // Increment counter
+      // Increment counter.
+      // Note: KV does not support atomic compare-and-swap, so this read-then-write
+      // is inherently racy under concurrent requests. Parallel requests can read the
+      // same count and each write count+1, allowing a client to exceed their limit
+      // proportional to their concurrency. This is intentionally accepted as a soft
+      // limit. For a hard rate limit, migrate to Durable Objects.
       await cache.put(key, (count + 1).toString(), {
         expirationTtl: Math.ceil(windowMs / 1000) + 1,
       });

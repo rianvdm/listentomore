@@ -35,6 +35,10 @@ database_id = "512d0c41-502c-41ba-82ff-635d0413b071"
 migrations_dir = "../../packages/db/src/migrations"
 
 # Environment variables
+# ENVIRONMENT controls CORS and origin-validation strictness (see middleware/security.ts).
+# It is set to "production" here for the main deployment.
+# For local dev, override via .dev.vars: ENVIRONMENT=development
+# For preview deployments, add [env.preview.vars] below if needed.
 [vars]
 ENVIRONMENT = "production"
 

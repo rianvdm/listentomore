@@ -34,3 +34,6 @@ coverage/
 
 # TypeScript
 *.tsbuildinfo
+
+# Local review notes (untracked)
+REVIEW*.md

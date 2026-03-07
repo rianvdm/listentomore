@@ -11,6 +11,14 @@ const LASTFM_AUTH_URL = 'https://www.last.fm/api/auth/';
 const LASTFM_API_URL = 'https://ws.audioscrobbler.com/2.0/';
 
 /**
+ * Validate that a redirect target is a safe relative path on this origin.
+ * Rejects absolute URLs and protocol-relative URLs (//evil.com).
+ */
+function isSafeRedirect(url: string): boolean {
+  return url.startsWith('/') && !url.startsWith('//');
+}
+
+/**
  * Step 1: Redirect to Last.fm for authorization
  * GET /auth/lastfm
  */
@@ -26,8 +34,10 @@ export function handleLastfmAuth(c: Context<{ Bindings: Bindings; Variables: Var
   const url = new URL(c.req.url);
   const callbackUrl = `${url.origin}/auth/lastfm/callback`;
 
-  // Preserve the 'next' parameter through the OAuth flow
-  const next = c.req.query('next');
+  // Preserve the 'next' parameter through the OAuth flow.
+  // Only forward safe relative paths to prevent open redirect via the callback.
+  const nextRaw = c.req.query('next');
+  const next = nextRaw && isSafeRedirect(nextRaw) ? nextRaw : null;
   const cb = next ? `${callbackUrl}?next=${encodeURIComponent(next)}` : callbackUrl;
 
   const authUrl = `${LASTFM_AUTH_URL}?api_key=${apiKey}&cb=${encodeURIComponent(cb)}`;
@@ -41,7 +51,9 @@ export function handleLastfmAuth(c: Context<{ Bindings: Bindings; Variables: Var
  */
 export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
   const token = c.req.query('token');
-  const next = c.req.query('next') || '/';
+  // Validate next is a safe relative path to prevent open redirect.
+  const nextRaw = c.req.query('next') || '/';
+  const next = isSafeRedirect(nextRaw) ? nextRaw : '/';
 
   if (!token) {
     return c.redirect('/login?error=no_token');
@@ -128,7 +140,8 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
 
     console.log(`Created new user: ${username} (Last.fm: ${lastfmUsername})`);
 
-    // Send Discord notification for new signups
+    // Send Discord notification for new signups.
+    // Use ctx.waitUntil() so the fetch is not dropped when the response is sent.
     if (c.env.DISCORD_WEBHOOK_URL) {
       const webhookPayload = {
         content: `🎉 New signup: **${username}** — https://listentomore.com/u/${username}`
@@ -140,31 +153,33 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
         payload: webhookPayload,
       });
 
-      fetch(c.env.DISCORD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookPayload)
-      })
-        .then(res => {
-          if (res.ok) {
-            console.log('[DISCORD_WEBHOOK] New signup notification sent successfully', {
-              username,
-              status: res.status,
-            });
-          } else {
-            console.error('[DISCORD_WEBHOOK] New signup notification failed', {
-              username,
-              status: res.status,
-              statusText: res.statusText,
-            });
-          }
+      c.executionCtx.waitUntil(
+        fetch(c.env.DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
         })
-        .catch(err => {
-          console.error('[DISCORD_WEBHOOK] New signup notification error', {
-            username,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
+          .then(res => {
+            if (res.ok) {
+              console.log('[DISCORD_WEBHOOK] New signup notification sent successfully', {
+                username,
+                status: res.status,
+              });
+            } else {
+              console.error('[DISCORD_WEBHOOK] New signup notification failed', {
+                username,
+                status: res.status,
+                statusText: res.statusText,
+              });
+            }
+          })
+          .catch(err => {
+            console.error('[DISCORD_WEBHOOK] New signup notification error', {
+              username,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          })
+      );
     } else {
       console.log('[DISCORD_WEBHOOK] DISCORD_WEBHOOK_URL not configured, skipping new signup notification');
     }
@@ -206,7 +221,8 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
 
     console.log(`User logged in: ${user.username} (Last.fm: ${lastfmUsername})`);
 
-    // Send Discord notification for first-time account claims (existing users)
+    // Send Discord notification for first-time account claims (existing users).
+    // Use ctx.waitUntil() so the fetch is not dropped when the response is sent.
     if ((user.login_count || 0) === 0 && c.env.DISCORD_WEBHOOK_URL) {
       const username = user.username; // Capture for async callbacks
       const webhookPayload = {
@@ -219,31 +235,33 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
         payload: webhookPayload,
       });
 
-      fetch(c.env.DISCORD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookPayload)
-      })
-        .then(res => {
-          if (res.ok) {
-            console.log('[DISCORD_WEBHOOK] Account claim notification sent successfully', {
-              username,
-              status: res.status,
-            });
-          } else {
-            console.error('[DISCORD_WEBHOOK] Account claim notification failed', {
-              username,
-              status: res.status,
-              statusText: res.statusText,
-            });
-          }
+      c.executionCtx.waitUntil(
+        fetch(c.env.DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
         })
-        .catch(err => {
-          console.error('[DISCORD_WEBHOOK] Account claim notification error', {
-            username,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
+          .then(res => {
+            if (res.ok) {
+              console.log('[DISCORD_WEBHOOK] Account claim notification sent successfully', {
+                username,
+                status: res.status,
+              });
+            } else {
+              console.error('[DISCORD_WEBHOOK] Account claim notification failed', {
+                username,
+                status: res.status,
+                statusText: res.statusText,
+              });
+            }
+          })
+          .catch(err => {
+            console.error('[DISCORD_WEBHOOK] Account claim notification error', {
+              username,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          })
+      );
     }
   }
 

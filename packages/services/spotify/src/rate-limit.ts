@@ -19,8 +19,18 @@ export class SpotifyRateLimiter {
   /**
    * Acquire a rate limit token before making a Spotify API request.
    * Will wait if rate limit is exceeded or in cooldown from a 429.
+   *
+   * Retries are capped at MAX_RETRIES to prevent exceeding the Cloudflare Workers
+   * 30-second wall-clock limit. Each retry can sleep up to ~15s, so uncapped recursion
+   * would kill the Worker with a 1101 error under sustained 429s.
    */
-  async acquire(): Promise<void> {
+  private readonly MAX_RETRIES = 3;
+
+  async acquire(attempt = 0): Promise<void> {
+    if (attempt >= this.MAX_RETRIES) {
+      throw new Error(`[Spotify] Rate limit: max retries (${this.MAX_RETRIES}) exceeded — try again later`);
+    }
+
     const now = Date.now();
     const state = await this.getState();
 
@@ -29,9 +39,9 @@ export class SpotifyRateLimiter {
       const baseWait = Math.min(state.retryAfter - now, 10000);
       const jitter = Math.random() * 2000; // Add 0-2s jitter
       const waitMs = baseWait + jitter;
-      console.log(`[Spotify] Rate limit cooldown, waiting ${Math.round(waitMs)}ms`);
+      console.log(`[Spotify] Rate limit cooldown, waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${this.MAX_RETRIES})`);
       await this.sleep(waitMs);
-      return this.acquire(); // Retry after wait
+      return this.acquire(attempt + 1);
     }
 
     // Reset window if expired
@@ -50,9 +60,9 @@ export class SpotifyRateLimiter {
       const jitterPercent = 0.2 + Math.random() * 0.3; // 20-50%
       const jitter = baseWait * jitterPercent;
       const waitMs = baseWait + jitter;
-      console.log(`[Spotify] Local rate limit reached (${state.requestCount}/${this.maxRequests}), waiting ${Math.round(waitMs)}ms (with jitter)`);
+      console.log(`[Spotify] Local rate limit reached (${state.requestCount}/${this.maxRequests}), waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${this.MAX_RETRIES})`);
       await this.sleep(waitMs);
-      return this.acquire(); // Retry after wait
+      return this.acquire(attempt + 1);
     }
 
     // Log when approaching limit (80% threshold)

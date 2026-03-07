@@ -287,52 +287,63 @@ app.get('/', async (c) => {
               ${enrichLinksScript}
 
               (function() {
-                var MAX_ITEMS = 8;
+                 var MAX_ITEMS = 8;
 
-                internalFetch('/api/internal/user-listens')
-                  .then(function(res) { return res.json(); })
-                  .then(function(result) {
-                    var container = document.getElementById('user-listens-container');
-                    if (!container) return;
+                 function escapeHtml(str) {
+                   return String(str)
+                     .replace(/&/g, '&amp;')
+                     .replace(/</g, '&lt;')
+                     .replace(/>/g, '&gt;')
+                     .replace(/"/g, '&quot;')
+                     .replace(/'/g, '&#39;');
+                 }
 
-                    if (result.error || !result.data || result.data.length === 0) {
-                      container.innerHTML = '<p class="text-center text-muted">No recent listens available.</p>';
-                      document.getElementById('user-listens-updated').textContent = '';
-                      return;
-                    }
+                 internalFetch('/api/internal/user-listens')
+                   .then(function(res) { return res.json(); })
+                   .then(function(result) {
+                     var container = document.getElementById('user-listens-container');
+                     if (!container) return;
 
-                    var updatedEl = document.getElementById('user-listens-updated');
-                    if (updatedEl && result.lastUpdated) {
-                      var date = new Date(result.lastUpdated);
-                      var timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-                      updatedEl.textContent = 'Last updated ' + timeStr;
-                    } else if (updatedEl) {
-                      updatedEl.textContent = '';
-                    }
+                     if (result.error || !result.data || result.data.length === 0) {
+                       container.innerHTML = '<p class="text-center text-muted">No recent listens available.</p>';
+                       document.getElementById('user-listens-updated').textContent = '';
+                       return;
+                     }
 
-                    var listens = result.data.slice(0, MAX_ITEMS);
-                    var html = '<div class="track-list" id="user-listens-list">';
-                    listens.forEach(function(listen, index) {
-                      var albumName = listen.album || listen.track;
-                      var nowPlayingBadge = listen.nowPlaying ? ' <span style="color: var(--accent-color);">▶ Now</span>' : '';
-                      html += '<div class="track-item" data-index="' + index + '">';
-                      html += '<div class="track-item-image" id="listen-image-' + index + '">';
-                      html += '<a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">';
-                      if (listen.image) {
-                        html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
-                      } else {
-                        html += '<div class="placeholder-image"><span class="spinner">↻</span></div>';
-                      }
-                      html += '</a></div>';
-                      html += '<div class="track-item-content">';
-                      html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
-                      html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + listen.artist + '</a></p>';
-                      html += '<p id="listen-sentence-' + index + '" class="text-muted"><span class="loading-inline">Loading...</span></p>';
-                      html += '<p id="listen-links-' + index + '"><a href="/u/' + listen.username + '">' + listen.username + "'s page →</a></p>";
-                      html += '</div></div>';
-                    });
-                    html += '</div>';
-                    container.innerHTML = html;
+                     var updatedEl = document.getElementById('user-listens-updated');
+                     if (updatedEl && result.lastUpdated) {
+                       var date = new Date(result.lastUpdated);
+                       var timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                       updatedEl.textContent = 'Last updated ' + timeStr;
+                     } else if (updatedEl) {
+                       updatedEl.textContent = '';
+                     }
+
+                     var listens = result.data.slice(0, MAX_ITEMS);
+                     var html = '<div class="track-list" id="user-listens-list">';
+                     listens.forEach(function(listen, index) {
+                       var albumName = escapeHtml(listen.album || listen.track);
+                       var artistName = escapeHtml(listen.artist);
+                       var username = escapeHtml(listen.username);
+                       var nowPlayingBadge = listen.nowPlaying ? ' <span style="color: var(--accent-color);">▶ Now</span>' : '';
+                       html += '<div class="track-item" data-index="' + index + '">';
+                       html += '<div class="track-item-image" id="listen-image-' + index + '">';
+                       html += '<a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + (listen.album || listen.track)) + '">';
+                       if (listen.image) {
+                         html += '<img src="' + escapeHtml(listen.image) + '" alt="' + albumName + ' by ' + artistName + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
+                       } else {
+                         html += '<div class="placeholder-image"><span class="spinner">↻</span></div>';
+                       }
+                       html += '</a></div>';
+                       html += '<div class="track-item-content">';
+                       html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + (listen.album || listen.track)) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
+                       html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + artistName + '</a></p>';
+                       html += '<p id="listen-sentence-' + index + '" class="text-muted"><span class="loading-inline">Loading...</span></p>';
+                       html += '<p id="listen-links-' + index + '"><a href="/u/' + username + '">' + username + "'s page →</a></p>";
+                       html += '</div></div>';
+                     });
+                     html += '</div>';
+                     container.innerHTML = html;
                     enrichLinks('user-listens-list');
 
                     listens.forEach(function(listen, index) {
@@ -485,6 +496,15 @@ app.get('/', async (c) => {
             (function() {
               var MAX_ITEMS = 8;
 
+              function escapeHtml(str) {
+                return String(str)
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;');
+              }
+
               internalFetch('/api/internal/user-listens')
                 .then(function(res) { return res.json(); })
                 .then(function(result) {
@@ -513,23 +533,25 @@ app.get('/', async (c) => {
                   // Build list HTML
                   var html = '<div class="track-list" id="user-listens-list">';
                   listens.forEach(function(listen, index) {
-                    var albumName = listen.album || listen.track;
+                    var albumName = escapeHtml(listen.album || listen.track);
+                    var artistName = escapeHtml(listen.artist);
+                    var username = escapeHtml(listen.username);
                     var nowPlayingBadge = listen.nowPlaying ? ' <span style="color: var(--accent-color);">▶ Now</span>' : '';
 
                     html += '<div class="track-item" data-index="' + index + '">';
                     html += '<div class="track-item-image" id="listen-image-' + index + '">';
-                    html += '<a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">';
+                    html += '<a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + (listen.album || listen.track)) + '">';
                     if (listen.image) {
-                      html += '<img src="' + listen.image + '" alt="' + albumName + ' by ' + listen.artist + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
+                      html += '<img src="' + escapeHtml(listen.image) + '" alt="' + albumName + ' by ' + artistName + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://file.elezea.com/noun-no-image.png\\'"/>';
                     } else {
                       html += '<div class="placeholder-image"><span class="spinner">↻</span></div>';
                     }
                     html += '</a></div>';
                     html += '<div class="track-item-content">';
-                    html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + albumName) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
-                    html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + listen.artist + '</a></p>';
+                    html += '<p><strong><a href="/album?q=' + encodeURIComponent(listen.artist + ' ' + (listen.album || listen.track)) + '">' + albumName + '</a></strong>' + nowPlayingBadge + '</p>';
+                    html += '<p><a href="/artist?q=' + encodeURIComponent(listen.artist) + '">' + artistName + '</a></p>';
                     html += '<p id="listen-sentence-' + index + '" class="text-muted"><span class="loading-inline">Loading...</span></p>';
-                    html += '<p id="listen-links-' + index + '"><a href="/u/' + listen.username + '">' + listen.username + "'s page →</a></p>";
+                    html += '<p id="listen-links-' + index + '"><a href="/u/' + username + '">' + username + "'s page →</a></p>";
                     html += '</div></div>';
                   });
                   html += '</div>';
