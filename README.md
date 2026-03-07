@@ -14,9 +14,9 @@ A music discovery platform that combines real-time listening data with AI-powere
 
 ### Music Discovery
 - **Album & Artist Search** - Search the Spotify catalog with instant results
-- **Album Detail Pages** - Rich album pages with release info, track listings, genres, and AI-generated summaries with citations
+- **Album Detail Pages** - Rich album pages with release info, track listings, genres, and AI-generated summaries
 - **Artist Detail Pages** - Artist profiles with biography, top albums, similar artists, and genre connections
-- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by OpenAI GPT-5.2 with web search (with source citations)
+- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by OpenAI GPT-5.4 with web search
 - **Genre Exploration** - Discover music by genre with AI-generated descriptions, history, and key artists
 - **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and Songlink (for all other services)
 - **Album Recommendations** - AI-generated "if you like this, try these" recommendations on album pages
@@ -26,7 +26,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Top Artists & Albums** - View your most-played music over different time periods (7 days, 30 days, etc.)
 - **Personalized Recommendations** - Discover new artists based on your listening habits and similar artist connections
 - **Loved Tracks** - See your favorite tracks with AI-generated artist insights
-- **Weekly Insights** - AI-powered analysis of your 7-day listening patterns with personalized album recommendations (GPT-5.2)
+- **Weekly Insights** - AI-powered analysis of your 7-day listening patterns with personalized album recommendations
 
 ### Home Feed
 - **Community Listening** - See what registered users are listening to in real-time (updates every 5 minutes)
@@ -156,7 +156,7 @@ pnpm deploy
 
 - **[Spotify Web API](https://developer.spotify.com/documentation/web-api)** - Music catalog data
 - **[Last.fm API](https://www.last.fm/api)** - Listening history and scrobbles
-- **[OpenAI API](https://platform.openai.com)** - GPT-5.2 for AI summaries, web search with citations, chatbot, and fact generation
+- **[OpenAI API](https://platform.openai.com)** - GPT-5.4 for AI summaries, web search, chatbot, and fact generation
 - **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
 - **[Songlink/Odesli](https://odesli.co)** - Cross-platform streaming links for all services
 
