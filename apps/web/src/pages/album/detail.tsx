@@ -129,8 +129,8 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
         ${enrichLinksScript}
 
         (function() {
-          var albumId = '${album.id}';
-          var spotifyUrl = '${album.spotifyUrl}';
+          var albumId = ${JSON.stringify(album.id)};
+          var spotifyUrl = ${JSON.stringify(album.spotifyUrl)};
           var artistName = ${JSON.stringify(album.artist)};
           var albumName = ${JSON.stringify(album.name)};
 

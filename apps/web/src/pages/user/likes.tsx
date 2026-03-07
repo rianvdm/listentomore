@@ -146,15 +146,15 @@ export function UserLikesPage({
               .then(function(data) {
                 var el = document.getElementById('loved-sentence-' + index);
                 if (el && data.data && data.data.sentence) {
-                  el.innerHTML = data.data.sentence;
+                  el.textContent = data.data.sentence;
                   el.className = '';
                 } else if (el) {
-                  el.innerHTML = '';
+                  el.textContent = '';
                 }
               })
               .catch(function() {
                 var el = document.getElementById('loved-sentence-' + index);
-                if (el) el.innerHTML = '';
+                if (el) el.textContent = '';
               });
 
             // Fetch Spotify track data for image and streaming link

@@ -48,6 +48,16 @@ import { enrichLinksScript } from './utils/client-scripts';
 import { apiRoutes } from './api';
 import type { Bindings, Variables } from './types';
 
+/** Escape a string for safe interpolation into HTML. */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Apply security headers to all responses
@@ -352,15 +362,15 @@ app.get('/', async (c) => {
                         .then(function(data) {
                           var el = document.getElementById('listen-sentence-' + index);
                           if (el && data.data && data.data.sentence) {
-                            el.innerHTML = data.data.sentence;
+                            el.textContent = data.data.sentence;
                             el.className = 'text-muted';
                           } else if (el) {
-                            el.innerHTML = '';
+                            el.textContent = '';
                           }
                         })
                         .catch(function() {
                           var el = document.getElementById('listen-sentence-' + index);
-                          if (el) el.innerHTML = '';
+                          if (el) el.textContent = '';
                         });
 
                       if (listen.album && listen.artist) {
@@ -568,15 +578,15 @@ app.get('/', async (c) => {
                       .then(function(data) {
                         var el = document.getElementById('listen-sentence-' + index);
                         if (el && data.data && data.data.sentence) {
-                          el.innerHTML = data.data.sentence;
+                          el.textContent = data.data.sentence;
                           el.className = 'text-muted';
                         } else if (el) {
-                          el.innerHTML = '';
+                          el.textContent = '';
                         }
                       })
                       .catch(function() {
                         var el = document.getElementById('listen-sentence-' + index);
-                        if (el) el.innerHTML = '';
+                        if (el) el.textContent = '';
                       });
 
                     // Fetch streaming links (using precise field-filter search)
@@ -702,7 +712,7 @@ app.get('/widget/recent', async (c) => {
     }
 
     if (format === 'html') {
-      const html = `♫ Most recently I listened to <strong>${track.album || track.name}</strong> by <strong>${track.artist}</strong>. <a href="https://listentomore.com/u/${username}" target="_blank">See more »</a>`;
+      const html = `♫ Most recently I listened to <strong>${escapeHtml(track.album || track.name)}</strong> by <strong>${escapeHtml(track.artist)}</strong>. <a href="https://listentomore.com/u/${encodeURIComponent(username)}" target="_blank">See more »</a>`;
       return new Response(html, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
