@@ -107,7 +107,6 @@ Just provide the 4 bullet-point recommendations.`;
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
-    returnCitations: false,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,

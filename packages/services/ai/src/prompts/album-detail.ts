@@ -1,4 +1,4 @@
-// Album detail prompt - generates album summaries with citations
+// Album detail prompt - generates album summaries
 
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
@@ -6,7 +6,6 @@ import type { AICache } from '../cache';
 
 export interface AlbumDetailResult {
   content: string;
-  citations: string[];
   metadata?: AIResponseMetadata;
 }
 
@@ -39,9 +38,9 @@ export async function generateAlbumDetail(
 
 Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.
 
-You MUST attempt to find at least 5 sources from web searches. Include inline citation numbers like [1], [2], etc. in your response to reference your sources.
+Always search the web for the latest information about this album before responding. Do not rely solely on your training data.
 
-Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also..."). Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
+Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").
 
 IMPORTANT: If you cannot find sufficient information about this album to write a meaningful summary, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
 
@@ -57,7 +56,6 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
-    returnCitations: true,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
@@ -65,14 +63,12 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
 
   const result: AlbumDetailResult = {
     content: response.content,
-    citations: response.citations,
     metadata: response.metadata,
   };
 
   // Cache the result (without metadata - it's only for fresh responses)
   await cache.set('albumDetail', [normalizedArtist, normalizedAlbum], {
     content: result.content,
-    citations: result.citations,
   });
 
   return result;

@@ -106,7 +106,7 @@ export class AIService {
   }
 
   /**
-   * Generate album details with citations (provider determined by config)
+   * Generate album details (provider determined by config)
    */
   async getAlbumDetail(artistName: string, albumName: string) {
     const { generateAlbumDetail } = await import('./prompts/album-detail');
@@ -115,7 +115,7 @@ export class AIService {
   }
 
   /**
-   * Generate genre summary with citations (provider determined by config)
+   * Generate genre summary (provider determined by config)
    */
   async getGenreSummary(genreName: string) {
     const { generateGenreSummary } = await import('./prompts/genre-summary');

@@ -1,4 +1,4 @@
-// Artist summary prompt - generates detailed artist summaries with linked references
+// Artist summary prompt - generates detailed artist summaries
 
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
@@ -6,7 +6,6 @@ import type { AICache } from '../cache';
 
 export interface ArtistSummaryResult {
   summary: string;
-  citations: string[];
   metadata?: AIResponseMetadata;
 }
 
@@ -70,7 +69,7 @@ export async function generateArtistSummary(
 
   const prompt = `Write a summary of the music artist/band ${artistName}. Include verifiable facts about the artist's history, genres, styles, and most popular albums. Include one or two interesting facts about them (without stating that it's an interesting fact). Also recommend similar artists to check out if one likes their music. Write no more than three paragraphs. Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name}}.
 
-Use Markdown formatting for the summary. Do NOT use bullet points. Include inline citation numbers like [1], [2], etc. to reference your sources. Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
+Use Markdown formatting for the summary. Do NOT use bullet points. Always search the web for the latest information about this artist before responding. Do not rely solely on your training data.
 
 IMPORTANT: If you cannot find sufficient verifiable information about this artist, respond with ONLY the text "Not enough information available for this artist." and nothing else. Do not explain what you couldn't find or apologize.`;
 
@@ -86,7 +85,6 @@ IMPORTANT: If you cannot find sufficient verifiable information about this artis
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
-    returnCitations: true,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
@@ -97,14 +95,12 @@ IMPORTANT: If you cannot find sufficient verifiable information about this artis
 
   const result: ArtistSummaryResult = {
     summary: formattedSummary,
-    citations: response.citations,
     metadata: response.metadata,
   };
 
   // Cache the result (without metadata - it's only for fresh responses)
   await cache.set('artistSummary', [normalizedName], {
     summary: result.summary,
-    citations: result.citations,
   });
 
   return result;

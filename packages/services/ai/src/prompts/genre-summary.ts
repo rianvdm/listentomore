@@ -1,4 +1,4 @@
-// Genre summary prompt - generates genre descriptions with citations
+// Genre summary prompt - generates genre descriptions
 
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
@@ -6,7 +6,6 @@ import type { AICache } from '../cache';
 
 export interface GenreSummaryResult {
   content: string;
-  citations: string[];
   metadata?: AIResponseMetadata;
 }
 
@@ -89,7 +88,7 @@ export async function generateGenreSummary(
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
-Use Markdown formatting for the summary. Include inline citation numbers like [1], [2], etc. to reference your sources. Do NOT start with a preamble or end with follow-up suggestions. Do NOT include a "References" or "Sources" section at the end - citations are extracted separately.
+Use Markdown formatting for the summary. Always search the web for the latest information about this genre before responding. Do not rely solely on your training data. Do NOT start with a preamble or end with follow-up suggestions.
 
 IMPORTANT: If you cannot find sufficient verifiable information about this music genre, respond with ONLY the text "Not enough information available for this genre." and nothing else. Do not explain what you couldn't find or apologize.`;
 
@@ -111,7 +110,6 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
         ],
         maxTokens: config.maxTokens,
         temperature: config.temperature,
-        returnCitations: true,
         reasoning: config.reasoning,
         verbosity: config.verbosity,
         webSearch: config.webSearch,
@@ -122,7 +120,6 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
 
       const result: GenreSummaryResult = {
         content: formattedContent,
-        citations: response.citations,
         metadata: response.metadata,
       };
 
@@ -130,7 +127,6 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
       try {
         await cache.set('genreSummary', [normalizedGenre], {
           content: result.content,
-          citations: result.citations,
         });
       } catch (err) {
         console.error(`[Genre Summary] Cache write failed for "${genreName}":`, err);

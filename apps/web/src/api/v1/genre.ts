@@ -27,7 +27,6 @@ app.get('/', async (c) => {
         url: `https://listentomore.com/genre/${slug}`,
         summary: {
           content: result.content,
-          citations: result.citations,
           metadata: result.metadata,
         },
       },

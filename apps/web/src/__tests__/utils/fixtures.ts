@@ -203,6 +203,5 @@ export const aiFixtures = {
         },
       },
     ],
-    citations: ['https://en.wikipedia.org/wiki/Alternative_rock'],
   },
 };

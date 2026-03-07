@@ -24,8 +24,6 @@ export interface ChatCompletionOptions {
   temperature?: number;
 
   // Provider-specific options (ignored if not supported)
-  /** Request citations from web search models */
-  returnCitations?: boolean;
   /** Reasoning effort for GPT-5 models (Responses API) */
   reasoning?: ReasoningEffort;
   /** Output verbosity for GPT-5 models (Responses API) */
@@ -59,8 +57,6 @@ export interface AIResponseMetadata {
     reasoning?: ReasoningEffort;
     /** Verbosity level if set */
     verbosity?: Verbosity;
-    /** Whether citations were returned */
-    citationsReturned?: boolean;
   };
 }
 
@@ -69,8 +65,6 @@ export interface AIResponseMetadata {
  */
 export interface ChatCompletionResponse {
   content: string;
-  /** Source URLs from web search - empty array if none */
-  citations: string[];
   /** Metadata about the API call (for debugging/testing) */
   metadata?: AIResponseMetadata;
 }

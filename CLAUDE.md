@@ -424,12 +424,13 @@ app.route('/', myInternalRoutes);  // Results in /api/internal/my-internal-data
 
 | Provider | Models | Best For |
 |----------|--------|----------|
-| OpenAI | `gpt-5-search-api`, `gpt-5.2`, `gpt-5.1`, `gpt-5-mini` | All AI tasks including web search with citations |
+| OpenAI | `gpt-5.4`, `gpt-5-mini`, `gpt-5-nano` | All AI tasks including web search |
 
 Key points:
 - Pass `internalToken` to Layout for pages using internal APIs
 - Use `internalFetch()` (not `fetch()`) for `/api/internal/*` calls
 - AI results use markdown; use `marked.parse()` client-side
+- No citation handling — web search results appear inline as model-generated text
 
 ### Caching
 

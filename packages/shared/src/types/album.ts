@@ -14,7 +14,6 @@ export interface Album {
 export interface AlbumDetail extends Album {
   tracks: Track[];
   summary: string | null;
-  citations: string[];
   streamingLinks: StreamingLinks;
 }
 

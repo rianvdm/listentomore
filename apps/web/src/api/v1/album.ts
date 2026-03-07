@@ -83,7 +83,6 @@ app.get('/', async (c) => {
     if (summaryResult) {
       response.summary = {
         content: summaryResult.content,
-        citations: summaryResult.citations,
         metadata: summaryResult.metadata,
       };
     }
@@ -146,7 +145,6 @@ app.get('/recommendations', async (c) => {
         },
         recommendations: {
           content: recommendations.content,
-          citations: recommendations.citations,
           metadata: recommendations.metadata,
         },
       },

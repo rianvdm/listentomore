@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { slugToDisplayName } from '../../data/genres';
-import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
+import { enrichLinksScript } from '../../utils/client-scripts';
 
 interface GenreDetailProps {
   displayName: string;
@@ -47,8 +47,6 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
-        ${transformCitationsScript}
-        ${renderCitationsScript}
 
         (function() {
           var genreName = ${JSON.stringify(displayName)};
@@ -64,9 +62,7 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
               var summary = data.data;
               var content = summary.content || summary.text || '';
 
-              // Format markdown, transform citations to superscript links, and add source list
-              var html = transformCitations(marked.parse(content), summary.citations);
-              html += renderCitations(summary.citations);
+              var html = marked.parse(content);
 
               document.getElementById('genre-summary').innerHTML = html;
 

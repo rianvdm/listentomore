@@ -6,7 +6,7 @@ import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
-import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
+import { enrichLinksScript } from '../../utils/client-scripts';
 
 interface ArtistData {
   id: string;
@@ -103,8 +103,6 @@ export function ArtistDetailPage({
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
-        ${transformCitationsScript}
-        ${renderCitationsScript}
 
         (function() {
           var artistName = ${JSON.stringify(artist.name)};
@@ -233,8 +231,7 @@ export function ArtistDetailPage({
               var summary = data.data;
               var text = summary.text || summary.summary || '';
               var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
-              html += '<div>' + transformCitations(marked.parse(text), summary.citations) + '</div>';
-              html += renderCitations(summary.citations);
+              html += '<div>' + marked.parse(text) + '</div>';
 
               document.getElementById('ai-summary').innerHTML = html;
 

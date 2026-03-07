@@ -72,7 +72,6 @@ Rules:
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
-    returnCitations: false,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
   });

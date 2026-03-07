@@ -1,6 +1,6 @@
 // ABOUTME: OpenAI API client for text and image generation.
 // ABOUTME: Supports both Chat Completions API and Responses API (for GPT-5.x).
-// ABOUTME: Includes distributed rate limiting and citation handling for web search models.
+// ABOUTME: Includes distributed rate limiting for web search models.
 
 import { AI_PROVIDERS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
@@ -29,8 +29,6 @@ export interface ChatCompletionOptions {
 
 export interface ChatCompletionResponse {
   content: string;
-  /** URL citations from web search-enabled models - empty array if none */
-  citations: string[];
   /** Metadata about the API call (for debugging/testing) */
   metadata?: AIResponseMetadata;
 }
@@ -58,7 +56,6 @@ export interface ResponsesOptions {
  */
 export interface ResponsesResult {
   content: string;
-  citations: string[];
   metadata?: AIResponseMetadata;
 }
 
@@ -104,9 +101,6 @@ export class OpenAIClient implements ChatClient {
     model: string,
     options: ChatCompletionOptions
   ): boolean {
-    // gpt-5-search-api uses Chat Completions with web_search_options
-    if (model === 'gpt-5-search-api') return false;
-
     const isGpt5 = model.startsWith('gpt-5');
     const hasResponsesFeatures = Boolean(
       options.webSearch || options.reasoning || options.verbosity
@@ -191,7 +185,6 @@ export class OpenAIClient implements ChatClient {
 
     return {
       content: result.content,
-      citations: result.citations,
       metadata: result.metadata,
     };
   }
@@ -218,11 +211,6 @@ export class OpenAIClient implements ChatClient {
       requestBody.temperature = options.temperature;
     }
 
-    // Add web_search_options for search models (gpt-5-search-api, etc.)
-    if (options.webSearch) {
-      requestBody.web_search_options = {};
-    }
-
     const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -244,16 +232,6 @@ export class OpenAIClient implements ChatClient {
       choices: Array<{
         message: {
           content: string;
-          annotations?: Array<{
-            type: string;
-            // Chat Completions format (nested)
-            url_citation?: { url: string; title?: string; start_index?: number; end_index?: number };
-            // Some models return url directly (flat format)
-            url?: string;
-            title?: string;
-            start_index?: number;
-            end_index?: number;
-          }>;
         };
       }>;
       usage?: {
@@ -263,86 +241,7 @@ export class OpenAIClient implements ChatClient {
       };
     };
 
-    const message = data.choices[0].message;
-    let content = message.content;
-    const citations: string[] = [];
-
-    // Step 1: Extract citation URLs from annotations (most reliable for gpt-5-search-api).
-    // gpt-5-search-api puts [N] markers in content with URLs only in annotations.
-    if (message.annotations) {
-      const urlAnnotations = message.annotations.filter(
-        (a) => a.type === 'url_citation'
-      );
-      const seenUrls = new Set<string>();
-      for (const annotation of urlAnnotations) {
-        // Handle both nested (url_citation.url) and flat (annotation.url) formats
-        const url = annotation.url_citation?.url || annotation.url;
-        if (url && !seenUrls.has(url)) {
-          seenUrls.add(url);
-          citations.push(url);
-        }
-      }
-
-      // Debug: log when annotations exist but yield no citations
-      if (citations.length === 0 && urlAnnotations.length > 0) {
-        console.error('[OpenAI] url_citation annotations found but no URLs extracted. Raw annotations:', JSON.stringify(urlAnnotations.slice(0, 3)));
-      }
-    }
-
-    // Step 2: If annotations yielded citations, ensure content has [N] markers
-    // (gpt-5-search-api already includes them, but normalize just in case)
-    if (citations.length > 0 && content) {
-      // Replace any markdown citation links with [N] markers
-      const citationMap = new Map<string, number>();
-      citations.forEach((url, i) => citationMap.set(url, i + 1));
-
-      content = content.replace(
-        /\(?\[([^\]]+)\]\((https?:\/\/[^)]+)\)\)?/g,
-        (_match, _text, url) => {
-          const num = citationMap.get(url);
-          return num ? `[${num}]` : _match;
-        }
-      );
-
-      // Deduplicate adjacent identical [N] markers (e.g., "text [1][1]" → "text [1]")
-      content = content.replace(/\[(\d+)\]\s*\[\1\]/g, '[$1]');
-    }
-
-    // Step 3: Fallback — if no annotations, extract from markdown links in content.
-    // Older models may embed citations as [source](url) directly in text.
-    if (citations.length === 0 && content) {
-      const linkRegex = /\(?\[([^\]]+)\]\((https?:\/\/[^)]+)\)\)?/g;
-      const seenUrls = new Set<string>();
-      let linkMatch;
-
-      while ((linkMatch = linkRegex.exec(content)) !== null) {
-        const url = linkMatch[2];
-        if (!seenUrls.has(url)) {
-          seenUrls.add(url);
-          citations.push(url);
-        }
-      }
-
-      if (citations.length > 0) {
-        const citationMap = new Map<string, number>();
-        citations.forEach((url, i) => citationMap.set(url, i + 1));
-
-        content = content.replace(
-          /\(?\[([^\]]+)\]\((https?:\/\/[^)]+)\)\)?/g,
-          (_match, _text, url) => {
-            const num = citationMap.get(url);
-            return num ? `[${num}]` : _match;
-          }
-        );
-
-        // Strip pre-existing [N] markers that the model added alongside markdown links
-        content = content.replace(/\[(\d+)\](?!\()/g, (_match, num) => {
-          const n = parseInt(num, 10);
-          return n >= 1 && n <= citations.length ? `[${n}]` : '';
-        });
-        content = content.replace(/\[(\d+)\]\s*\[\1\]/g, '[$1]');
-      }
-    }
+    const content = data.choices[0].message.content;
 
     // Build metadata from actual API response
     const metadata: AIResponseMetadata = {
@@ -356,12 +255,9 @@ export class OpenAIClient implements ChatClient {
           totalTokens: data.usage.total_tokens ?? null,
         }
         : undefined,
-      features: {
-        citationsReturned: citations.length > 0,
-      },
     };
 
-    return { content, citations, metadata };
+    return { content, metadata };
   }
 
   /**
@@ -456,8 +352,8 @@ export class OpenAIClient implements ChatClient {
 
   /**
    * Parse the Responses API result into our common format.
-   * Extracts content from output_text helper or output[].content[].text,
-   * and citations from annotations. Also extracts metadata from the response.
+   * Extracts content from output_text helper or output[].content[].text.
+   * Also extracts metadata from the response.
    */
   private parseResponsesResult(
     data: {
@@ -485,7 +381,6 @@ export class OpenAIClient implements ChatClient {
   ): ResponsesResult {
     const result: ResponsesResult = {
       content: '',
-      citations: [],
     };
 
     // Try to get content from output_text helper first
@@ -495,13 +390,9 @@ export class OpenAIClient implements ChatClient {
 
     // Track if web search was actually performed
     let webSearchUsed = false;
-    // Collect annotation URLs as fallback
-    const annotationUrls: string[] = [];
 
-    // Extract content and annotation URLs from output array
+    // Extract content from output array
     if (data.output) {
-      const seenUrls = new Set<string>();
-
       for (const item of data.output) {
         if (item.type === 'web_search_call') {
           webSearchUsed = true;
@@ -512,76 +403,8 @@ export class OpenAIClient implements ChatClient {
             if (!result.content && block.type === 'output_text' && block.text) {
               result.content = block.text;
             }
-
-            if (block.annotations) {
-              for (const annotation of block.annotations) {
-                if (annotation.type === 'url_citation' && annotation.url) {
-                  if (!seenUrls.has(annotation.url)) {
-                    seenUrls.add(annotation.url);
-                    annotationUrls.push(annotation.url);
-                  }
-                }
-              }
-            }
           }
         }
-      }
-    }
-
-    // Step 1: Use annotation URLs as primary citation source
-    // Annotations are the most reliable source for both Responses API and search models
-    if (annotationUrls.length > 0) {
-      result.citations = annotationUrls;
-    }
-
-    // Step 2: If annotations yielded citations, normalize content markers
-    if (result.citations.length > 0 && result.content) {
-      const citationMap = new Map<string, number>();
-      result.citations.forEach((url, i) => citationMap.set(url, i + 1));
-
-      result.content = result.content.replace(
-        /\(?\[([^\]]+)\]\((https?:\/\/[^)]+)\)\)?/g,
-        (_match, _text, url) => {
-          const num = citationMap.get(url);
-          return num ? `[${num}]` : _match;
-        }
-      );
-
-      result.content = result.content.replace(/\[(\d+)\]\s*\[\1\]/g, '[$1]');
-    }
-
-    // Step 3: Fallback — if no annotation URLs, extract from markdown links in content
-    if (result.citations.length === 0 && result.content) {
-      const linkRegex = /\(?\[([^\]]+)\]\((https?:\/\/[^)]+)\)\)?/g;
-      const seenUrls = new Set<string>();
-      let linkMatch;
-
-      while ((linkMatch = linkRegex.exec(result.content)) !== null) {
-        const url = linkMatch[2];
-        if (!seenUrls.has(url)) {
-          seenUrls.add(url);
-          result.citations.push(url);
-        }
-      }
-
-      if (result.citations.length > 0) {
-        const citationMap = new Map<string, number>();
-        result.citations.forEach((url, i) => citationMap.set(url, i + 1));
-
-        result.content = result.content.replace(
-          /\(?\[([^\]]+)\]\((https?:\/\/[^)]+)\)\)?/g,
-          (_match, _text, url) => {
-            const num = citationMap.get(url);
-            return num ? `[${num}]` : _match;
-          }
-        );
-
-        // Strip pre-existing [N] markers that conflict with our numbering
-        result.content = result.content.replace(/\[(\d+)\](?!\()/g, (_match, num) => {
-          const n = parseInt(num, 10);
-          return n >= 1 && n <= result.citations.length ? `[${n}]` : '';
-        });
-        result.content = result.content.replace(/\[(\d+)\]\s*\[\1\]/g, '[$1]');
       }
     }
 
@@ -601,7 +424,6 @@ export class OpenAIClient implements ChatClient {
         webSearchUsed,
         reasoning: options.reasoning?.effort,
         verbosity: options.text?.verbosity,
-        citationsReturned: result.citations.length > 0,
       },
     };
 

@@ -6,7 +6,6 @@ import type { AICache } from '../cache';
 
 export interface AlbumRecommendationsResult {
   content: string;
-  citations: string[];
   metadata?: AIResponseMetadata;
 }
 
@@ -90,9 +89,9 @@ Use bullets for the album recommendations. Format each recommendation as: **{{Al
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
-Include inline citation numbers like [1], [2], etc. to reference your sources when making factual claims.
+Always search the web to verify album information before responding. Do not rely solely on your training data.
 
-Do NOT start with a preamble (like "Here are some recommendations..." or "Great choice!"). Do NOT end with follow-up suggestions, summary statements (like "All these albums are available on Spotify..."), or any concluding remarks. Do NOT include a "References" or "Sources" section - citations are extracted separately. Just provide the bullet-point recommendations and nothing else.
+Do NOT start with a preamble (like "Here are some recommendations..." or "Great choice!"). Do NOT end with follow-up suggestions, summary statements (like "All these albums are available on Spotify..."), or any concluding remarks. Just provide the bullet-point recommendations and nothing else.
 
 IMPORTANT:
 * You MUST provide ALBUM recommendations, not songs.
@@ -112,7 +111,6 @@ IMPORTANT:
     ],
     maxTokens: config.maxTokens,
     temperature: config.temperature,
-    returnCitations: true,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
@@ -123,14 +121,12 @@ IMPORTANT:
 
   const result: AlbumRecommendationsResult = {
     content: formattedContent,
-    citations: response.citations,
     metadata: response.metadata,
   };
 
   // Cache the result (without metadata - it's only for fresh responses)
   await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], {
     content: result.content,
-    citations: result.citations,
   });
 
   return result;

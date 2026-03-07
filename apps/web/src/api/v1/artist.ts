@@ -64,7 +64,6 @@ app.get('/', async (c) => {
     if (summaryResult && summaryResult.summary) {
       response.summary = {
         content: summaryResult.summary,
-        citations: summaryResult.citations,
         metadata: summaryResult.metadata,
       };
     }

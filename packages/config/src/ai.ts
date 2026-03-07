@@ -43,7 +43,7 @@ export interface AITaskConfig {
  * ┌─────────────────────────────────────────────────────────────────────────────┐
  * │ MODEL CAPABILITIES & CONSTRAINTS                                            │
  * ├─────────────────┬──────────────────────┬──────────────────────┤
- * │ Model           │ gpt-5.2              │ gpt-5-mini/nano      │
+ * │ Model           │ gpt-5.4              │ gpt-5-mini/nano      │
  * ├─────────────────┼──────────────────────┼──────────────────────┤
  * │ reasoning       │ none*, low,          │ minimal, low,        │
  * │                 │ medium, high, xhigh  │ medium*, high        │
@@ -64,7 +64,7 @@ export interface AITaskConfig {
 export const AI_TASKS = {
   artistSummary: {
     provider: 'openai',
-    model: 'gpt-5-search-api',
+    model: 'gpt-5.4',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
@@ -73,7 +73,7 @@ export const AI_TASKS = {
 
   albumDetail: {
     provider: 'openai',
-    model: 'gpt-5-search-api',
+    model: 'gpt-5.4',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 120,
@@ -82,7 +82,7 @@ export const AI_TASKS = {
 
   genreSummary: {
     provider: 'openai',
-    model: 'gpt-5-search-api',
+    model: 'gpt-5.4',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
@@ -91,7 +91,7 @@ export const AI_TASKS = {
 
   artistSentence: {
     provider: 'openai',
-    model: 'gpt-5-search-api',
+    model: 'gpt-5.4',
     maxTokens: 150,
     temperature: 1,
     cacheTtlDays: 180,
@@ -116,7 +116,7 @@ export const AI_TASKS = {
 
   listenAi: {
     provider: 'openai',
-    model: 'gpt-5.1',
+    model: 'gpt-5.4',
     maxTokens: 500,
     temperature: 1,
     cacheTtlDays: 0,
@@ -126,7 +126,7 @@ export const AI_TASKS = {
 
   albumRecommendations: {
     provider: 'openai',
-    model: 'gpt-5-search-api',
+    model: 'gpt-5.4',
     maxTokens: 1000,
     temperature: 1,
     cacheTtlDays: 30,
@@ -135,7 +135,7 @@ export const AI_TASKS = {
 
   userInsightsSummary: {
     provider: 'openai',
-    model: 'gpt-5.2',
+    model: 'gpt-5.4',
     maxTokens: 1500,
     temperature: 0.7,
     cacheTtlDays: 1,
@@ -144,7 +144,7 @@ export const AI_TASKS = {
 
   userInsightsRecommendations: {
     provider: 'openai',
-    model: 'gpt-5.2',
+    model: 'gpt-5.4',
     maxTokens: 4000, // Increased from 1500 to avoid timeout
     temperature: 1,
     cacheTtlDays: 1,

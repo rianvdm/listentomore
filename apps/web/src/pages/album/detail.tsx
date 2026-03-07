@@ -6,7 +6,7 @@ import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
-import { enrichLinksScript, renderCitationsScript, transformCitationsScript } from '../../utils/client-scripts';
+import { enrichLinksScript } from '../../utils/client-scripts';
 
 interface AlbumData {
   id: string;
@@ -127,8 +127,6 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
-        ${transformCitationsScript}
-        ${renderCitationsScript}
 
         (function() {
           var albumId = '${album.id}';
@@ -162,7 +160,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
             .then(function(data) {
               if (data.error) throw new Error(data.error);
               var summary = data.data;
-              var html = '<div>' + transformCitations(marked.parse(summary.content), summary.citations) + '</div>';
+              var html = '<div>' + marked.parse(summary.content) + '</div>';
               document.getElementById('ai-summary').innerHTML = html;
             })
             .catch(function(e) {
@@ -185,7 +183,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
                 return;
               }
               var html = '<h3>Album Recommendations</h3>';
-              html += '<div>' + transformCitations(marked.parse(recommendations.content), recommendations.citations) + '</div>';
+              html += '<div>' + marked.parse(recommendations.content) + '</div>';
               document.getElementById('album-recommendations').innerHTML = html;
               // Enrich links: search links -> direct Spotify ID links
               enrichLinks('album-recommendations');

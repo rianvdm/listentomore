@@ -973,8 +973,7 @@ blockquote {
   margin: 0;
 }
 
-.ai-summary ul,
-.citations ul {
+.ai-summary ul {
   margin: 0.5em 0;
   padding-left: 1.5em;
   list-style-type: disc;
@@ -984,52 +983,6 @@ blockquote {
   font-size: 18px;
   margin-bottom: 0.5em;
   line-height: 1.4em;
-}
-
-.citations {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(var(--c-base-rgb), 0.1);
-}
-
-.citations h4 {
-  margin: 0 0 0.3em;
-  font-size: 13px;
-  opacity: 0.7;
-}
-
-.citations ol,
-.ai-summary .citations ol {
-  list-style-type: decimal;
-  margin: 0;
-  padding-left: 1.5em;
-}
-
-.citations li,
-.ai-summary .citations li {
-  font-size: 12px;
-  margin-bottom: 0.15em;
-  line-height: 1.3em;
-  scroll-margin-top: 2rem;
-}
-
-/* Citation superscript links */
-.cite-ref {
-  font-size: 0.75em;
-  vertical-align: super;
-  line-height: 0;
-  margin-left: 1px;
-}
-
-.cite-ref a {
-  color: var(--c-accent);
-  text-decoration: none;
-  opacity: 0.8;
-}
-
-.cite-ref a:hover {
-  opacity: 1;
-  text-decoration: underline;
 }
 
 /* Similar Artists (outside image-text-wrapper) */
