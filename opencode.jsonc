@@ -1,6 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"],
+  "instructions": [
+    "AGENTS.md"
+  ],
   "permission": {
     "*": "allow",
     "external_directory": "allow"
@@ -9,7 +11,7 @@
     "openai": {
       "options": {
         "websearch_cited": {
-          "model": "gpt-5.2"
+          "model": "gpt-5.4"
         }
       }
     },
