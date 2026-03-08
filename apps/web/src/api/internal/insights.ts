@@ -232,7 +232,7 @@ app.get('/user-insights-recommendations', async (c) => {
         let artistSpotifyId: string | null = null;
 
         try {
-          // Search for album on Spotify
+          // Search for album on Spotify — artist ID is available from the album result
           const albumResults = await spotify.search.search(
             `${rec.artistName} ${rec.albumName}`,
             'album',
@@ -243,24 +243,13 @@ app.get('/user-insights-recommendations', async (c) => {
             const album = albumResults[0];
             spotifyId = album.id;
             albumArt = album.image;
+            artistSpotifyId = album.artistIds[0] ?? null;
             console.log(`[Insights Recs] Found Spotify album: ${rec.albumName} -> ${album.id}`);
           } else {
             console.log(`[Insights Recs] No Spotify album match for: ${rec.artistName} - ${rec.albumName}`);
           }
         } catch (error) {
           console.error(`[Insights Recs] Error enriching album ${rec.albumName}:`, error);
-        }
-
-        try {
-          // Search for artist on Spotify
-          const artistResults = await spotify.search.search(rec.artistName, 'artist', 1);
-
-          if (artistResults.length > 0) {
-            artistSpotifyId = artistResults[0].id;
-            console.log(`[Insights Recs] Found Spotify artist: ${rec.artistName} -> ${artistSpotifyId}`);
-          }
-        } catch (error) {
-          console.error(`[Insights Recs] Error enriching artist ${rec.artistName}:`, error);
         }
 
         return {

@@ -96,27 +96,33 @@ app.get('/user-recommendations', async (c) => {
     const seenArtistNames = new Set<string>();
     const topArtistNames = new Set(topArtists.map((a) => a.name.toLowerCase()));
 
-    // Fetch similar artists from Last.fm for each top artist
-    for (const topArtist of topArtists) {
-      try {
-        const artistDetail = await userLastfm.getArtistDetail(topArtist.name);
+    // Fetch similar artists from Last.fm for all top artists in parallel
+    const artistDetails = await Promise.all(
+      topArtists.map((a) =>
+        userLastfm.getArtistDetail(a.name).catch((error) => {
+          console.error(`Error fetching similar artists for ${a.name}:`, error);
+          return null;
+        })
+      )
+    );
 
-        for (const similarName of artistDetail.similar) {
-          const normalizedName = similarName.toLowerCase();
-          // Skip if already seen or if it's one of the user's top artists
-          if (seenArtistNames.has(normalizedName)) continue;
-          if (topArtistNames.has(normalizedName)) continue;
+    for (let i = 0; i < topArtists.length; i++) {
+      const artistDetail = artistDetails[i];
+      if (!artistDetail) continue;
 
-          seenArtistNames.add(normalizedName);
-          recommendedArtists.push({
-            id: null, // Will be enriched with Spotify data
-            name: similarName,
-            image: null,
-            basedOn: topArtist.name,
-          });
-        }
-      } catch (error) {
-        console.error(`Error fetching similar artists for ${topArtist.name}:`, error);
+      for (const similarName of artistDetail.similar) {
+        const normalizedName = similarName.toLowerCase();
+        // Skip if already seen or if it's one of the user's top artists
+        if (seenArtistNames.has(normalizedName)) continue;
+        if (topArtistNames.has(normalizedName)) continue;
+
+        seenArtistNames.add(normalizedName);
+        recommendedArtists.push({
+          id: null, // Will be enriched with Spotify data
+          name: similarName,
+          image: null,
+          basedOn: topArtists[i].name,
+        });
       }
     }
 

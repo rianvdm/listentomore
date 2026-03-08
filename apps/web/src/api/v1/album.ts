@@ -20,7 +20,6 @@ app.get('/', async (c) => {
 
   try {
     const spotify = c.get('spotify');
-    const spotifyStreaming = c.get('spotifyStreaming');
     const ai = c.get('ai');
     const streamingLinks = c.get('streamingLinks');
 
@@ -44,16 +43,15 @@ app.get('/', async (c) => {
       include.includes('links')
         ? (async () => {
             try {
-              const albumForLinks = await spotifyStreaming.getAlbum(searchResult.id);
               const metadata = StreamingLinksService.albumMetadataFromSpotify({
-                id: albumForLinks.id,
-                name: albumForLinks.name,
-                artists: albumForLinks.artistIds.map((_, i) => ({
-                  name: albumForLinks.artist.split(', ')[i] || albumForLinks.artist,
+                id: albumData.id,
+                name: albumData.name,
+                artists: albumData.artistIds.map((_, i) => ({
+                  name: albumData.artist.split(', ')[i] || albumData.artist,
                 })),
-                total_tracks: albumForLinks.tracks,
-                release_date: albumForLinks.releaseDate,
-                external_ids: albumForLinks.upc ? { upc: albumForLinks.upc } : undefined,
+                total_tracks: albumData.tracks,
+                release_date: albumData.releaseDate,
+                external_ids: albumData.upc ? { upc: albumData.upc } : undefined,
               });
               return await streamingLinks.getAlbumLinks(metadata);
             } catch (err) {
