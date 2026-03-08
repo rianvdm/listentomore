@@ -13,6 +13,8 @@ export interface ListeningData {
   topArtists: Array<{ name: string; playcount: number }>;
   topAlbums: Array<{ name: string; artist: string; playcount: number }>;
   recentTracks: Array<{ name: string; artist: string }>;
+  weeklyPlayCount: number;
+  historicalArtists: Array<{ name: string }>;
 }
 
 /**
@@ -37,28 +39,40 @@ export async function generateUserInsightsSummary(
 
   const config = getTaskConfig('userInsightsSummary');
 
-  const { topArtists, topAlbums, recentTracks } = listeningData;
+  const { topArtists, topAlbums, recentTracks, weeklyPlayCount, historicalArtists } = listeningData;
 
-  const prompt = `Analyze this user's recent listening activity from the past few days. Write 4-5 sentences summarizing what they've been into.
+  const historicalNames = new Set(historicalArtists.map((a) => a.name.toLowerCase()));
+  const annotatedArtists = topArtists.map((a) => ({
+    ...a,
+    isRegular: historicalNames.has(a.name.toLowerCase()),
+  }));
 
-Top Artists (by play count):
-${topArtists.map((a) => `- ${a.name}: ${a.playcount} plays`).join('\n')}
+  const prompt = `Here is someone's listening data for the past week. Write a short editorial — 2-3 paragraphs — about their week in music.
 
-Top Albums:
+Total plays this week: ${weeklyPlayCount}
+
+Top Artists this week:
+${annotatedArtists.map((a) => `- ${a.name}: ${a.playcount} plays${a.isRegular ? ' (a regular for them)' : ' (not in their usual rotation)'}`).join('\n')}
+
+Top Albums this week:
 ${topAlbums.map((a) => `- ${a.name} by ${a.artist}: ${a.playcount} plays`).join('\n')}
 
-Recent Tracks:
+Recent tracks (chronological sample):
 ${recentTracks.slice(0, 10).map((t) => `- ${t.name} by ${t.artist}`).join('\n')}
 
+Their usual artists (past 3 months): ${historicalArtists.map((a) => a.name).join(', ') || 'none on record'}
+
+Write as if you are a music journalist filing a short end-of-week column for this specific person. Find the story of the week — don't just list what they listened to. Ask: what does this week say? Was it a deep dive into one artist? A genre mood? A reunion with an old favourite? Something new breaking through?
+
 Rules:
-- Write in second person ("You've been...")
-- Use 2-3 short paragraphs. Each paragraph should cover a distinct thread or pattern. Do NOT write everything as one long block of text.
-- Mention specific artists and albums by name
-- Point out patterns you notice: repeated artists, genre shifts, deep-dives into one artist, etc.
-- Use clear, polished language. No invented compound adjectives, no forced metaphors, no flowery descriptions.
-- Do NOT recommend anything - only describe what they listened to and what patterns stand out.
-- Do NOT start with "Based on your listening..." - jump straight into the summary.
-- Each sentence should say something distinct. Don't repeat the same observation in different words.`;
+- Write in second person ("You spent the week...", "This was a week for...")
+- 2-3 paragraphs, each with a clear point — not a list of observations strung together
+- Name specific artists and albums; be concrete
+- Use the regular/unusual labels to add context — note when something is a departure or a return
+- Clear, direct prose. No compound adjectives, no forced metaphors, no music-crit clichés
+- Do NOT recommend anything
+- Do NOT open with "Based on your listening" or "This week you listened to"
+- Every sentence should earn its place — cut anything that just restates something already said`;
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -66,7 +80,7 @@ Rules:
       {
         role: 'system',
         content:
-          'You are a music journalist writing a short, polished editorial about someone\'s listening week. You are knowledgeable and specific but never flashy. Write in clear paragraphs, not run-on sentences. Never use forced metaphors, hyphenated adjective chains, or overly creative phrasing.',
+          'You are a music journalist writing a weekly column about one person\'s listening habits. You have access to their play history and know what\'s normal for them versus what\'s new. Your job is to find the narrative thread in their week — not just report what they listened to, but say something true about it. Be specific, direct, and a little opinionated. Write like someone who actually cares about music.',
       },
       { role: 'user', content: prompt },
     ],

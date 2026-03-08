@@ -120,11 +120,12 @@ app.get('/user-insights-summary', async (c) => {
   }
 
   try {
-    // Fetch listening data
-    const [topArtists, topAlbums, recentTracks] = await Promise.all([
+    // Fetch listening data — historical artists fetched in parallel for context
+    const [topArtists, topAlbums, recentTracks, historicalArtists] = await Promise.all([
       lastfm.getTopArtists('7day', 5).catch(() => []),
       lastfm.getTopAlbums('7day', 5).catch(() => []),
       lastfm.recentTracks.getRecentTracks(20).catch(() => []),
+      lastfm.getTopArtists('3month', 15).catch(() => []),
     ]);
 
     // Check for sparse listening data
@@ -149,6 +150,8 @@ app.get('/user-insights-summary', async (c) => {
         playcount: a.playcount,
       })),
       recentTracks: recentTracks.map((t) => ({ name: t.name, artist: t.artist })),
+      weeklyPlayCount: totalPlays,
+      historicalArtists: historicalArtists.map((a) => ({ name: a.name })),
     });
 
     return c.json({ data: summary });

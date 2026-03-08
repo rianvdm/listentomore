@@ -197,6 +197,8 @@ export class AIService {
       topArtists: Array<{ name: string; playcount: number }>;
       topAlbums: Array<{ name: string; artist: string; playcount: number }>;
       recentTracks: Array<{ name: string; artist: string }>;
+      weeklyPlayCount: number;
+      historicalArtists: Array<{ name: string }>;
     }
   ) {
     const { generateUserInsightsSummary } = await import(
