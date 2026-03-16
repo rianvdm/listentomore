@@ -145,7 +145,12 @@ export function originValidationMiddleware(env: {
       // Note: CF-Ray is NOT used as a trust signal — it is a standard header any client
       // can set. Scheduled Workers use the scheduled() export, not the fetch handler,
       // so there is no legitimate case for bypassing origin checks via CF-Ray.
-      if (!origin && !referer) {
+      //
+      // API key authentication is sufficient for server-to-server calls (e.g. bots,
+      // other Workers). Origin/referer checks are a browser-CSRF defence; an authenticated
+      // API key already provides equivalent protection for non-browser callers.
+      const hasApiKey = !!c.req.header('X-API-Key');
+      if (!origin && !referer && !hasApiKey) {
         return c.json(
           {
             error: 'Forbidden',
