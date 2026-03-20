@@ -24,6 +24,7 @@ app.get('/artist-summary', async (c) => {
 
 app.get('/artist-lastfm', async (c) => {
   const name = c.req.query('name');
+  const username = c.req.query('username');
 
   if (!name) {
     return c.json({ error: 'Missing name parameter' }, 400);
@@ -33,7 +34,7 @@ app.get('/artist-lastfm', async (c) => {
     const lastfm = c.get('lastfm');
     // Fetch artist detail and top albums in parallel
     const [artistDetail, topAlbums] = await Promise.all([
-      lastfm.getArtistDetail(name),
+      lastfm.getArtistDetail(name, username || undefined),
       lastfm.getArtistTopAlbums(name, 3),
     ]);
     return c.json({

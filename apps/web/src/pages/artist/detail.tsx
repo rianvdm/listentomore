@@ -78,6 +78,9 @@ export function ArtistDetailPage({
                 <span class="text-muted">Loading...</span>
               </p>
 
+              {/* User playcount - populated via JS for logged-in users */}
+              <p id="user-playcount" style={{ display: 'none' }}></p>
+
               {/* Popular Albums - loaded via JS from Last.fm */}
               <div id="popular-albums">
                 <p style={{ marginBottom: '0.2em' }}>
@@ -107,6 +110,7 @@ export function ArtistDetailPage({
         (function() {
           var artistName = ${JSON.stringify(artist.name)};
           var artistId = '${artist.id}';
+          var lastfmUsername = ${currentUser?.lastfm_username ? JSON.stringify(currentUser.lastfm_username) : 'null'};
 
           // Tags to filter out (not real genres)
           var excludedTags = ['seen live', 'live', 'favorite', 'favorites', 'favourite', 'favourites',
@@ -119,7 +123,11 @@ export function ArtistDetailPage({
           }
 
           // Fetch Last.fm data (playcount, genres, and similar artists)
-          internalFetch('/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+          var lastfmUrl = '/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName);
+          if (lastfmUsername) {
+            lastfmUrl += '&username=' + encodeURIComponent(lastfmUsername);
+          }
+          internalFetch(lastfmUrl, { cache: 'no-store' })
             .then(function(r) {
               if (!r.ok) throw new Error('HTTP ' + r.status);
               return r.json();
@@ -143,6 +151,13 @@ export function ArtistDetailPage({
                 }
               } else {
                 document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
+              }
+
+              // Show user playcount if available
+              if (lastfmUsername && lastfm.userplaycount !== undefined) {
+                var el = document.getElementById('user-playcount');
+                el.innerHTML = '<strong>Your plays:</strong> ' + lastfm.userplaycount.toLocaleString();
+                el.style.display = '';
               }
 
               // Update popular albums (from Last.fm, enriched with Spotify IDs)

@@ -13,6 +13,7 @@ export interface ArtistDetail {
   tags: string[];
   similar: string[];
   bio: string;
+  userplaycount?: number;
 }
 
 export interface ArtistTopAlbum {
@@ -66,9 +67,11 @@ export class ArtistDetails {
     private cache?: KVNamespace
   ) {}
 
-  async getArtistDetail(artistName: string): Promise<ArtistDetail> {
-    // Normalize artist name for cache key
-    const cacheKey = `lastfm:artistDetail:${artistName.toLowerCase().trim()}`;
+  async getArtistDetail(artistName: string, username?: string): Promise<ArtistDetail> {
+    // Normalize artist name for cache key (include username when provided)
+    const cacheKey = username
+      ? `lastfm:artistDetail:${artistName.toLowerCase().trim()}:user:${username.toLowerCase()}`
+      : `lastfm:artistDetail:${artistName.toLowerCase().trim()}`;
 
     // Check cache first
     if (this.cache) {
@@ -78,7 +81,10 @@ export class ArtistDetails {
       }
     }
 
-    const url = `${LASTFM_API_BASE}/?method=artist.getInfo&artist=${encodeURIComponent(artistName)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&autocorrect=1`;
+    let url = `${LASTFM_API_BASE}/?method=artist.getInfo&artist=${encodeURIComponent(artistName)}&api_key=${encodeURIComponent(this.config.apiKey)}&format=json&autocorrect=1`;
+    if (username) {
+      url += `&username=${encodeURIComponent(username)}`;
+    }
 
     const response = await fetchWithTimeout(url, { timeout: 'fast' });
     const data = (await response.json()) as LastfmArtistInfoResponse;
@@ -97,6 +103,10 @@ export class ArtistDetails {
           .map((tag) => tag.name.charAt(0).toUpperCase() + tag.name.slice(1))
       : [];
 
+    const userplaycount = username && artist.stats?.userplaycount
+      ? parseInt(artist.stats.userplaycount, 10)
+      : undefined;
+
     const result: ArtistDetail = {
       name: artist.name,
       url: artist.url,
@@ -104,6 +114,7 @@ export class ArtistDetails {
       tags: filteredTags,
       similar: artist.similar?.artist?.slice(0, 3).map((a) => a.name) || [],
       bio: artist.bio?.content || '',
+      ...(userplaycount !== undefined && { userplaycount }),
     };
 
     // Cache result
