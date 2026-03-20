@@ -66,8 +66,8 @@ export class LastfmService {
     return this.topArtists.getTopArtists(period, limit);
   }
 
-  async getArtistDetail(artistName: string) {
-    return this.artistDetails.getArtistDetail(artistName);
+  async getArtistDetail(artistName: string, username?: string) {
+    return this.artistDetails.getArtistDetail(artistName, username);
   }
 
   async getArtistTopAlbums(artistName: string, limit: number = 5) {
