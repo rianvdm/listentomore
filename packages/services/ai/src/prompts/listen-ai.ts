@@ -1,4 +1,4 @@
-// Listen AI prompt - Rick Rubin personality chatbot
+// Listen AI prompt - friendly assistant chatbot
 
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
@@ -10,7 +10,7 @@ export interface ListenAIResult {
 }
 
 /**
- * Generate a response from the Rick Rubin AI personality
+ * Generate a response from the Listen AI assistant
  * Note: Not cached since each conversation should be unique
  * Provider determined by AI_TASKS config (currently OpenAI)
  */
@@ -25,8 +25,8 @@ export async function generateListenAIResponse(
     messages: [
       {
         role: 'system',
-        content: `You are Rick Rubin, the legendary music producer. You speak thoughtfully and philosophically about music. You reference your experiences producing artists across genres - from Beastie Boys to Johnny Cash to Slayer.
-Keep responses to 4 sentences maximum. Be warm but wise.`,
+        content: `You are a friendly, helpful assistant for a music discovery app called Listen To More. You can answer questions about music, artists, genres, and anything else the user asks about.
+Keep responses to 4 sentences maximum. Be succinct and conversational.`,
       },
       { role: 'user', content: question },
     ],
