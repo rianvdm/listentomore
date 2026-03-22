@@ -7,6 +7,7 @@ import { SITE_CONFIG } from '@listentomore/config';
 import type { User } from '@listentomore/db';
 import { globalStyles } from '../../styles/globals';
 import { NavBar } from './NavBar';
+import { Banner } from './Banner';
 
 interface LayoutProps {
   children: Child;
@@ -104,6 +105,7 @@ export function Layout({ children, title, description, image, url, internalToken
       </head>
       <body>
         <NavBar currentUser={currentUser} />
+        <Banner />
 
         <main class="main-content">{children}</main>
 
@@ -124,6 +126,29 @@ export function Layout({ children, title, description, image, url, internalToken
             <a href="/terms">Terms</a>
           </p>
         </footer>
+
+        {/* Banner Dismiss Script */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var banner = document.getElementById('announcement-banner');
+                if (!banner) return;
+                var id = banner.getAttribute('data-banner-id');
+                var key = 'banner-dismissed-' + id;
+                if (localStorage.getItem(key)) return;
+                banner.style.display = '';
+                var btn = banner.querySelector('.banner-dismiss');
+                if (btn) {
+                  btn.addEventListener('click', function() {
+                    banner.style.display = 'none';
+                    localStorage.setItem(key, '1');
+                  });
+                }
+              })();
+            `,
+          }}
+        />
 
         {/* Theme Toggle Script */}
         <script

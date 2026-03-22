@@ -105,6 +105,45 @@ h4 {
   margin: 0 auto;
 }
 
+/* Announcement Banner */
+.banner {
+  background-color: var(--c-accent);
+  color: #000;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.banner-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 8px 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.banner-message a {
+  color: #000;
+  font-weight: 600;
+}
+
+.banner-dismiss {
+  background: none;
+  border: none;
+  color: #000;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.banner-dismiss:hover {
+  opacity: 1;
+}
+
 /* Navigation */
 .nav {
   background-color: var(--c-bg);
