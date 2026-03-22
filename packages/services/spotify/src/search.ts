@@ -212,28 +212,43 @@ export class SpotifySearch {
       : null;
     
     // Check if we got a good match (exact or very close)
-    const isGoodMatch = fieldFilterMatch && 
+    const isGoodMatch = fieldFilterMatch &&
       this.isAlbumNameMatch(fieldFilterMatch.name, album);
-    
+
     if (isGoodMatch) {
       return fieldFilterMatch;
     }
-    
+
+    // Try stripping parenthetical suffixes like "(Bonus Track Version)", "(Deluxe Edition)", etc.
+    // Apple Music often has edition-specific names that don't match Spotify's base album name.
+    const strippedAlbum = album.replace(/\s*\(.*\)\s*$/, '').trim();
+    if (strippedAlbum && strippedAlbum !== album) {
+      const strippedQuery = `artist:"${artist}" album:"${strippedAlbum}"`;
+      console.log(`[Spotify] Retrying with stripped album name: ${strippedQuery}`);
+      const strippedResults = await this.search(strippedQuery, 'album', 5);
+      const strippedMatch = strippedResults.length > 0
+        ? this.pickBestAlbumMatch(strippedResults, strippedAlbum, artist)
+        : null;
+      if (strippedMatch && this.isAlbumNameMatch(strippedMatch.name, strippedAlbum)) {
+        return strippedMatch;
+      }
+    }
+
     // Field filter didn't find a good match, try natural query
     // This works better for albums with special characters like "i, i"
     const fallbackQuery = `${artist} ${album}`;
     console.log(`[Spotify] Field filter ${results.length ? 'no good match' : 'failed'}, trying natural query: ${fallbackQuery}`);
     const fallbackResults = await this.search(fallbackQuery, 'album', 5);
-    
+
     const naturalMatch = this.pickBestAlbumMatch(fallbackResults, album, artist);
-    
+
     // If natural query found a better match, use it
     if (naturalMatch && this.isAlbumNameMatch(naturalMatch.name, album)) {
       return naturalMatch;
     }
-    
-    // Return whichever result we have (prefer field filter if both exist)
-    return fieldFilterMatch || naturalMatch;
+
+    // No good match found — return null rather than a wrong album
+    return null;
   }
   
   /**
