@@ -13,13 +13,14 @@ interface UserStatsPageProps {
   username: string;
   lastfmUsername: string;
   profileImage?: string;
+  bio?: string | null;
   internalToken?: string;
   currentUser?: User | null;
   isOwner?: boolean;
   profileVisibility?: 'public' | 'private';
 }
 
-export function UserStatsPage({ username, lastfmUsername, profileImage, internalToken, currentUser, isOwner, profileVisibility }: UserStatsPageProps) {
+export function UserStatsPage({ username, lastfmUsername, profileImage, bio, internalToken, currentUser, isOwner, profileVisibility }: UserStatsPageProps) {
   return (
     <Layout
       title={`${username}'s Stats`}
@@ -29,7 +30,7 @@ export function UserStatsPage({ username, lastfmUsername, profileImage, internal
       internalToken={internalToken}
       currentUser={currentUser}
     >
-      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
+      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} profileImage={profileImage} bio={bio} />
       <UserProfileNav username={username} activePage="stats" />
 
       {isOwner && profileVisibility === 'private' && (
@@ -435,6 +436,7 @@ export async function handleUserStats(c: Context) {
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
       profileImage={profileImage}
+      bio={user.bio}
       internalToken={internalToken}
       currentUser={currentUser}
       isOwner={isOwner}

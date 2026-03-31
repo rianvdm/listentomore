@@ -11,6 +11,8 @@ import type { Database, User } from '@listentomore/db';
 interface UserInsightsPageProps {
   username: string;
   lastfmUsername: string;
+  profileImage?: string;
+  bio?: string | null;
   internalToken?: string;
   currentUser?: User | null;
   isOwner: boolean;
@@ -20,6 +22,8 @@ interface UserInsightsPageProps {
 export function UserInsightsPage({
   username,
   lastfmUsername,
+  profileImage,
+  bio,
   internalToken,
   currentUser,
   isOwner,
@@ -33,7 +37,7 @@ export function UserInsightsPage({
       internalToken={internalToken}
       currentUser={currentUser}
     >
-      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
+      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} profileImage={profileImage} bio={bio} />
       <UserProfileNav username={username} activePage="insights" />
 
       {isOwner && profileVisibility === 'private' && (
@@ -470,10 +474,27 @@ export async function handleUserInsights(c: Context) {
     );
   }
 
+  // Fetch Last.fm user info for profile picture
+  let profileImage: string | undefined;
+  try {
+    const { LastfmService } = await import('@listentomore/lastfm');
+    const lastfm = new LastfmService({
+      apiKey: c.env.LASTFM_API_KEY,
+      username: user.lastfm_username,
+      cache: c.env.CACHE,
+    });
+    const userInfo = await lastfm.getUserInfo();
+    profileImage = userInfo.image || undefined;
+  } catch (error) {
+    console.error('Failed to fetch Last.fm user info:', error);
+  }
+
   return c.html(
     <UserInsightsPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
+      profileImage={profileImage}
+      bio={user.bio}
       internalToken={internalToken}
       currentUser={currentUser}
       isOwner={isOwner}

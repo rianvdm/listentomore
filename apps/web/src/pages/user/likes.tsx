@@ -12,6 +12,8 @@ import type { TopArtist, LovedTrack } from '@listentomore/lastfm';
 interface UserLikesPageProps {
   username: string;
   lastfmUsername: string;
+  profileImage?: string;
+  bio?: string | null;
   lovedTracks: LovedTrack[];
   topArtists: TopArtist[];
   internalToken?: string;
@@ -23,6 +25,8 @@ interface UserLikesPageProps {
 export function UserLikesPage({
   username,
   lastfmUsername,
+  profileImage,
+  bio,
   lovedTracks,
   topArtists,
   internalToken,
@@ -44,7 +48,7 @@ export function UserLikesPage({
       internalToken={internalToken}
       currentUser={currentUser}
     >
-      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} />
+      <UserProfileHeader username={username} lastfmUsername={lastfmUsername} profileImage={profileImage} bio={bio} />
       <UserProfileNav username={username} activePage="likes" />
 
       {isOwner && profileVisibility === 'private' && (
@@ -308,16 +312,21 @@ export async function handleUserLikes(c: Context) {
     cache: c.env.CACHE,
   });
 
-  // Fetch loved tracks and top artists in parallel
-  const [lovedTracks, topArtists] = await Promise.all([
+  // Fetch loved tracks, top artists, and user info in parallel
+  const [lovedTracks, topArtists, userInfo] = await Promise.all([
     lastfm.getLovedTracks(5).catch(() => []),
     lastfm.getTopArtists('7day', 6).catch(() => []),
+    lastfm.getUserInfo().catch(() => null),
   ]);
+
+  const profileImage = userInfo?.image || undefined;
 
   return c.html(
     <UserLikesPage
       username={user.username || user.lastfm_username}
       lastfmUsername={user.lastfm_username}
+      profileImage={profileImage}
+      bio={user.bio}
       lovedTracks={lovedTracks}
       topArtists={topArtists}
       internalToken={internalToken}
