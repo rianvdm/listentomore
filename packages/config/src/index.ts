@@ -21,10 +21,10 @@ export const DEFAULT_USER_ID = 'default';
 // Change the id whenever you update the message so dismissed state resets.
 export const BANNER_CONFIG = {
   enabled: true,
-  id: '2026-03-22-album-matching2',
-  message: 'v1.4.2: Improved album matching for Apple Music links — cross-platform lookups are now more accurate.',
+  id: '2026-04-01-v1.4.3',
+  message: 'v1.4.3: Profile pictures and bios on public profiles, plus improved insights summaries.',
   link: {
-    url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.4.2',
+    url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.4.3',
     text: 'Release notes',
   },
 } as const;
