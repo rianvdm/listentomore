@@ -68,7 +68,7 @@ export const AI_TASKS = {
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: true,
+    webSearch: false,
   },
 
   albumDetail: {
@@ -86,7 +86,7 @@ export const AI_TASKS = {
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: true,
+    webSearch: false,
   },
 
   artistSentence: {
@@ -95,7 +95,7 @@ export const AI_TASKS = {
     maxTokens: 150,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: true,
+    webSearch: false,
   },
 
   randomFact: {
@@ -130,7 +130,7 @@ export const AI_TASKS = {
     maxTokens: 1000,
     temperature: 1,
     cacheTtlDays: 30,
-    webSearch: true,
+    webSearch: false,
   },
 
   userInsightsSummary: {

@@ -89,14 +89,12 @@ Use bullets for the album recommendations. Format each recommendation as: **{{Al
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
-Always search the web to verify album information before responding. Do not rely solely on your training data.
-
 Do NOT start with a preamble (like "Here are some recommendations..." or "Great choice!"). Do NOT end with follow-up suggestions, summary statements (like "All these albums are available on Spotify..."), or any concluding remarks. Just provide the bullet-point recommendations and nothing else.
 
 IMPORTANT:
 * You MUST provide ALBUM recommendations, not songs.
-* ONLY recommend albums that are available on Spotify. If you cannot confirm an album is on Spotify, do not recommend it.
-* ONLY recommend albums you can find reviews or articles about via web search. Do not recommend obscure albums that lack online documentation.
+* ONLY recommend well-known albums that are available on Spotify.
+* Do not recommend obscure albums that lack mainstream recognition.
 * If you cannot find sufficient verifiable information about the album "${albumName}" by ${artistName} to provide meaningful recommendations, respond with ONLY the text "Not enough information available for this album." and nothing else. Do not explain what you couldn't find or apologize.`;
 
   const response = await client.chatCompletion({
