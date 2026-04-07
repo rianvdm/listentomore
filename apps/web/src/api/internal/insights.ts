@@ -7,6 +7,7 @@ import type { User } from '@listentomore/db';
 import type { AIService } from '@listentomore/ai';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { Bindings, Variables } from '../../types';
+import { requireSessionAuth } from '../../middleware/require-session-auth';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -80,7 +81,7 @@ async function setRefreshTimestamp(
   await c.env.CACHE.put(cacheKey, Date.now().toString(), { expirationTtl: ttl });
 }
 
-app.get('/user-insights-summary', async (c) => {
+app.get('/user-insights-summary', requireSessionAuth, async (c) => {
   const username = c.req.query('username');
   const refresh = c.req.query('refresh') === 'true';
 
@@ -161,7 +162,7 @@ app.get('/user-insights-summary', async (c) => {
   }
 });
 
-app.get('/user-insights-recommendations', async (c) => {
+app.get('/user-insights-recommendations', requireSessionAuth, async (c) => {
   const username = c.req.query('username');
   const refresh = c.req.query('refresh') === 'true';
 

@@ -2,10 +2,11 @@
 
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../../types';
+import { requireSessionAuth } from '../../middleware/require-session-auth';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-app.get('/album-summary', async (c) => {
+app.get('/album-summary', requireSessionAuth, async (c) => {
   const artist = c.req.query('artist');
   const album = c.req.query('album');
 
@@ -23,7 +24,7 @@ app.get('/album-summary', async (c) => {
   }
 });
 
-app.get('/album-recommendations', async (c) => {
+app.get('/album-recommendations', requireSessionAuth, async (c) => {
   const artist = c.req.query('artist');
   const album = c.req.query('album');
 

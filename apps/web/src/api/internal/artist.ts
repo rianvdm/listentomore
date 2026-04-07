@@ -2,10 +2,11 @@
 
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../../types';
+import { requireSessionAuth } from '../../middleware/require-session-auth';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-app.get('/artist-summary', async (c) => {
+app.get('/artist-summary', requireSessionAuth, async (c) => {
   const name = c.req.query('name');
 
   if (!name) {
@@ -49,7 +50,7 @@ app.get('/artist-lastfm', async (c) => {
   }
 });
 
-app.get('/artist-sentence', async (c) => {
+app.get('/artist-sentence', requireSessionAuth, async (c) => {
   const name = c.req.query('name');
 
   if (!name) {
