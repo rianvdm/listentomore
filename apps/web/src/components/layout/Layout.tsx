@@ -86,12 +86,13 @@ export function Layout({ children, title, description, image, url, internalToken
           }}
         />
 
-        {/* Internal API Token - for progressive loading fetch calls */}
+        {/* Internal API Token and auth flag - for progressive loading fetch calls */}
         {internalToken && (
           <script
             dangerouslySetInnerHTML={{
               __html: `
                 window.__INTERNAL_TOKEN__ = '${internalToken}';
+                window.__IS_AUTHENTICATED__ = ${!!currentUser};
                 window.internalFetch = function(url, options) {
                   options = options || {};
                   options.headers = options.headers || {};
