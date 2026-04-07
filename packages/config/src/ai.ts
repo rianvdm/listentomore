@@ -95,7 +95,7 @@ export const AI_TASKS = {
     maxTokens: 150,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: false,
+    webSearch: true,
   },
 
   randomFact: {
