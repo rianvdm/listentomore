@@ -23,6 +23,7 @@ app.get('/artist-summary', requireSessionAuth, async (c) => {
   }
 });
 
+// No requireSessionAuth — Last.fm data is public and does not consume AI quota
 app.get('/artist-lastfm', async (c) => {
   const name = c.req.query('name');
   const username = c.req.query('username');

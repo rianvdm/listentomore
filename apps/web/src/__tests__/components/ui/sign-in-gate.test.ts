@@ -1,7 +1,7 @@
 // SignInGate component rendering tests
 
 import { describe, it, expect } from 'vitest';
-import { SignInGate } from '../../components/ui/SignInGate';
+import { SignInGate } from '../../../components/ui/SignInGate';
 
 describe('SignInGate', () => {
   it('renders children when user is authenticated', () => {

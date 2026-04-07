@@ -277,6 +277,7 @@ app.get('/user-insights-recommendations', requireSessionAuth, async (c) => {
 });
 
 // Check refresh cooldown status
+// No requireSessionAuth — read-only rate limit check, no AI calls
 app.get('/user-insights-cooldown', async (c) => {
   const username = c.req.query('username');
 

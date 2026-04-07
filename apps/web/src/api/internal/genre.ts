@@ -20,7 +20,7 @@ app.get('/genre-summary', requireSessionAuth, async (c) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`Internal genre summary error for "${name}":`, errorMessage);
-    return c.json({ error: `Failed to generate genre summary: ${errorMessage}` }, 500);
+    return c.json({ error: 'Failed to generate genre summary' }, 500);
   }
 });
 

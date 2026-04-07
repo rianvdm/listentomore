@@ -4,10 +4,9 @@
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
-import { RateLimitedPage } from '../../components/ui';
+import { RateLimitedPage, SignInGate } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript } from '../../utils/client-scripts';
-import { SignInGate } from '../../components/ui';
 
 interface AlbumData {
   id: string;
@@ -155,50 +154,48 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
 
           // AI features - only fetch for authenticated users
           if (window.__IS_AUTHENTICATED__) {
+            // Fetch AI summary
+            internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
+              .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+              })
+              .then(function(data) {
+                if (data.error) throw new Error(data.error);
+                var summary = data.data;
+                var html = '<div>' + marked.parse(summary.content) + '</div>';
+                document.getElementById('ai-summary').innerHTML = html;
+              })
+              .catch(function(e) {
+                console.error('Album summary error:', e);
+                document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
+              });
 
-          // Fetch AI summary
-          internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
-            .then(function(r) {
-              if (!r.ok) throw new Error('HTTP ' + r.status);
-              return r.json();
-            })
-            .then(function(data) {
-              if (data.error) throw new Error(data.error);
-              var summary = data.data;
-              var html = '<div>' + marked.parse(summary.content) + '</div>';
-              document.getElementById('ai-summary').innerHTML = html;
-            })
-            .catch(function(e) {
-              console.error('Album summary error:', e);
-              document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
-            });
-
-          // Fetch album recommendations
-          internalFetch('/api/internal/album-recommendations?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
-            .then(function(r) {
-              if (!r.ok) throw new Error('HTTP ' + r.status);
-              return r.json();
-            })
-            .then(function(data) {
-              if (data.error) throw new Error(data.error);
-              var recommendations = data.data;
-              // Check if no info available
-              if (recommendations.content.includes('Not enough information available')) {
-                document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Recommendations not available for this album.</p>';
-                return;
-              }
-              var html = '<h3>Album Recommendations</h3>';
-              html += '<div>' + marked.parse(recommendations.content) + '</div>';
-              document.getElementById('album-recommendations').innerHTML = html;
-              // Enrich links: search links -> direct Spotify ID links
-              enrichLinks('album-recommendations');
-            })
-            .catch(function(e) {
-              console.error('Album recommendations error:', e);
-              document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Unable to load recommendations.</p>';
-            });
-
-          } // end auth check
+            // Fetch album recommendations
+            internalFetch('/api/internal/album-recommendations?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
+              .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+              })
+              .then(function(data) {
+                if (data.error) throw new Error(data.error);
+                var recommendations = data.data;
+                // Check if no info available
+                if (recommendations.content.includes('Not enough information available')) {
+                  document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Recommendations not available for this album.</p>';
+                  return;
+                }
+                var html = '<h3>Album Recommendations</h3>';
+                html += '<div>' + marked.parse(recommendations.content) + '</div>';
+                document.getElementById('album-recommendations').innerHTML = html;
+                // Enrich links: search links -> direct Spotify ID links
+                enrichLinks('album-recommendations');
+              })
+              .catch(function(e) {
+                console.error('Album recommendations error:', e);
+                document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Unable to load recommendations.</p>';
+              });
+          }
         })();
       ` }} />
     </Layout>

@@ -1,7 +1,7 @@
 // SignInCTA component rendering tests
 
 import { describe, it, expect } from 'vitest';
-import { SignInCTA } from '../../components/ui/SignInCTA';
+import { SignInCTA } from '../../../components/ui/SignInCTA';
 
 describe('SignInCTA', () => {
   it('renders sign-in link with current path', () => {
