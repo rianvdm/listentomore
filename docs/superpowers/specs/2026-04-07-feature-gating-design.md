@@ -153,3 +153,13 @@ Once this infrastructure is in place, gating additional pages is straightforward
 - **Per-section gating:** Wrap sections in `<SignInGate>` and gate corresponding client-side JS behind `window.__IS_AUTHENTICATED__`
 
 Candidate pages for future gating: artist detail (AI summary), genre pages (AI summary), user stats, insights, recommendations.
+
+## Developer Guide
+
+As a final implementation step, write a short guide at `docs/feature-gating.md` documenting how to gate new pages. Should cover:
+
+- How to add full-page gating (middleware approach, with example)
+- How to add per-section gating (component approach, with example)
+- How to gate client-side JS fetches
+- How to add session auth to new internal API routes
+- Which routes are currently gated vs public
