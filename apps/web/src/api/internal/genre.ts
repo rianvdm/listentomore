@@ -6,7 +6,8 @@ import { requireSessionAuth } from '../../middleware/require-session-auth';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-app.get('/genre-summary', requireSessionAuth, async (c) => {
+// No requireSessionAuth — genre pages are public discovery content
+app.get('/genre-summary', async (c) => {
   const name = c.req.query('name');
 
   if (!name) {
