@@ -4,7 +4,7 @@
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
-import { RateLimitedPage } from '../../components/ui';
+import { RateLimitedPage, SignInGate } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript } from '../../utils/client-scripts';
 
@@ -96,10 +96,12 @@ export function ArtistDetailPage({
           {/* Similar Artists - loaded via JS */}
           <div id="similar-artists"></div>
 
-          {/* AI Overview - loaded via JS */}
-          <div id="ai-summary" class="ai-summary">
-            <p class="text-muted">Loading AI summary...</p>
-          </div>
+          {/* AI Overview - gated behind login */}
+          <SignInGate currentUser={currentUser ?? null} currentPath={`/artist/${artist.id}`}>
+            <div id="ai-summary" class="ai-summary">
+              <p class="text-muted">Loading AI summary...</p>
+            </div>
+          </SignInGate>
         </section>
       </main>
 
@@ -235,28 +237,30 @@ export function ArtistDetailPage({
               document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
             });
 
-          // Fetch AI summary
-          internalFetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
-            .then(function(r) {
-              if (!r.ok) throw new Error('HTTP ' + r.status);
-              return r.json();
-            })
-            .then(function(data) {
-              if (data.error) throw new Error(data.error);
-              var summary = data.data;
-              var text = summary.text || summary.summary || '';
-              var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
-              html += '<div>' + marked.parse(text) + '</div>';
+          // Fetch AI summary - only for authenticated users
+          if (window.__IS_AUTHENTICATED__) {
+            internalFetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+              .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+              })
+              .then(function(data) {
+                if (data.error) throw new Error(data.error);
+                var summary = data.data;
+                var text = summary.text || summary.summary || '';
+                var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
+                html += '<div>' + marked.parse(text) + '</div>';
 
-              document.getElementById('ai-summary').innerHTML = html;
+                document.getElementById('ai-summary').innerHTML = html;
 
-              // Enrich artist/album links in the summary with Spotify IDs
-              enrichLinks('ai-summary');
-            })
-            .catch(function(e) {
-              console.error('AI summary error:', e);
-              document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
-            });
+                // Enrich artist/album links in the summary with Spotify IDs
+                enrichLinks('ai-summary');
+              })
+              .catch(function(e) {
+                console.error('AI summary error:', e);
+                document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
+              });
+          }
         })();
       ` }} />
     </Layout>
