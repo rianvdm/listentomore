@@ -130,7 +130,7 @@ export const AI_TASKS = {
     maxTokens: 1000,
     temperature: 1,
     cacheTtlDays: 30,
-    webSearch: false,
+    webSearch: true,
   },
 
   userInsightsSummary: {
