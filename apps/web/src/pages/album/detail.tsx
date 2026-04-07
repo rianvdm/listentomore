@@ -7,6 +7,7 @@ import { Layout } from '../../components/layout';
 import { RateLimitedPage } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript } from '../../utils/client-scripts';
+import { SignInGate } from '../../components/ui';
 
 interface AlbumData {
   id: string;
@@ -111,16 +112,17 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
             </div>
           </div>
 
-          {/* AI Summary - loaded via JS */}
-          <div id="ai-summary" class="ai-summary">
-            <p class="text-muted">Loading AI summary...</p>
-          </div>
+          {/* AI Summary + Recommendations - gated behind login */}
+          <SignInGate currentUser={currentUser ?? null} currentPath={`/album/${album.id}`}>
+            <div id="ai-summary" class="ai-summary">
+              <p class="text-muted">Loading AI summary...</p>
+            </div>
 
-          {/* Album Recommendations - loaded via JS */}
-          <div id="album-recommendations" class="ai-summary" style={{ marginTop: '2rem' }}>
-            <h3>Album Recommendations</h3>
-            <p class="text-muted">Loading recommendations...</p>
-          </div>
+            <div id="album-recommendations" class="ai-summary" style={{ marginTop: '2rem' }}>
+              <h3>Album Recommendations</h3>
+              <p class="text-muted">Loading recommendations...</p>
+            </div>
+          </SignInGate>
         </section>
       </main>
 
@@ -150,6 +152,9 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
               // Keep just Spotify link on error
               document.getElementById('streaming-links').innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
             });
+
+          // AI features - only fetch for authenticated users
+          if (window.__IS_AUTHENTICATED__) {
 
           // Fetch AI summary
           internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
@@ -192,6 +197,8 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
               console.error('Album recommendations error:', e);
               document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Unable to load recommendations.</p>';
             });
+
+          } // end auth check
         })();
       ` }} />
     </Layout>
