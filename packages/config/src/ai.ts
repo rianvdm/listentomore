@@ -68,7 +68,7 @@ export const AI_TASKS = {
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: false,
+    webSearch: true,
   },
 
   albumDetail: {
