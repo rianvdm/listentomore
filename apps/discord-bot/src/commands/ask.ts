@@ -39,8 +39,10 @@ export async function handleAsk(
     }
 
     // Send the AI response as a public message
+    // Discord renders single newlines inline — double them so paragraphs get visible spacing
+    const formatted = aiResponse.response.replace(/\n/g, '\n\n');
     await sendNewMessage(env.DISCORD_TOKEN, interaction.channel_id, {
-      content: aiResponse.response,
+      content: formatted,
     });
   } catch (error) {
     console.error('Error in handleAsk:', error);
