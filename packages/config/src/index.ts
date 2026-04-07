@@ -21,10 +21,10 @@ export const DEFAULT_USER_ID = 'default';
 // Change the id whenever you update the message so dismissed state resets.
 export const BANNER_CONFIG = {
   enabled: true,
-  id: '2026-04-01-v1.4.3',
-  message: 'v1.4.3: Profile pictures and bios on public profiles, plus improved insights summaries.',
+  id: '2026-04-07-v1.5.0',
+  message: 'v1.5.0: AI features now require a free Last.fm sign-in. Core music discovery stays fully public.',
   link: {
-    url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.4.3',
+    url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.5.0',
     text: 'Release notes',
   },
 } as const;
