@@ -7,7 +7,7 @@ export function Banner() {
   if (!BANNER_CONFIG.enabled) return null;
 
   return (
-    <div id="announcement-banner" class="banner" data-banner-id={BANNER_CONFIG.id} style="display:none">
+    <div id="announcement-banner" class="banner" data-banner-id={BANNER_CONFIG.id} data-expires={BANNER_CONFIG.expiresAt ?? ''} style="display:none">
       <div class="banner-content">
         <span class="banner-message">
           {BANNER_CONFIG.message}

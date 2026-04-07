@@ -137,6 +137,8 @@ export function Layout({ children, title, description, image, url, internalToken
               (function() {
                 var banner = document.getElementById('announcement-banner');
                 if (!banner) return;
+                var expires = banner.getAttribute('data-expires');
+                if (expires && new Date(expires + 'T23:59:59') < new Date()) return;
                 var id = banner.getAttribute('data-banner-id');
                 var key = 'banner-dismissed-' + id;
                 if (localStorage.getItem(key)) return;

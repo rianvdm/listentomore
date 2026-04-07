@@ -19,6 +19,7 @@ export const DEFAULT_USER_ID = 'default';
 // Announcement banner configuration
 // Set enabled to true and update message/link to show a banner across the site.
 // Change the id whenever you update the message so dismissed state resets.
+// Set expiresAt (YYYY-MM-DD) to auto-hide the banner after that date.
 export const BANNER_CONFIG = {
   enabled: true,
   id: '2026-04-07-v1.5.0',
@@ -27,4 +28,5 @@ export const BANNER_CONFIG = {
     url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.5.0',
     text: 'Release notes',
   },
+  expiresAt: '2026-04-10',
 } as const;
