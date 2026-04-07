@@ -51,7 +51,8 @@ app.get('/artist-lastfm', async (c) => {
   }
 });
 
-app.get('/artist-sentence', requireSessionAuth, async (c) => {
+// No requireSessionAuth — artist sentences are short, cheap, and used on public home page
+app.get('/artist-sentence', async (c) => {
   const name = c.req.query('name');
 
   if (!name) {

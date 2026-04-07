@@ -65,7 +65,6 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
 - `/api/internal/album-summary`
 - `/api/internal/album-recommendations`
 - `/api/internal/artist-summary`
-- `/api/internal/artist-sentence`
 - `/api/internal/genre-summary`
 - `/api/internal/user-insights-summary`
 - `/api/internal/user-insights-recommendations`
@@ -74,6 +73,7 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
 - `/api/internal/streaming-links`
 - `/api/internal/search`
 - `/api/internal/artist-lastfm`
+- `/api/internal/artist-sentence` (short, cheap, used on public home page)
 - `/api/internal/user-insights-cooldown`
 
 ## Adding a New Gated Page
