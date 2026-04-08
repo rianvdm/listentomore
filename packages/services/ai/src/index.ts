@@ -216,6 +216,8 @@ export class AIService {
     listeningData: {
       topArtists: Array<{ name: string; playcount: number }>;
       topAlbums: Array<{ name: string; artist: string; playcount: number }>;
+      recentTracks: Array<{ name: string; artist: string }>;
+      historicalArtists: Array<{ name: string }>;
     }
   ) {
     const { generateUserInsightsRecommendations } = await import(

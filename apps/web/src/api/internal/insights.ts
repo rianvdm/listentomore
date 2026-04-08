@@ -190,7 +190,7 @@ app.get('/user-insights-recommendations', requireSessionAuth, async (c) => {
   try {
     // Fetch listening data
     console.log(`[Insights Recs] Fetching Last.fm data...`);
-    const [topArtists, topAlbums] = await Promise.all([
+    const [topArtists, topAlbums, recentTracks, historicalArtists] = await Promise.all([
       lastfm.getTopArtists('7day', 5).catch((e) => {
         console.error(`[Insights Recs] Failed to fetch top artists:`, e);
         return [];
@@ -199,8 +199,16 @@ app.get('/user-insights-recommendations', requireSessionAuth, async (c) => {
         console.error(`[Insights Recs] Failed to fetch top albums:`, e);
         return [];
       }),
+      lastfm.recentTracks.getRecentTracks(30).catch((e) => {
+        console.error(`[Insights Recs] Failed to fetch recent tracks:`, e);
+        return [];
+      }),
+      lastfm.getTopArtists('6month', 20).catch((e) => {
+        console.error(`[Insights Recs] Failed to fetch historical artists:`, e);
+        return [];
+      }),
     ]);
-    console.log(`[Insights Recs] Got ${topArtists.length} artists, ${topAlbums.length} albums`);
+    console.log(`[Insights Recs] Got ${topArtists.length} artists, ${topAlbums.length} albums, ${recentTracks.length} recent tracks, ${historicalArtists.length} historical`);
 
     // Check for sparse listening data
     const totalPlays = topArtists.reduce((sum, a) => sum + a.playcount, 0);
@@ -223,6 +231,8 @@ app.get('/user-insights-recommendations', requireSessionAuth, async (c) => {
         artist: a.artist,
         playcount: a.playcount,
       })),
+      recentTracks: recentTracks.map((t) => ({ name: t.name, artist: t.artist })),
+      historicalArtists: historicalArtists.map((a) => ({ name: a.name })),
     });
     console.log(`[Insights Recs] AI returned ${result.recommendations.length} recommendations in ${Date.now() - startTime}ms`);
 

@@ -18,6 +18,8 @@ export interface UserInsightsRecommendationsResult {
 export interface ListeningData {
   topArtists: Array<{ name: string; playcount: number }>;
   topAlbums: Array<{ name: string; artist: string; playcount: number }>;
+  recentTracks: Array<{ name: string; artist: string }>;
+  historicalArtists: Array<{ name: string }>;
 }
 
 /**
@@ -73,27 +75,43 @@ export async function generateUserInsightsRecommendations(
 
   const config = getTaskConfig('userInsightsRecommendations');
 
-  const { topArtists, topAlbums } = listeningData;
+  const { topArtists, topAlbums, recentTracks, historicalArtists } = listeningData;
 
-  const topArtistNames = topArtists.map((a) => a.name).join(', ');
-  const topAlbumsList = topAlbums
-    .map((a) => `${a.name} by ${a.artist}`)
-    .join(', ');
+  const historicalNames = new Set(historicalArtists.map((a) => a.name.toLowerCase()));
+  const annotatedArtists = topArtists.slice(0, 5).map((a) => ({
+    ...a,
+    isRegular: historicalNames.has(a.name.toLowerCase()),
+  }));
+  const topAlbumsSlice = topAlbums.slice(0, 5);
+  const recentTracksSlice = recentTracks.slice(0, 30);
 
-  const prompt = `Based on this user's recent 7-day listening, recommend exactly 4 albums they should check out.
+  const prompt = `Recommend exactly 4 albums that extend what this person is into right now. Read their week carefully, pick up on the thread or mood they're in, and suggest albums that push that thread forward — either by deepening it or opening an adjacent door.
 
-Their top artists this week: ${topArtistNames}
-Their top albums this week: ${topAlbumsList}
+Top artists this week:
+${annotatedArtists.map((a) => `- ${a.name}: ${a.playcount} plays${a.isRegular ? ' (familiar)' : ' (new for them)'}`).join('\n')}
 
-Requirements:
-- Recommend albums by DIFFERENT artists than their top artists listed above
-- Albums must be available on Spotify
-- Include a mix of: one classic/essential album, one recent release, two deeper cuts
-- Format each recommendation EXACTLY as: **Album Name by Artist Name**: One sentence explaining why they'd like it based on their taste
+Top albums this week:
+${topAlbumsSlice.map((a) => `- ${a.name} by ${a.artist}: ${a.playcount} plays`).join('\n')}
 
-Do NOT include any preamble like "Based on your listening..." or "Here are some recommendations..."
+Recent tracks (most recent first):
+${recentTracksSlice.map((t) => `- ${t.name} — ${t.artist}`).join('\n') || '- (none on record)'}
+
+Their rotation over the past 6 months (for exclusion only, NOT for framing the recs): ${historicalArtists.map((a) => a.name).join(', ') || 'none on record'}
+
+Rules:
+- Anchor on THIS WEEK. Extend the thread or mood they're in right now. Don't design recommendations around their historical taste.
+- Use the 6-month rotation only to avoid recommending artists they already listen to regularly.
+- Recommend albums by artists NOT in their 6-month rotation and NOT in their top 5 this week.
+- Each album must actually exist and be available on Spotify. Do not invent titles.
+- The four recommendations should cover different angles of this week's thread — don't give four variations of the same vibe.
+- Each reason should name the specific connection to this week: a particular artist, album, track, or mood they're sitting in right now.
+
+Format each recommendation EXACTLY as:
+**Album Name by Artist Name**: One sentence naming the specific connection.
+
+Do NOT include any preamble ("Based on your listening...", "Here are some recommendations...").
 Do NOT include closing remarks or summaries.
-Just provide the 4 bullet-point recommendations.`;
+Just the 4 formatted recommendations, one per line.`;
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -101,7 +119,7 @@ Just provide the 4 bullet-point recommendations.`;
       {
         role: 'system',
         content:
-          'You are a music expert who gives personalized album recommendations. You prioritize accuracy - only recommend albums you can verify exist and are available on streaming platforms. Be specific about why each album matches their taste.',
+          "You're a music expert who recommends albums someone will actually want to hear. You read their listening carefully — what they're deep in this week, what's on rotation for them historically, what's new vs familiar — and you pick four albums that each connect to something specific in that picture. You don't repeat what they already listen to. You name the connection in plain language. You only recommend albums that actually exist and are available on Spotify.",
       },
       { role: 'user', content: prompt },
     ],
