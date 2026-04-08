@@ -74,7 +74,11 @@ Things worth looking for — pick ONE, don't try to cover everything:
 - A mood: the week has a clear temperature, even across different artists
 - A contrast: the gap between what they're usually into and what this week actually was
 
-Write one paragraph — 4 to 6 sentences — in second person. Name specific artists, albums, or tracks. Use the familiar/new flags. You can be a little writerly if the observation earns it, but no clichés, no "based on your listening", no recommendations. If the week is genuinely unremarkable — mostly their usual rotation without much variation — say that plainly, then find the small thing that's still worth noting.`;
+Write 2 to 3 short paragraphs in second person. Give the observation room to breathe: set it up, show the evidence in the tracks and albums, land the point. Name specific artists, albums, or tracks. Use the familiar/new flags.
+
+Open with a direct observation — something concrete that's actually in their week. Do NOT open with a rhetorical hook ("The interesting thing is...", "What stands out is...", "Here's what's notable..."). Do NOT open with "Based on your listening" or "This week you listened to." Start in the scene, not above it.
+
+You can be a little writerly if the observation earns it, but no clichés, no recommendations. If the week is genuinely unremarkable — mostly their usual rotation without much variation — say that plainly, then find the small thing that's still worth noting.`;
 
   const response = await client.chatCompletion({
     model: config.model,
