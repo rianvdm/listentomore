@@ -109,6 +109,8 @@ Rules:
 Format each recommendation EXACTLY as:
 **Album Name by Artist Name**: One sentence naming the specific connection.
 
+The ONLY markdown allowed is the **...** wrapping the "Album Name by Artist Name" part. The reason sentence after the colon must be plain text — no bold, no italics, no asterisks, no brackets, no markdown of any kind.
+
 Do NOT include any preamble ("Based on your listening...", "Here are some recommendations...").
 Do NOT include closing remarks or summaries.
 Just the 4 formatted recommendations, one per line.`;
