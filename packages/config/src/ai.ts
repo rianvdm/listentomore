@@ -148,7 +148,7 @@ export const AI_TASKS = {
     maxTokens: 4000, // Increased from 1500 to avoid timeout
     temperature: 1,
     cacheTtlDays: 1,
-    reasoning: 'minimal',
+    reasoning: 'low',
     verbosity: 'medium',
   },
 } as const satisfies Record<string, AITaskConfig>;
