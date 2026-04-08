@@ -139,7 +139,7 @@ export const AI_TASKS = {
     maxTokens: 1500,
     temperature: 0.7,
     cacheTtlDays: 1,
-    verbosity: 'low',
+    verbosity: 'medium',
   },
 
   userInsightsRecommendations: {

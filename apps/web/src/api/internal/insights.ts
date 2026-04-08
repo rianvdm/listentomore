@@ -125,8 +125,8 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
     const [topArtists, topAlbums, recentTracks, historicalArtists] = await Promise.all([
       lastfm.getTopArtists('7day', 5).catch(() => []),
       lastfm.getTopAlbums('7day', 5).catch(() => []),
-      lastfm.recentTracks.getRecentTracks(20).catch(() => []),
-      lastfm.getTopArtists('3month', 15).catch(() => []),
+      lastfm.recentTracks.getRecentTracks(30).catch(() => []),
+      lastfm.getTopArtists('6month', 20).catch(() => []),
     ]);
 
     // Check for sparse listening data

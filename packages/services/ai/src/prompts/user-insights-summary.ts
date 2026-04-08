@@ -47,32 +47,34 @@ export async function generateUserInsightsSummary(
     isRegular: historicalNames.has(a.name.toLowerCase()),
   }));
 
-  const topArtistsSlice = annotatedArtists.slice(0, 3);
-  const topAlbumsSlice = topAlbums.slice(0, 3);
+  const topArtistsSlice = annotatedArtists.slice(0, 5);
+  const topAlbumsSlice = topAlbums.slice(0, 5);
+  const recentTracksSlice = recentTracks.slice(0, 30);
 
-  const prompt = `Here is someone's listening data for the past week. Write one short paragraph — 3 to 5 sentences — that captures the single most interesting thread from their week.
+  const prompt = `Here's someone's listening from the past week. Find the one thing about it that's genuinely interesting — the pattern a friend who knows their taste would call out, not a recap.
 
-Total plays: ${weeklyPlayCount}
+Total plays this week: ${weeklyPlayCount}
 
-Top artists:
+Top artists this week:
 ${topArtistsSlice.map((a) => `- ${a.name}: ${a.playcount} plays${a.isRegular ? ' (familiar)' : ' (new for them)'}`).join('\n')}
 
-Top albums:
+Top albums this week:
 ${topAlbumsSlice.map((a) => `- ${a.name} by ${a.artist}: ${a.playcount} plays`).join('\n')}
 
-Their usual rotation (past 3 months): ${historicalArtists.map((a) => a.name).join(', ') || 'none on record'}
+Recent tracks (most recent first):
+${recentTracksSlice.map((t) => `- ${t.name} — ${t.artist}`).join('\n') || '- (none on record)'}
 
-Pick the one thing that defines this week — a deep dive, a new discovery, a return to something familiar, a genre mood — and say something about it. Ignore data points that don't serve that thread.
+Their rotation over the past 6 months: ${historicalArtists.map((a) => a.name).join(', ') || 'none on record'}
 
-Rules:
-- One paragraph, 3-5 sentences. No more.
-- Write in second person ("You spent the week...", "This was a week for...")
-- Name specific artists and albums
-- Use the familiar/new labels to add context
-- Clear, direct prose. No compound adjectives, no forced metaphors, no clichés
-- Do NOT recommend anything
-- Do NOT open with "Based on your listening" or "This week you listened to"
-- Every sentence should earn its place`;
+Things worth looking for — pick ONE, don't try to cover everything:
+- An obsession: one artist or album eating the week
+- A rabbit hole: a thread from one artist, scene, or era to another
+- A return: coming back to something they hadn't played in a while
+- A break: stepping outside their usual rotation
+- A mood: the week has a clear temperature, even across different artists
+- A contrast: the gap between what they're usually into and what this week actually was
+
+Write one paragraph — 4 to 6 sentences — in second person. Name specific artists, albums, or tracks. Use the familiar/new flags. You can be a little writerly if the observation earns it, but no clichés, no "based on your listening", no recommendations. If the week is genuinely unremarkable — mostly their usual rotation without much variation — say that plainly, then find the small thing that's still worth noting.`;
 
   const response = await client.chatCompletion({
     model: config.model,
@@ -80,7 +82,7 @@ Rules:
       {
         role: 'system',
         content:
-          'You distill a week of listening into one sharp observation. You know what\'s normal for this person and what\'s new. Your job is to find the single thread that makes this week worth noting — then say it in a few sentences. Be specific and direct. Skip anything that doesn\'t serve that one point.',
+          "You're a friend who pays attention to what people listen to. When someone shares their week, you find the one thing that's actually interesting about it — not the obvious summary, but the pattern they might not have noticed themselves. You know their usual rotation and what's new for them. You write like a person, not a report: one sharp observation, specific and earned.",
       },
       { role: 'user', content: prompt },
     ],
