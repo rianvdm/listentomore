@@ -149,7 +149,7 @@ export const AI_TASKS = {
     temperature: 1,
     cacheTtlDays: 1,
     reasoning: 'low',
-    verbosity: 'medium',
+    verbosity: 'low',
   },
 } as const satisfies Record<string, AITaskConfig>;
 
