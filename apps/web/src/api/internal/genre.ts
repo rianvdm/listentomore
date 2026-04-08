@@ -6,8 +6,8 @@ import { requireSessionAuth } from '../../middleware/require-session-auth';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// No requireSessionAuth — genre pages are public discovery content
-app.get('/genre-summary', async (c) => {
+// Gated: genre summary is AI-generated and shown only to signed-in users
+app.get('/genre-summary', requireSessionAuth, async (c) => {
   const name = c.req.query('name');
 
   if (!name) {

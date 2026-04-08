@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SignInGate } from '../../components/ui';
 import { slugToDisplayName } from '../../data/genres';
 import { enrichLinksScript } from '../../utils/client-scripts';
 
@@ -28,13 +29,15 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
       </header>
 
       <main>
-        {/* AI Summary - loaded via JS */}
-        <section class="ai-summary" id="genre-summary">
-          <div class="loading-container">
-            <span class="spinner">↻</span>
-            <span class="loading-text">Generating summary...</span>
-          </div>
-        </section>
+        {/* AI Summary - loaded via JS (gated) */}
+        <SignInGate currentUser={currentUser ?? null} currentPath={`/genre/${slug}`}>
+          <section class="ai-summary" id="genre-summary">
+            <div class="loading-container">
+              <span class="spinner">↻</span>
+              <span class="loading-text">Generating summary...</span>
+            </div>
+          </section>
+        </SignInGate>
 
         {/* Back Link */}
         <section class="text-center" style={{ marginTop: '2em' }}>
@@ -49,6 +52,8 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
         ${enrichLinksScript}
 
         (function() {
+          if (!window.__IS_AUTHENTICATED__) return;
+
           var genreName = ${JSON.stringify(displayName)};
 
           // Fetch genre summary
