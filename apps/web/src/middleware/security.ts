@@ -16,6 +16,9 @@ type Env = {
 const ALLOWED_ORIGINS = [
   'https://listentomore-web.rian-db8.workers.dev',
   'https://listentomore.com', // Future custom domain
+  'https://elezea.com', // Blog — /widget/recent ticker tape
+  'https://www.elezea.com',
+  'https://elezea-preview.rian-db8.workers.dev', // Migration preview worker
 ];
 
 // Development origins (only allowed when ENVIRONMENT !== 'production')
