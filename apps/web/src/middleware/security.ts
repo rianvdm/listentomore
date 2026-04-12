@@ -19,6 +19,7 @@ const ALLOWED_ORIGINS = [
   'https://elezea.com', // Blog — /widget/recent ticker tape
   'https://www.elezea.com',
   'https://elezea-preview.rian-db8.workers.dev', // Migration preview worker
+  'https://elezea-prod.rian-db8.workers.dev', // Production worker (pre-DNS-cutover)
 ];
 
 // Development origins (only allowed when ENVIRONMENT !== 'production')
