@@ -693,7 +693,28 @@ app.get('/terms', (c) => c.html(<TermsPage currentUser={c.get('currentUser')} />
 app.get('/widget/recent', async (c) => {
   const format = c.req.query('format');
   const username = c.req.query('username') || 'bordesak';
+  const kvKey = `widget:recent:${username}`;
 
+  const renderHtml = (artist: string, album: string, trackName: string) =>
+    `♫ Most recently I listened to <strong>${escapeHtml(album || trackName)}</strong> by <strong>${escapeHtml(artist)}</strong>. <a href="https://listentomore.com/u/${encodeURIComponent(username)}" target="_blank">See more »</a>`;
+
+  // Fast path: read from KV (populated every 5 minutes by the scheduled handler).
+  // When Last.fm is flaking, this path still returns the last known-good track.
+  const cached = await c.env.CACHE.get<{ artist: string; album: string; track: string }>(kvKey, 'json');
+  if (cached) {
+    if (format === 'html') {
+      return new Response(renderHtml(cached.artist, cached.album, cached.track), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+    return c.json({
+      last_artist: cached.artist,
+      last_album: cached.album,
+    });
+  }
+
+  // Bootstrap path: cold KV (first request after deploy, new user, or expired entry).
+  // Do one live fetch and seed the cache so subsequent requests hit the fast path.
   try {
     const lastfm = new LastfmService({
       apiKey: c.env.LASTFM_API_KEY,
@@ -711,9 +732,14 @@ app.get('/widget/recent', async (c) => {
       return c.json({ error: 'No recent tracks found' }, 404);
     }
 
+    await c.env.CACHE.put(
+      kvKey,
+      JSON.stringify({ artist: track.artist, album: track.album, track: track.name }),
+      { expirationTtl: 604800 }
+    );
+
     if (format === 'html') {
-      const html = `♫ Most recently I listened to <strong>${escapeHtml(track.album || track.name)}</strong> by <strong>${escapeHtml(track.artist)}</strong>. <a href="https://listentomore.com/u/${encodeURIComponent(username)}" target="_blank">See more »</a>`;
-      return new Response(html, {
+      return new Response(renderHtml(track.artist, track.album, track.name), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     }
@@ -828,7 +854,7 @@ async function scheduled(
             const track = await userLastfm.getMostRecentTrack();
             if (track) {
               lastfmSuccessCount++;
-              return {
+              const trackData = {
                 username: user.username || user.lastfm_username,
                 artist: track.artist,
                 album: track.album,
@@ -837,6 +863,14 @@ async function scheduled(
                 playedAt: track.playedAt,
                 nowPlaying: track.nowPlaying,
               };
+              // Persist for /widget/recent so the widget keeps working when Last.fm flakes.
+              // 7-day TTL: if the CRON has been broken for a week, stale is no longer useful.
+              await env.CACHE.put(
+                `widget:recent:${user.lastfm_username}`,
+                JSON.stringify(trackData),
+                { expirationTtl: 604800 }
+              );
+              return trackData;
             }
           } catch (error) {
             lastfmErrorCount++;
