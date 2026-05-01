@@ -108,10 +108,20 @@ export class AIService {
   /**
    * Generate album details (provider determined by config)
    */
-  async getAlbumDetail(artistName: string, albumName: string) {
+  async getAlbumDetail(
+    artistName: string,
+    albumName: string,
+    releaseYear?: number
+  ) {
     const { generateAlbumDetail } = await import('./prompts/album-detail');
     const client = this.getClientForTask('albumDetail');
-    return generateAlbumDetail(artistName, albumName, client, this.cache);
+    return generateAlbumDetail(
+      artistName,
+      albumName,
+      client,
+      this.cache,
+      releaseYear
+    );
   }
 
   /**

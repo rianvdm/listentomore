@@ -17,7 +17,8 @@ export async function generateAlbumDetail(
   artistName: string,
   albumName: string,
   client: ChatClient,
-  cache: AICache
+  cache: AICache,
+  releaseYear?: number
 ): Promise<AlbumDetailResult> {
   const normalizedArtist = artistName.toLowerCase().trim();
   const normalizedAlbum = albumName.toLowerCase().trim();
@@ -34,11 +35,21 @@ export async function generateAlbumDetail(
 
   const config = getTaskConfig('albumDetail');
 
+  // Gate web search on release recency: catalog albums (older than ~2 years)
+  // are well-covered by training data. Recent releases need web search for
+  // accurate details. Missing year → assume recent and enable search.
+  const currentYear = new Date().getUTCFullYear();
+  const needsWebSearch =
+    config.webSearch &&
+    (releaseYear === undefined || releaseYear >= currentYear - 1);
+
+  const webSearchInstruction = needsWebSearch
+    ? `\n\nAlways search the web for the latest information about this album before responding. Do not rely solely on your training data.`
+    : '';
+
   const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2-3 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes.
 
-Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.
-
-Always search the web for the latest information about this album before responding. Do not rely solely on your training data.
+Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.${webSearchInstruction}
 
 Do NOT start with a preamble (like "Here is a summary...") or end with follow-up suggestions (like "I can also...").
 
@@ -58,7 +69,7 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
     temperature: config.temperature,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
-    webSearch: config.webSearch,
+    webSearch: needsWebSearch,
   });
 
   const result: AlbumDetailResult = {

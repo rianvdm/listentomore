@@ -8,6 +8,12 @@ import type { Bindings, Variables } from '../../types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+function parseReleaseYear(releaseDate: string | undefined): number | undefined {
+  if (!releaseDate) return undefined;
+  const year = parseInt(releaseDate.slice(0, 4), 10);
+  return Number.isFinite(year) ? year : undefined;
+}
+
 // GET /api/v1/album - Get album details with AI summary and streaming links
 app.get('/', async (c) => {
   const artist = c.req.query('artist');
@@ -35,10 +41,16 @@ app.get('/', async (c) => {
     // Step 3: Fetch AI summary and streaming links in parallel (if requested)
     const [summaryResult, linksResult] = await Promise.all([
       include.includes('summary')
-        ? ai.getAlbumDetail(albumData.artist, albumData.name).catch((err) => {
-            console.error('AI album summary error:', err);
-            return null;
-          })
+        ? ai
+            .getAlbumDetail(
+              albumData.artist,
+              albumData.name,
+              parseReleaseYear(albumData.releaseDate)
+            )
+            .catch((err) => {
+              console.error('AI album summary error:', err);
+              return null;
+            })
         : Promise.resolve(null),
       include.includes('links')
         ? (async () => {

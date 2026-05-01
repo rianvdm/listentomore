@@ -134,6 +134,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
           var spotifyUrl = ${JSON.stringify(album.spotifyUrl)};
           var artistName = ${JSON.stringify(album.artist)};
           var albumName = ${JSON.stringify(album.name)};
+          var releaseYear = ${JSON.stringify(album.releaseYear || '')};
 
           // Fetch streaming links
           internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(albumId) + '&type=album', { cache: 'no-store' })
@@ -155,7 +156,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
           // AI features - only fetch for authenticated users
           if (window.__IS_AUTHENTICATED__) {
             // Fetch AI summary
-            internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
+            internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName) + (releaseYear ? '&releaseYear=' + encodeURIComponent(releaseYear) : ''), { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
