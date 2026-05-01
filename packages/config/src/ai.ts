@@ -91,7 +91,7 @@ export const AI_TASKS = {
 
   artistSentence: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.4-mini',
     maxTokens: 150,
     temperature: 1,
     cacheTtlDays: 180,
