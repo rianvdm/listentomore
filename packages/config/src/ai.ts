@@ -64,11 +64,11 @@ export interface AITaskConfig {
 export const AI_TASKS = {
   artistSummary: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.4-mini',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: true,
+    webSearch: false,
   },
 
   albumDetail: {
