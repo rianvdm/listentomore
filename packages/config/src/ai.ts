@@ -73,7 +73,7 @@ export const AI_TASKS = {
 
   albumDetail: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.4-mini',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 120,
