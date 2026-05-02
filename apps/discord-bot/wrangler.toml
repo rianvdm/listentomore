@@ -18,13 +18,9 @@ binding = "CACHE"
 id = "a6011a8b5bac4be9a472ff86f8d5fd91"
 preview_id = "d6703c6a7283467eb7a452a6cb34fa87"
 
-# Environment variables (non-sensitive defaults)
+# Environment variables. Production value is set here; override locally via .dev.vars.
 [vars]
-ENVIRONMENT = "development"
-
-# Production environment overrides
-[env.production]
-vars = { ENVIRONMENT = "production" }
+ENVIRONMENT = "production"
 
 # Note: Secrets should be set with `wrangler secret put`:
 # Discord:
