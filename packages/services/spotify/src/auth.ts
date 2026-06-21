@@ -14,7 +14,6 @@ export interface SpotifyTokenData {
 export interface SpotifyAuthConfig {
   clientId: string;
   clientSecret: string;
-  refreshToken: string;
 }
 
 export class SpotifyAuth {
@@ -36,20 +35,18 @@ export class SpotifyAuth {
       return cached.access_token;
     }
 
-    // Token expired or not in cache - refresh it
-    return this.refreshAccessToken();
+    // Token expired or not in cache - fetch a new one
+    return this.fetchAccessToken();
   }
 
-  private async refreshAccessToken(): Promise<string> {
+  private async fetchAccessToken(): Promise<string> {
     const clientIdPrefix = this.config.clientId.substring(0, 8);
-    console.log(`[Spotify] Refreshing token for app ${clientIdPrefix}...`);
+    console.log(`[Spotify] Fetching client-credentials token for app ${clientIdPrefix}...`);
 
     const credentials = btoa(`${this.config.clientId}:${this.config.clientSecret}`);
 
-    // URL-encode the refresh token to handle special characters
     const body = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: this.config.refreshToken,
+      grant_type: 'client_credentials',
     });
 
     const response = await fetchWithTimeout(SPOTIFY_TOKEN_URL, {

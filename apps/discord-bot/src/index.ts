@@ -30,7 +30,6 @@ interface Env {
   // Service credentials
   SPOTIFY_CLIENT_ID: string;
   SPOTIFY_CLIENT_SECRET: string;
-  SPOTIFY_REFRESH_TOKEN: string;
   LASTFM_API_KEY: string;
   OPENAI_API_KEY: string;
   // Apple MusicKit credentials (for streaming links)
@@ -55,7 +54,6 @@ function createServices(env: Env): Services {
     spotify: new SpotifyService({
       clientId: env.SPOTIFY_CLIENT_ID,
       clientSecret: env.SPOTIFY_CLIENT_SECRET,
-      refreshToken: env.SPOTIFY_REFRESH_TOKEN,
       cache: env.CACHE,
     }),
     // Last.fm service factory - needs username per request

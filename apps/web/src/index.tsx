@@ -87,7 +87,6 @@ app.use('*', async (c, next) => {
   const spotify = new SpotifyService({
     clientId: c.env.SPOTIFY_CLIENT_ID,
     clientSecret: c.env.SPOTIFY_CLIENT_SECRET,
-    refreshToken: c.env.SPOTIFY_REFRESH_TOKEN,
     cache: c.env.CACHE,
   });
   c.set('spotify', spotify);
@@ -98,7 +97,6 @@ app.use('*', async (c, next) => {
     ? new SpotifyService({
       clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID!,
       clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
-      refreshToken: c.env.SPOTIFY_STREAMING_REFRESH_TOKEN!,
       cache: c.env.CACHE,
     })
     : spotify;
