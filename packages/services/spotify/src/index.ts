@@ -40,7 +40,6 @@ export class SpotifyService {
   constructor(config: {
     clientId: string;
     clientSecret: string;
-    refreshToken: string;
     cache: KVNamespace;
   }) {
     this.clientIdPrefix = config.clientId.substring(0, 8);
@@ -52,7 +51,6 @@ export class SpotifyService {
       {
         clientId: config.clientId,
         clientSecret: config.clientSecret,
-        refreshToken: config.refreshToken,
       },
       config.cache
     );

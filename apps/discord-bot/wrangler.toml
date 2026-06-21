@@ -30,7 +30,6 @@ ENVIRONMENT = "production"
 # Services:
 # - SPOTIFY_CLIENT_ID
 # - SPOTIFY_CLIENT_SECRET
-# - SPOTIFY_REFRESH_TOKEN
 # - LASTFM_API_KEY
 # - OPENAI_API_KEY
 # Apple MusicKit (for streaming links):

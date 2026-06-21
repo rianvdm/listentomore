@@ -16,11 +16,9 @@ export type Bindings = {
   // Environment variables
   SPOTIFY_CLIENT_ID: string;
   SPOTIFY_CLIENT_SECRET: string;
-  SPOTIFY_REFRESH_TOKEN: string;
   // Secondary Spotify app for streaming-links (rate limit isolation)
   SPOTIFY_STREAMING_CLIENT_ID?: string;
   SPOTIFY_STREAMING_CLIENT_SECRET?: string;
-  SPOTIFY_STREAMING_REFRESH_TOKEN?: string;
   LASTFM_API_KEY: string;
   LASTFM_SHARED_SECRET?: string;
   LASTFM_USERNAME: string;
