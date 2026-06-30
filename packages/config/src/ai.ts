@@ -138,12 +138,11 @@ export const AI_TASKS = {
   },
 
   userInsightsSummary: {
-    provider: 'openai',
-    model: 'gpt-5.4',
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-6',
     maxTokens: 1500,
-    temperature: 0.7,
+    temperature: 0.8,
     cacheTtlDays: 1,
-    verbosity: 'medium',
   },
 
   userInsightsRecommendations: {

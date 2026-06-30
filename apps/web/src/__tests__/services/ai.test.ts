@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { getTaskConfig } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -464,5 +465,19 @@ describe('generateUserInsightsSummary cache key', () => {
       expect.any(String),
       expect.any(Object)
     );
+  });
+});
+
+describe('userInsightsSummary provider flip', () => {
+  it('is configured for anthropic sonnet', () => {
+    const cfg = getTaskConfig('userInsightsSummary');
+    expect(cfg.provider).toBe('anthropic');
+    expect(cfg.model).toBe('claude-sonnet-4-6');
+    expect(cfg.temperature).toBe(0.8);
+  });
+
+  it('routes the task to the anthropic client', () => {
+    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
+    expect(ai.getClientForTask('userInsightsSummary')).toBe(ai.anthropic);
   });
 });
