@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -294,5 +294,19 @@ describe('generateArtistSentence', () => {
 
     expect(result).toEqual(cachedResult);
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('AIRateLimiter — provider-aware limits', () => {
+  it('uses the anthropic rate limit, not openai', async () => {
+    const rl = new AIRateLimiter(createMockKV(), 'anthropic');
+    const stats = await rl.getStats();
+    expect(stats.provider).toBe('anthropic');
+    expect(stats.maxRequests).toBe(50);
+  });
+
+  it('still reports the openai limit for the openai provider', async () => {
+    const rl = new AIRateLimiter(createMockKV(), 'openai');
+    expect((await rl.getStats()).maxRequests).toBe(90);
   });
 });

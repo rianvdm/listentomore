@@ -8,6 +8,10 @@ export const AI_PROVIDERS = {
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-5-mini',
   },
+  anthropic: {
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-sonnet-4-6',
+  },
 } as const;
 
 export type AIProvider = keyof typeof AI_PROVIDERS;
@@ -168,6 +172,10 @@ export const RATE_LIMITS = {
   openai: {
     requestsPerMinute: 90,
     tokensPerMinute: 90000,
+  },
+  anthropic: {
+    requestsPerMinute: 50,
+    tokensPerMinute: 40000,
   },
   spotify: {
     requestsPerMinute: 150, // (Spotify allows ~180)
