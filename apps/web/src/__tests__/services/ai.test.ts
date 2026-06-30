@@ -449,6 +449,14 @@ describe('warmer-voice prompt', () => {
   it('exposes a prompt version for cache busting', () => {
     expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v2');
   });
+
+  it('embeds the hand-authored gold examples', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('When you fall into something, you fall all the way in.');
+    expect(user).toContain('Still the one, no argument.');
+    expect(user).toContain("No notes. That's a healthy week.");
+    expect(user).not.toContain('[PLACEHOLDER');
+  });
 });
 
 describe('generateUserInsightsSummary cache key', () => {
