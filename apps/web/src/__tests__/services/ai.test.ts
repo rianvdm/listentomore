@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -308,5 +308,73 @@ describe('AIRateLimiter — provider-aware limits', () => {
   it('still reports the openai limit for the openai provider', async () => {
     const rl = new AIRateLimiter(createMockKV(), 'openai');
     expect((await rl.getStats()).maxRequests).toBe(90);
+  });
+});
+
+describe('AnthropicClient.chatCompletion', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function lastBody(mockFetch: ReturnType<typeof setupFetchMock>) {
+    const init = mockFetch.mock.calls[0][1] as RequestInit;
+    return JSON.parse(init.body as string);
+  }
+
+  it('extracts the system message to the top-level system param', async () => {
+    const mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'hi' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-4-6',
+      messages: [
+        { role: 'system', content: 'You are a friend.' },
+        { role: 'user', content: 'My week...' },
+      ],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    const body = lastBody(mockFetch);
+    expect(body.system).toBe('You are a friend.');
+    expect(body.messages).toEqual([{ role: 'user', content: 'My week...' }]);
+    expect(body.max_tokens).toBe(1500);
+    expect(body.temperature).toBe(0.8);
+  });
+
+  it('omits temperature for opus-tier models', async () => {
+    const mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-4-8', content: [{ type: 'text', text: 'x' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-4-8',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    expect(lastBody(mockFetch).temperature).toBeUndefined();
+  });
+
+  it('maps the response to content + anthropic metadata', async () => {
+    setupFetchMock([
+      {
+        pattern: /api\.anthropic\.com/,
+        response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'warm summary' }], usage: { input_tokens: 100, output_tokens: 50 } },
+      },
+    ]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(res.content).toBe('warm summary');
+    expect(res.metadata?.provider).toBe('anthropic');
+    expect(res.metadata?.api).toBe('messages');
+    expect(res.metadata?.usage).toEqual({ inputTokens: 100, outputTokens: 50, totalTokens: 150 });
+  });
+
+  it('throws on a non-200 response', async () => {
+    setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { error: 'bad' }, options: { status: 400, ok: false } },
+    ]);
+    await expect(
+      new AnthropicClient('key').chatCompletion({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] })
+    ).rejects.toThrow('Anthropic API error');
   });
 });

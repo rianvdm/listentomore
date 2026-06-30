@@ -18,6 +18,7 @@ export type {
 
 // Re-export clients and cache for direct use
 export { OpenAIClient } from './openai';
+export { AnthropicClient } from './anthropic';
 export type {
   ChatCompletionOptions,
   ChatCompletionResponse,

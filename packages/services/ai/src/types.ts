@@ -38,11 +38,11 @@ export interface ChatCompletionOptions {
  */
 export interface AIResponseMetadata {
   /** Provider that handled the request */
-  provider: 'openai';
+  provider: 'openai' | 'anthropic';
   /** Actual model used (from API response) */
   model: string;
-  /** Which API was used (OpenAI has multiple) */
-  api: 'responses' | 'chat_completions';
+  /** Which API was used */
+  api: 'responses' | 'chat_completions' | 'messages';
   /** Token usage from API response */
   usage?: {
     inputTokens: number | null;
