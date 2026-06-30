@@ -5,7 +5,7 @@ import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { LastfmService } from '@listentomore/lastfm';
 import type { User } from '@listentomore/db';
 import type { AIService } from '@listentomore/ai';
-import { USER_INSIGHTS_PROMPT_VERSION } from '@listentomore/ai';
+import { USER_INSIGHTS_PROMPT_VERSION, buildUserInsightsMessages } from '@listentomore/ai';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { Bindings, Variables } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
@@ -164,6 +164,63 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
   } catch (error) {
     console.error('Internal user-insights-summary error:', error);
     return c.json({ error: 'Failed to generate insights' }, 500);
+  }
+});
+
+// Throwaway A/B comparison route for issue #32 — delete after picking a model.
+app.get('/insights-ab', requireSessionAuth, async (c) => {
+  const username = c.req.query('username');
+  if (!username) {
+    return c.json({ error: 'Missing username parameter' }, 400);
+  }
+
+  const accessResult = await getUserWithInsightsAccess(c, username);
+  if ('error' in accessResult) {
+    return c.json({ error: accessResult.error }, accessResult.status as 403 | 404);
+  }
+  const { lastfm } = accessResult;
+
+  try {
+    const [topArtists, topAlbums, recentTracks, historicalArtists] = await Promise.all([
+      lastfm.getTopArtists('7day', 5).catch(() => []),
+      lastfm.getTopAlbums('7day', 5).catch(() => []),
+      lastfm.recentTracks.getRecentTracks(30).catch(() => []),
+      lastfm.getTopArtists('6month', 20).catch(() => []),
+    ]);
+
+    const totalPlays = topArtists.reduce((sum, a) => sum + a.playcount, 0);
+    if (totalPlays < MIN_PLAYS_THRESHOLD) {
+      return c.json({ data: null, sparse: true });
+    }
+
+    const messages = buildUserInsightsMessages({
+      topArtists: topArtists.map((a) => ({ name: a.name, playcount: a.playcount })),
+      topAlbums: topAlbums.map((a) => ({ name: a.name, artist: a.artist, playcount: a.playcount })),
+      recentTracks: recentTracks.map((t) => ({ name: t.name, artist: t.artist })),
+      weeklyPlayCount: totalPlays,
+      historicalArtists: historicalArtists.map((a) => ({ name: a.name })),
+    });
+
+    const ai = c.get('ai') as AIService;
+    const variants = [
+      { key: 'gpt54', client: ai.openai, model: 'gpt-5.4', temperature: undefined as number | undefined },
+      { key: 'sonnet46', client: ai.anthropic, model: 'claude-sonnet-4-6', temperature: 0.8 },
+      { key: 'opus48', client: ai.anthropic, model: 'claude-opus-4-8', temperature: undefined as number | undefined },
+    ];
+
+    const results = await Promise.all(
+      variants.map((v) =>
+        v.client
+          .chatCompletion({ model: v.model, messages, maxTokens: 1500, temperature: v.temperature })
+          .then((r) => [v.key, r.content] as const)
+          .catch((e) => [v.key, `ERROR: ${e instanceof Error ? e.message : String(e)}`] as const)
+      )
+    );
+
+    return c.json({ data: Object.fromEntries(results) });
+  } catch (error) {
+    console.error('insights-ab error:', error);
+    return c.json({ error: 'Failed to generate A/B insights' }, 500);
   }
 });
 
