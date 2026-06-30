@@ -1,7 +1,8 @@
 // AI service - consolidated AI functionality for text and image generation
 
-import type { AITask } from '@listentomore/config';
+import { getTaskConfig, type AITask } from '@listentomore/config';
 import { OpenAIClient } from './openai';
+import { AnthropicClient } from './anthropic';
 import { AICache } from './cache';
 import { AIRateLimiter } from './rate-limit';
 import type { ChatClient } from './types';
@@ -66,6 +67,7 @@ export {
 
 export interface AIServiceConfig {
   openaiApiKey: string;
+  anthropicApiKey: string;
   cache: KVNamespace;
 }
 
@@ -74,25 +76,33 @@ export interface AIServiceConfig {
  */
 export class AIService {
   public readonly openai: OpenAIClient;
+  public readonly anthropic: AnthropicClient;
   public readonly cache: AICache;
   public readonly kv: KVNamespace;
   public readonly openaiRateLimiter: AIRateLimiter;
+  public readonly anthropicRateLimiter: AIRateLimiter;
 
   constructor(config: AIServiceConfig) {
-    // Create distributed rate limiter for OpenAI
+    // Create distributed rate limiters per provider
     this.openaiRateLimiter = new AIRateLimiter(config.cache, 'openai');
+    this.anthropicRateLimiter = new AIRateLimiter(config.cache, 'anthropic');
 
-    // Create client with rate limiter
+    // Create clients with rate limiters
     this.openai = new OpenAIClient(config.openaiApiKey, this.openaiRateLimiter);
+    this.anthropic = new AnthropicClient(
+      config.anthropicApiKey,
+      this.anthropicRateLimiter
+    );
     this.cache = new AICache(config.cache);
     this.kv = config.cache;
   }
 
   /**
-   * Get the appropriate client for a task based on config.
+   * Get the appropriate client for a task based on config.provider.
    */
-  getClientForTask(_task: AITask): ChatClient {
-    return this.openai;
+  getClientForTask(task: AITask): ChatClient {
+    const { provider } = getTaskConfig(task);
+    return provider === 'anthropic' ? this.anthropic : this.openai;
   }
 
   // Convenience methods that use the appropriate client based on config

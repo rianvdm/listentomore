@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -376,5 +376,21 @@ describe('AnthropicClient.chatCompletion', () => {
     await expect(
       new AnthropicClient('key').chatCompletion({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] })
     ).rejects.toThrow('Anthropic API error');
+  });
+});
+
+describe('AIService.getClientForTask', () => {
+  function makeService() {
+    return new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
+  }
+
+  it('returns the OpenAI client for an openai-provider task', () => {
+    const ai = makeService();
+    expect(ai.getClientForTask('artistSummary')).toBe(ai.openai);
+  });
+
+  it('exposes a constructed anthropic client', () => {
+    const ai = makeService();
+    expect(ai.anthropic).toBeInstanceOf(AnthropicClient);
   });
 });
