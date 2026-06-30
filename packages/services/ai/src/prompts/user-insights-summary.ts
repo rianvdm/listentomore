@@ -17,8 +17,18 @@ export interface ListeningData {
   historicalArtists: Array<{ name: string }>;
 }
 
+/** Bump when the prompt changes so cached cold summaries don't linger. */
+export const USER_INSIGHTS_PROMPT_VERSION = 'v2';
+
 const SYSTEM_PROMPT =
-  "You're a friend who pays attention to what people listen to. When someone shares their week, you find the one thing that's actually interesting about it — not the obvious summary, but the pattern they might not have noticed themselves. You know their usual rotation and what's new for them. You write like a person, not a report: one sharp observation, specific and earned.";
+  "You're a friend who pays attention to what people listen to. When someone shows you their week, you react to the music itself — you have opinions about records and songs, the ones you love, the ones that surprised you, the stuff you'd text them about. You know their usual rotation and what's new for them. You're not analyzing them; you're talking about the music with someone whose taste you know.";
+
+// Hand-authored gold-standard examples in the owner's voice. Filled in Task 8
+// from the worksheet. Until then this is a single neutral placeholder so the
+// structure compiles and the bans/voice are exercised by tests.
+const FEW_SHOT_EXAMPLES = `Here are a couple of summaries in the right voice (one with the data it came from, then two on their own):
+
+[PLACEHOLDER — replace with the owner's hand-authored examples in Task 8]`;
 
 /**
  * Build the chat messages for the weekly insights summary.
@@ -62,19 +72,14 @@ ${recentTracksSlice.map((t) => `- ${t.name} — ${t.artist}`).join('\n') || '- (
 
 Their rotation over the past 6 months: ${historicalArtists.map((a) => a.name).join(', ') || 'none on record'}
 
-Things worth looking for — pick ONE, don't try to cover everything:
-- An obsession: one artist or album eating the week
-- A rabbit hole: a thread from one artist, scene, or era to another
-- A return: coming back to something they hadn't played in a while
-- A break: stepping outside their usual rotation
-- A mood: the week has a clear temperature, even across different artists
-- A contrast: the gap between what they're usually into and what this week actually was
+${FEW_SHOT_EXAMPLES}
 
-Write 2 to 3 short paragraphs in second person. Give the observation room to breathe: set it up, show the evidence in the tracks and albums, land the point. Name specific artists, albums, or tracks. Use the familiar/new flags.
+Now write theirs. 2 to 3 short paragraphs, second person. React to the music with at least one real opinion about a song or record, not a description of the listener. Name specific artists, albums, or tracks, and use the familiar/new flags. If the week is mostly their usual rotation, say so plainly, then find the small thing still worth noting.
 
-Open with a direct observation — something concrete that's actually in their week. Do NOT open with a rhetorical hook ("The interesting thing is...", "What stands out is...", "Here's what's notable..."). Do NOT open with "Based on your listening" or "This week you listened to." Start in the scene, not above it.
-
-You can be a little writerly if the observation earns it, but no clichés, no recommendations. If the week is genuinely unremarkable — mostly their usual rotation without much variation — say that plainly, then find the small thing that's still worth noting.`;
+Hard rules:
+- Never use "not X — but Y", "it isn't X, it's Y", or "less like X, more like Y" anywhere. This is the move to avoid.
+- At most 3 em dashes in the whole thing.
+- No clichés, no recommendations, no mood/atmosphere adjectives standing in for an actual observation.`;
 
   return [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -96,7 +101,8 @@ export async function generateUserInsightsSummary(
   // Check cache first
   const cached = await cache.get<UserInsightsSummaryResult>(
     'userInsightsSummary',
-    normalizedUsername
+    normalizedUsername,
+    USER_INSIGHTS_PROMPT_VERSION
   );
   if (cached) {
     return cached;
@@ -120,7 +126,7 @@ export async function generateUserInsightsSummary(
   };
 
   // Cache the result (without metadata)
-  await cache.set('userInsightsSummary', [normalizedUsername], {
+  await cache.set('userInsightsSummary', [normalizedUsername, USER_INSIGHTS_PROMPT_VERSION], {
     content: result.content,
   });
 

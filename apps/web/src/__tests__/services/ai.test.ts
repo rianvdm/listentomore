@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -424,5 +424,45 @@ describe('buildUserInsightsMessages', () => {
     const user = buildUserInsightsMessages(insightsSample)[1].content;
     expect(user).toContain('73');
     expect(user).toContain('Nostalgia Burns by Siiga');
+  });
+});
+
+describe('warmer-voice prompt', () => {
+  it('persona reacts to the music, not the listener', () => {
+    const system = buildUserInsightsMessages(insightsSample)[0].content;
+    expect(system.toLowerCase()).toContain('opinions about');
+    expect(system).not.toContain('pattern they might not have noticed');
+  });
+
+  it('bans the not-X-but-Y construction and caps em dashes', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('less like X, more like Y');
+    expect(user.toLowerCase()).toContain('em dash');
+  });
+
+  it('drops the atmosphere-seeding language', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).not.toContain('clear temperature');
+  });
+
+  it('exposes a prompt version for cache busting', () => {
+    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v2');
+  });
+});
+
+describe('generateUserInsightsSummary cache key', () => {
+  it('reads and writes the versioned cache key', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'warm' }], usage: { input_tokens: 1, output_tokens: 1 } } },
+    ]);
+    await generateUserInsightsSummary('Bordesak', insightsSample, new AnthropicClient('k'), cache);
+    expect(mockKV.get).toHaveBeenCalledWith('ai:userInsightsSummary:bordesak:v2', 'json');
+    expect(mockKV.put).toHaveBeenCalledWith(
+      'ai:userInsightsSummary:bordesak:v2',
+      expect.any(String),
+      expect.any(Object)
+    );
   });
 });
