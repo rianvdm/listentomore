@@ -1,7 +1,7 @@
 // User insights summary prompt - generates personalized listening analysis
 
 import { getTaskConfig } from '@listentomore/config';
-import type { ChatClient, AIResponseMetadata } from '../types';
+import type { ChatClient, ChatMessage, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
 
 export interface UserInsightsSummaryResult {
@@ -17,31 +17,27 @@ export interface ListeningData {
   historicalArtists: Array<{ name: string }>;
 }
 
+const SYSTEM_PROMPT =
+  "You're a friend who pays attention to what people listen to. When someone shares their week, you find the one thing that's actually interesting about it — not the obvious summary, but the pattern they might not have noticed themselves. You know their usual rotation and what's new for them. You write like a person, not a report: one sharp observation, specific and earned.";
+
 /**
- * Generate a personalized summary of user's 7-day listening patterns
+ * Build the chat messages for the weekly insights summary.
+ * Pure — no cache, no client. Shared by generate + the A/B route.
  */
-export async function generateUserInsightsSummary(
-  username: string,
-  listeningData: ListeningData,
-  client: ChatClient,
-  cache: AICache
-): Promise<UserInsightsSummaryResult> {
-  const normalizedUsername = username.toLowerCase().trim();
+export function buildUserInsightsMessages(
+  listeningData: ListeningData
+): ChatMessage[] {
+  const {
+    topArtists,
+    topAlbums,
+    recentTracks,
+    weeklyPlayCount,
+    historicalArtists,
+  } = listeningData;
 
-  // Check cache first
-  const cached = await cache.get<UserInsightsSummaryResult>(
-    'userInsightsSummary',
-    normalizedUsername
+  const historicalNames = new Set(
+    historicalArtists.map((a) => a.name.toLowerCase())
   );
-  if (cached) {
-    return cached;
-  }
-
-  const config = getTaskConfig('userInsightsSummary');
-
-  const { topArtists, topAlbums, recentTracks, weeklyPlayCount, historicalArtists } = listeningData;
-
-  const historicalNames = new Set(historicalArtists.map((a) => a.name.toLowerCase()));
   const annotatedArtists = topArtists.map((a) => ({
     ...a,
     isRegular: historicalNames.has(a.name.toLowerCase()),
@@ -51,7 +47,7 @@ export async function generateUserInsightsSummary(
   const topAlbumsSlice = topAlbums.slice(0, 5);
   const recentTracksSlice = recentTracks.slice(0, 30);
 
-  const prompt = `Here's someone's listening from the past week. Find the one thing about it that's genuinely interesting — the pattern a friend who knows their taste would call out, not a recap.
+  const userPrompt = `Here's someone's listening from the past week. Find the one thing about it that's genuinely interesting — the pattern a friend who knows their taste would call out, not a recap.
 
 Total plays this week: ${weeklyPlayCount}
 
@@ -80,16 +76,38 @@ Open with a direct observation — something concrete that's actually in their w
 
 You can be a little writerly if the observation earns it, but no clichés, no recommendations. If the week is genuinely unremarkable — mostly their usual rotation without much variation — say that plainly, then find the small thing that's still worth noting.`;
 
+  return [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: userPrompt },
+  ];
+}
+
+/**
+ * Generate a personalized summary of user's 7-day listening patterns
+ */
+export async function generateUserInsightsSummary(
+  username: string,
+  listeningData: ListeningData,
+  client: ChatClient,
+  cache: AICache
+): Promise<UserInsightsSummaryResult> {
+  const normalizedUsername = username.toLowerCase().trim();
+
+  // Check cache first
+  const cached = await cache.get<UserInsightsSummaryResult>(
+    'userInsightsSummary',
+    normalizedUsername
+  );
+  if (cached) {
+    return cached;
+  }
+
+  const config = getTaskConfig('userInsightsSummary');
+  const messages = buildUserInsightsMessages(listeningData);
+
   const response = await client.chatCompletion({
     model: config.model,
-    messages: [
-      {
-        role: 'system',
-        content:
-          "You're a friend who pays attention to what people listen to. When someone shares their week, you find the one thing that's actually interesting about it — not the obvious summary, but the pattern they might not have noticed themselves. You know their usual rotation and what's new for them. You write like a person, not a report: one sharp observation, specific and earned.",
-      },
-      { role: 'user', content: prompt },
-    ],
+    messages,
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     reasoning: config.reasoning,

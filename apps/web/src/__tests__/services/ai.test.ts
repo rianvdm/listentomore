@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -392,5 +392,37 @@ describe('AIService.getClientForTask', () => {
   it('exposes a constructed anthropic client', () => {
     const ai = makeService();
     expect(ai.anthropic).toBeInstanceOf(AnthropicClient);
+  });
+});
+
+const insightsSample = {
+  weeklyPlayCount: 73,
+  topArtists: [
+    { name: 'Siiga', playcount: 39 },
+    { name: 'Celer', playcount: 39 },
+  ],
+  topAlbums: [{ name: 'Nostalgia Burns', artist: 'Siiga', playcount: 39 }],
+  recentTracks: [{ name: 'Videotape', artist: 'Radiohead' }],
+  historicalArtists: [{ name: 'Celer' }, { name: 'Nils Frahm' }],
+};
+
+describe('buildUserInsightsMessages', () => {
+  it('returns a system message and a user message', () => {
+    const msgs = buildUserInsightsMessages(insightsSample);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].role).toBe('system');
+    expect(msgs[1].role).toBe('user');
+  });
+
+  it('annotates familiar vs new against the 6-month rotation', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('Celer: 39 plays (familiar)');
+    expect(user).toContain('Siiga: 39 plays (new for them)');
+  });
+
+  it('includes the weekly play count and a named album', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('73');
+    expect(user).toContain('Nostalgia Burns by Siiga');
   });
 });

@@ -49,6 +49,7 @@ export {
   generateListenAIResponse,
   generateAlbumRecommendations,
   generateUserInsightsSummary,
+  buildUserInsightsMessages,
   generateUserInsightsRecommendations,
   type ArtistSummaryResult,
   type AlbumDetailResult,
