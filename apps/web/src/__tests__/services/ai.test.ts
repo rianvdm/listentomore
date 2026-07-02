@@ -353,6 +353,31 @@ describe('AnthropicClient.chatCompletion', () => {
     expect(lastBody(mockFetch).temperature).toBeUndefined();
   });
 
+  it('omits temperature for claude-sonnet-5 but keeps it for claude-sonnet-4-6', async () => {
+    const mkFetch = (model: string) =>
+      setupFetchMock([
+        { pattern: /api\.anthropic\.com/, response: { model, content: [{ type: 'text', text: 'x' }] } },
+      ]);
+
+    let mockFetch = mkFetch('claude-sonnet-5');
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    expect(lastBody(mockFetch).temperature).toBeUndefined();
+
+    mockFetch = mkFetch('claude-sonnet-4-6');
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    expect(lastBody(mockFetch).temperature).toBe(0.8);
+  });
+
   it('maps the response to content + anthropic metadata', async () => {
     setupFetchMock([
       {
@@ -480,8 +505,7 @@ describe('userInsightsSummary provider flip', () => {
   it('is configured for anthropic sonnet', () => {
     const cfg = getTaskConfig('userInsightsSummary');
     expect(cfg.provider).toBe('anthropic');
-    expect(cfg.model).toBe('claude-sonnet-4-6');
-    expect(cfg.temperature).toBe(0.8);
+    expect(cfg.model).toBe('claude-sonnet-5');
   });
 
   it('routes the task to the anthropic client', () => {

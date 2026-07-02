@@ -204,6 +204,7 @@ app.get('/insights-ab', requireSessionAuth, async (c) => {
     const ai = c.get('ai') as AIService;
     const variants = [
       { key: 'gpt54', client: ai.openai, model: 'gpt-5.4', temperature: undefined as number | undefined },
+      { key: 'sonnet5', client: ai.anthropic, model: 'claude-sonnet-5', temperature: undefined as number | undefined },
       { key: 'sonnet46', client: ai.anthropic, model: 'claude-sonnet-4-6', temperature: 0.8 },
       { key: 'opus48', client: ai.anthropic, model: 'claude-opus-4-8', temperature: undefined as number | undefined },
     ];

@@ -13,11 +13,14 @@ import type { AIRateLimiter } from './rate-limit';
 
 const ANTHROPIC_VERSION = '2023-06-01';
 
-// Opus-tier (4.7+) and Fable 5 reject sampling params with a 400.
+// Newer-generation models reject sampling params (temperature/top_p/top_k)
+// with a 400: opus-tier (4.7+), Fable 5, and Sonnet 5. Verified live for
+// claude-sonnet-5 on 2026-07-01 ("`temperature` is deprecated for this model").
 const MODELS_WITHOUT_TEMPERATURE = [
   'claude-opus-4-8',
   'claude-opus-4-7',
   'claude-fable-5',
+  'claude-sonnet-5',
 ];
 
 export class AnthropicClient implements ChatClient {

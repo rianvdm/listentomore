@@ -139,8 +139,11 @@ export const AI_TASKS = {
 
   userInsightsSummary: {
     provider: 'anthropic',
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5',
     maxTokens: 1500,
+    // temperature is inert on claude-sonnet-5 (rejected with a 400; the
+    // AnthropicClient omits it for this model) — kept only to satisfy the
+    // AITaskConfig shape. Warmth comes from the persona + few-shot examples.
     temperature: 0.8,
     cacheTtlDays: 1,
   },
