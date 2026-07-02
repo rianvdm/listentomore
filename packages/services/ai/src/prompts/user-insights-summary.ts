@@ -178,6 +178,10 @@ export async function generateUserInsightsSummary(
     verbosity: config.verbosity,
   });
 
+  console.log(
+    `[Insights Summary] Model: ${response.metadata?.provider ?? 'unknown'}/${response.metadata?.model ?? config.model}`
+  );
+
   const result: UserInsightsSummaryResult = {
     content: response.content,
     metadata: response.metadata,

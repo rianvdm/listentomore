@@ -132,6 +132,10 @@ Just the 4 formatted recommendations, one per line.`;
     webSearch: config.webSearch,
   });
 
+  console.log(
+    `[Insights Recs] Model: ${response.metadata?.provider ?? 'unknown'}/${response.metadata?.model ?? config.model}`
+  );
+
   // Parse the response into structured recommendations
   const recommendations = parseRecommendations(response.content);
 
