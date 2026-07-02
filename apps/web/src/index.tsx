@@ -131,6 +131,7 @@ app.use('*', async (c, next) => {
     'ai',
     new AIService({
       openaiApiKey: c.env.OPENAI_API_KEY,
+      anthropicApiKey: c.env.ANTHROPIC_API_KEY,
       cache: c.env.CACHE,
     })
   );
@@ -806,6 +807,7 @@ async function scheduled(
   if (minute < 5) {
     const ai = new AIService({
       openaiApiKey: env.OPENAI_API_KEY,
+      anthropicApiKey: env.ANTHROPIC_API_KEY,
       cache: env.CACHE,
     });
 

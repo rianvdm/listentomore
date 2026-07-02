@@ -9,7 +9,7 @@ export interface AIRateLimitState {
   retryAfter?: number;
 }
 
-export type AIProvider = 'openai';
+export type AIProvider = 'openai' | 'anthropic';
 
 export class AIRateLimiter {
   private readonly cacheKey: string;
@@ -21,7 +21,7 @@ export class AIRateLimiter {
     private provider: AIProvider
   ) {
     this.cacheKey = `ai:ratelimit:${provider}`;
-    this.maxRequests = RATE_LIMITS.openai.requestsPerMinute;
+    this.maxRequests = RATE_LIMITS[provider].requestsPerMinute;
   }
 
   /**

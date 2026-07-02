@@ -37,6 +37,8 @@ export {
 
 export {
   generateUserInsightsSummary,
+  buildUserInsightsMessages,
+  USER_INSIGHTS_PROMPT_VERSION,
   type UserInsightsSummaryResult,
   type ListeningData as InsightsListeningData,
 } from './user-insights-summary';

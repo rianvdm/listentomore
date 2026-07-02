@@ -1,7 +1,8 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { getTaskConfig } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -294,5 +295,221 @@ describe('generateArtistSentence', () => {
 
     expect(result).toEqual(cachedResult);
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('AIRateLimiter — provider-aware limits', () => {
+  it('uses the anthropic rate limit, not openai', async () => {
+    const rl = new AIRateLimiter(createMockKV(), 'anthropic');
+    const stats = await rl.getStats();
+    expect(stats.provider).toBe('anthropic');
+    expect(stats.maxRequests).toBe(50);
+  });
+
+  it('still reports the openai limit for the openai provider', async () => {
+    const rl = new AIRateLimiter(createMockKV(), 'openai');
+    expect((await rl.getStats()).maxRequests).toBe(90);
+  });
+});
+
+describe('AnthropicClient.chatCompletion', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function lastBody(mockFetch: ReturnType<typeof setupFetchMock>) {
+    const init = mockFetch.mock.calls[0][1] as RequestInit;
+    return JSON.parse(init.body as string);
+  }
+
+  it('extracts the system message to the top-level system param', async () => {
+    const mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'hi' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-4-6',
+      messages: [
+        { role: 'system', content: 'You are a friend.' },
+        { role: 'user', content: 'My week...' },
+      ],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    const body = lastBody(mockFetch);
+    expect(body.system).toBe('You are a friend.');
+    expect(body.messages).toEqual([{ role: 'user', content: 'My week...' }]);
+    expect(body.max_tokens).toBe(1500);
+    expect(body.temperature).toBe(0.8);
+  });
+
+  it('omits temperature for opus-tier models', async () => {
+    const mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-4-8', content: [{ type: 'text', text: 'x' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-4-8',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    expect(lastBody(mockFetch).temperature).toBeUndefined();
+  });
+
+  it('omits temperature for claude-sonnet-5 but keeps it for claude-sonnet-4-6', async () => {
+    const mkFetch = (model: string) =>
+      setupFetchMock([
+        { pattern: /api\.anthropic\.com/, response: { model, content: [{ type: 'text', text: 'x' }] } },
+      ]);
+
+    let mockFetch = mkFetch('claude-sonnet-5');
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    expect(lastBody(mockFetch).temperature).toBeUndefined();
+
+    mockFetch = mkFetch('claude-sonnet-4-6');
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 1500,
+      temperature: 0.8,
+    });
+    expect(lastBody(mockFetch).temperature).toBe(0.8);
+  });
+
+  it('maps the response to content + anthropic metadata', async () => {
+    setupFetchMock([
+      {
+        pattern: /api\.anthropic\.com/,
+        response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'warm summary' }], usage: { input_tokens: 100, output_tokens: 50 } },
+      },
+    ]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(res.content).toBe('warm summary');
+    expect(res.metadata?.provider).toBe('anthropic');
+    expect(res.metadata?.api).toBe('messages');
+    expect(res.metadata?.usage).toEqual({ inputTokens: 100, outputTokens: 50, totalTokens: 150 });
+  });
+
+  it('throws on a non-200 response', async () => {
+    setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { error: 'bad' }, options: { status: 400, ok: false } },
+    ]);
+    await expect(
+      new AnthropicClient('key').chatCompletion({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] })
+    ).rejects.toThrow('Anthropic API error');
+  });
+});
+
+describe('AIService.getClientForTask', () => {
+  function makeService() {
+    return new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
+  }
+
+  it('returns the OpenAI client for an openai-provider task', () => {
+    const ai = makeService();
+    expect(ai.getClientForTask('artistSummary')).toBe(ai.openai);
+  });
+
+  it('exposes a constructed anthropic client', () => {
+    const ai = makeService();
+    expect(ai.anthropic).toBeInstanceOf(AnthropicClient);
+  });
+});
+
+const insightsSample = {
+  weeklyPlayCount: 73,
+  topArtists: [
+    { name: 'Siiga', playcount: 39 },
+    { name: 'Celer', playcount: 39 },
+  ],
+  topAlbums: [{ name: 'Nostalgia Burns', artist: 'Siiga', playcount: 39 }],
+  recentTracks: [{ name: 'Videotape', artist: 'Radiohead' }],
+  historicalArtists: [{ name: 'Celer' }, { name: 'Nils Frahm' }],
+};
+
+describe('buildUserInsightsMessages', () => {
+  it('returns a system message and a user message', () => {
+    const msgs = buildUserInsightsMessages(insightsSample);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].role).toBe('system');
+    expect(msgs[1].role).toBe('user');
+  });
+
+  it('annotates familiar vs new against the 6-month rotation', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('Celer: 39 plays (familiar)');
+    expect(user).toContain('Siiga: 39 plays (new for them)');
+  });
+
+  it('includes the weekly play count and a named album', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('73');
+    expect(user).toContain('Nostalgia Burns by Siiga');
+  });
+});
+
+describe('warmer-voice prompt', () => {
+  it('persona reacts to the music, not the listener', () => {
+    const system = buildUserInsightsMessages(insightsSample)[0].content;
+    expect(system.toLowerCase()).toContain('opinions about');
+    expect(system).not.toContain('pattern they might not have noticed');
+  });
+
+  it('bans the not-X-but-Y construction and caps em dashes', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('less like X, more like Y');
+    expect(user.toLowerCase()).toContain('em dash');
+  });
+
+  it('drops the atmosphere-seeding language', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).not.toContain('clear temperature');
+  });
+
+  it('exposes a prompt version for cache busting', () => {
+    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v2');
+  });
+
+  it('embeds the hand-authored gold examples', () => {
+    const user = buildUserInsightsMessages(insightsSample)[1].content;
+    expect(user).toContain('When you fall into something, you fall all the way in.');
+    expect(user).toContain('Still the one, no argument.');
+    expect(user).toContain("No notes. That's a healthy week.");
+    expect(user).not.toContain('[PLACEHOLDER');
+  });
+});
+
+describe('generateUserInsightsSummary cache key', () => {
+  it('reads and writes the versioned cache key', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'warm' }], usage: { input_tokens: 1, output_tokens: 1 } } },
+    ]);
+    await generateUserInsightsSummary('Bordesak', insightsSample, new AnthropicClient('k'), cache);
+    expect(mockKV.get).toHaveBeenCalledWith('ai:userInsightsSummary:bordesak:v2', 'json');
+    expect(mockKV.put).toHaveBeenCalledWith(
+      'ai:userInsightsSummary:bordesak:v2',
+      expect.any(String),
+      expect.any(Object)
+    );
+  });
+});
+
+describe('userInsightsSummary provider flip', () => {
+  it('is configured for anthropic sonnet', () => {
+    const cfg = getTaskConfig('userInsightsSummary');
+    expect(cfg.provider).toBe('anthropic');
+    expect(cfg.model).toBe('claude-sonnet-5');
+  });
+
+  it('routes the task to the anthropic client', () => {
+    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
+    expect(ai.getClientForTask('userInsightsSummary')).toBe(ai.anthropic);
   });
 });

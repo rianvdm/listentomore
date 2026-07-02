@@ -8,6 +8,10 @@ export const AI_PROVIDERS = {
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-5-mini',
   },
+  anthropic: {
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-sonnet-4-6',
+  },
 } as const;
 
 export type AIProvider = keyof typeof AI_PROVIDERS;
@@ -134,12 +138,14 @@ export const AI_TASKS = {
   },
 
   userInsightsSummary: {
-    provider: 'openai',
-    model: 'gpt-5.4',
+    provider: 'anthropic',
+    model: 'claude-sonnet-5',
     maxTokens: 1500,
-    temperature: 0.7,
+    // temperature is inert on claude-sonnet-5 (rejected with a 400; the
+    // AnthropicClient omits it for this model) — kept only to satisfy the
+    // AITaskConfig shape. Warmth comes from the persona + few-shot examples.
+    temperature: 0.8,
     cacheTtlDays: 1,
-    verbosity: 'medium',
   },
 
   userInsightsRecommendations: {
@@ -168,6 +174,10 @@ export const RATE_LIMITS = {
   openai: {
     requestsPerMinute: 90,
     tokensPerMinute: 90000,
+  },
+  anthropic: {
+    requestsPerMinute: 50,
+    tokensPerMinute: 40000,
   },
   spotify: {
     requestsPerMinute: 150, // (Spotify allows ~180)

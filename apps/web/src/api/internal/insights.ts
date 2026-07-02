@@ -5,6 +5,7 @@ import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { LastfmService } from '@listentomore/lastfm';
 import type { User } from '@listentomore/db';
 import type { AIService } from '@listentomore/ai';
+import { USER_INSIGHTS_PROMPT_VERSION } from '@listentomore/ai';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { Bindings, Variables } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
@@ -116,7 +117,11 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
 
     // Clear cache for this user
     const ai = c.get('ai') as AIService;
-    await ai.cache.delete('userInsightsSummary', username.toLowerCase());
+    await ai.cache.delete(
+      'userInsightsSummary',
+      username.toLowerCase(),
+      USER_INSIGHTS_PROMPT_VERSION
+    );
     await setRefreshTimestamp(c, username);
   }
 
