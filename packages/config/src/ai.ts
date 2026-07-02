@@ -140,7 +140,10 @@ export const AI_TASKS = {
   userInsightsSummary: {
     provider: 'anthropic',
     model: 'claude-sonnet-5',
-    maxTokens: 1500,
+    // 5000 gives headroom for Sonnet 5's on-demand adaptive thinking (thinking
+    // tokens count against max_tokens, display-omitted so invisible) plus the
+    // 2-3 paragraph output. Only tokens actually generated are billed.
+    maxTokens: 5000,
     // temperature is inert on claude-sonnet-5 (rejected with a 400; the
     // AnthropicClient omits it for this model) — kept only to satisfy the
     // AITaskConfig shape. Warmth comes from the persona + few-shot examples.
