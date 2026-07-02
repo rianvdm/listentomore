@@ -18,7 +18,7 @@ export interface ListeningData {
 }
 
 /** Bump when the prompt changes so cached cold summaries don't linger. */
-export const USER_INSIGHTS_PROMPT_VERSION = 'v2';
+export const USER_INSIGHTS_PROMPT_VERSION = 'v3';
 
 const SYSTEM_PROMPT =
   "You're a friend who pays attention to what people listen to. When someone shows you their week, you react to the music itself — you have opinions about records and songs, the ones you love, the ones that surprised you, the stuff you'd text them about. You know their usual rotation and what's new for them. You're not analyzing them; you're talking about the music with someone whose taste you know.";
@@ -135,7 +135,7 @@ ${FEW_SHOT_EXAMPLES}
 Now write theirs. 2 to 3 short paragraphs, second person. React to the music with at least one real opinion about a song or record, not a description of the listener. Name specific artists, albums, or tracks, and use the familiar/new flags. If the week is mostly their usual rotation, say so plainly, then find the small thing still worth noting.
 
 Hard rules:
-- Never use "not X — but Y", "it isn't X, it's Y", or "less like X, more like Y" anywhere. This is the move to avoid.
+- NEVER contrast by negation. Do not set up a claim by denying its opposite first — in ANY form. Banned: "It's not X, it's Y", "That's not X, that's Y", "You're not X, you're Y", "X isn't Y, it's Z", "not X but Y", "not X — Y", "less like X, more like Y". State the point directly and positively instead. For example, do NOT write "That's not a stray discovery, that's a whole new direction" — just write "That's a whole new direction." This is the single most important rule.
 - At most 3 em dashes in the whole thing.
 - No clichés, no recommendations, no mood/atmosphere adjectives standing in for an actual observation.`;
 
@@ -144,6 +144,34 @@ Hard rules:
     { role: 'user', content: userPrompt },
   ];
 }
+
+// The "not X, it's Y" family is the #1 AI tell, and the model evades a prompt
+// ban by finding new surface forms (comma instead of "but", repeated
+// demonstrative, etc.). These patterns catch the high-signal forms so we can
+// scrub them deterministically rather than trusting the prompt alone.
+const FORBIDDEN_CONSTRUCTION_PATTERNS: RegExp[] = [
+  // "It's not X, it's Y" / "That's not a discovery, that's a wing" / "This isn't X, it's Y"
+  // (negation clause led by a copula/demonstrative, then a comma, then another copula/article)
+  /\b(?:it'?s|that'?s|there'?s|you'?re|they'?re|we'?re|he'?s|she'?s|this|that|these|those)\b[^.?!\n]*?\b(?:not|isn'?t|aren'?t|wasn'?t|weren'?t)\b[^.?!\n]*?,\s*(?:it'?s|that'?s|you'?re|they'?re|we'?re|he'?s|she'?s|this|that|the|a|an)\b/i,
+  // "not X but Y" / "not X — Y" (em-dash or double-hyphen dismissal)
+  /\bnot\b[^.?!\n]*?(?:\bbut\b|—|--)/i,
+  // "less like X, more like Y"
+  /\bless\s+like\b[^.?!\n]*?\bmore\s+like\b/i,
+];
+
+/**
+ * True if the text contains a "not X, it's Y" style negation-contrast in any of
+ * its common surface forms. Pure — used to gate a scrub pass and in tests.
+ */
+export function containsForbiddenConstruction(text: string): boolean {
+  return FORBIDDEN_CONSTRUCTION_PATTERNS.some((re) => re.test(text));
+}
+
+const SCRUB_SYSTEM =
+  'You are a precise line editor. You remove one specific sentence construction and change nothing else about the text.';
+
+const SCRUB_INSTRUCTION =
+  'The summary below uses the "not X, it\'s Y" construction, which is banned. Rewrite ONLY the sentence(s) that use it so they state the point directly and positively, with no negation-then-correction. This construction takes many forms — all banned: "It\'s not X, it\'s Y", "That\'s not X, that\'s Y", "You\'re not X, you\'re Y", "X isn\'t Y, it\'s Z", "not X but Y", "not X — Y", "less like X, more like Y". Keep every other sentence word-for-word identical. Preserve the paragraphs, the facts, and the casual second-person voice. Return only the rewritten summary — no preamble, no explanation.';
 
 /**
  * Generate a personalized summary of user's 7-day listening patterns
@@ -182,14 +210,41 @@ export async function generateUserInsightsSummary(
     `[Insights Summary] Model: ${response.metadata?.provider ?? 'unknown'}/${response.metadata?.model ?? config.model}`
   );
 
+  let content = response.content;
+
+  // The model evades the prompt ban on "not X, it's Y". If it slipped through,
+  // run one narrow rewrite pass to strip it. Bounded to a single retry.
+  if (containsForbiddenConstruction(content)) {
+    console.log('[Insights Summary] Detected "not X, it\'s Y" construction — running scrub pass');
+    try {
+      const scrub = await client.chatCompletion({
+        model: config.model,
+        maxTokens: config.maxTokens,
+        messages: [
+          { role: 'system', content: SCRUB_SYSTEM },
+          { role: 'user', content: `${SCRUB_INSTRUCTION}\n\nSummary:\n${content}` },
+        ],
+      });
+      const cleaned = scrub.content.trim();
+      if (cleaned) {
+        content = cleaned;
+      }
+      if (containsForbiddenConstruction(content)) {
+        console.warn('[Insights Summary] Construction still present after scrub pass');
+      }
+    } catch (err) {
+      console.error('[Insights Summary] Scrub pass failed, using original:', err);
+    }
+  }
+
   const result: UserInsightsSummaryResult = {
-    content: response.content,
+    content,
     metadata: response.metadata,
   };
 
   // Cache the result (without metadata)
   await cache.set('userInsightsSummary', [normalizedUsername, USER_INSIGHTS_PROMPT_VERSION], {
-    content: result.content,
+    content,
   });
 
   return result;

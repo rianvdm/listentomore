@@ -50,6 +50,7 @@ export {
   generateAlbumRecommendations,
   generateUserInsightsSummary,
   buildUserInsightsMessages,
+  containsForbiddenConstruction,
   USER_INSIGHTS_PROMPT_VERSION,
   generateUserInsightsRecommendations,
   type ArtistSummaryResult,

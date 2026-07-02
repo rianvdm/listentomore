@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
 import { getTaskConfig } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
@@ -472,7 +472,7 @@ describe('warmer-voice prompt', () => {
   });
 
   it('exposes a prompt version for cache busting', () => {
-    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v2');
+    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v3');
   });
 
   it('embeds the hand-authored gold examples', () => {
@@ -492,12 +492,77 @@ describe('generateUserInsightsSummary cache key', () => {
       { pattern: /api\.anthropic\.com/, response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'warm' }], usage: { input_tokens: 1, output_tokens: 1 } } },
     ]);
     await generateUserInsightsSummary('Bordesak', insightsSample, new AnthropicClient('k'), cache);
-    expect(mockKV.get).toHaveBeenCalledWith('ai:userInsightsSummary:bordesak:v2', 'json');
+    expect(mockKV.get).toHaveBeenCalledWith('ai:userInsightsSummary:bordesak:v3', 'json');
     expect(mockKV.put).toHaveBeenCalledWith(
-      'ai:userInsightsSummary:bordesak:v2',
+      'ai:userInsightsSummary:bordesak:v3',
       expect.any(String),
       expect.any(Object)
     );
+  });
+});
+
+describe('containsForbiddenConstruction', () => {
+  it('catches the comma "that\'s not X, that\'s Y" variant', () => {
+    expect(
+      containsForbiddenConstruction(
+        "That's not a stray discovery, that's a whole new wing of the house getting furnished."
+      )
+    ).toBe(true);
+  });
+
+  it('catches "it\'s not X, it\'s Y" and "you\'re not X, you\'re Y"', () => {
+    expect(containsForbiddenConstruction("It's not a phase, it's a full pivot.")).toBe(true);
+    expect(containsForbiddenConstruction("You're not dabbling, you're all in.")).toBe(true);
+  });
+
+  it('catches "not X but Y" and the em-dash dismissal', () => {
+    expect(containsForbiddenConstruction('not a detour but a destination')).toBe(true);
+    expect(containsForbiddenConstruction('not background music — the main event')).toBe(true);
+  });
+
+  it('catches "less like X, more like Y"', () => {
+    expect(containsForbiddenConstruction('It reads less like a week, more like a manifesto.')).toBe(true);
+  });
+
+  it('does not fire on legitimate negations', () => {
+    expect(containsForbiddenConstruction("You didn't settle on one record, you bounced around all week.")).toBe(false);
+    expect(containsForbiddenConstruction('Every Breath You Take live still does the job.')).toBe(false);
+    expect(containsForbiddenConstruction('Still the one, no argument.')).toBe(false);
+    expect(containsForbiddenConstruction('The jazz dig is the story.')).toBe(false);
+  });
+});
+
+describe('generateUserInsightsSummary — scrub pass', () => {
+  it('rewrites output that contains the banned construction', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    let call = 0;
+    const client = {
+      chatCompletion: vi.fn(async () => {
+        call += 1;
+        return call === 1
+          ? { content: "That's not a discovery, that's a whole new direction." }
+          : { content: "That's a whole new direction." };
+      }),
+    } as unknown as AnthropicClient;
+
+    const result = await generateUserInsightsSummary('bordesak', insightsSample, client, cache);
+
+    expect(client.chatCompletion).toHaveBeenCalledTimes(2); // generate + scrub
+    expect(result.content).toBe("That's a whole new direction.");
+    expect(containsForbiddenConstruction(result.content)).toBe(false);
+  });
+
+  it('does not run a scrub pass when the output is clean', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    const client = {
+      chatCompletion: vi.fn(async () => ({ content: 'The jazz dig is the story.' })),
+    } as unknown as AnthropicClient;
+
+    await generateUserInsightsSummary('bordesak', insightsSample, client, cache);
+
+    expect(client.chatCompletion).toHaveBeenCalledTimes(1);
   });
 });
 
