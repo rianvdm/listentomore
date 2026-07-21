@@ -21,6 +21,13 @@ mode = "smart"
 [observability]
 enabled = true
 
+# Automatic tracing (OpenTelemetry-standard): Cloudflare instruments fetch,
+# KV/D1 binding calls, and handler invocations with no code changes. Sampling
+# defaults to 1 (100%); LTM is low-traffic so we trace everything. Add
+# `head_sampling_rate = 0.x` here if volume/cost ever needs capping.
+[observability.traces]
+enabled = true
+
 # KV Namespace for caching
 [[kv_namespaces]]
 binding = "CACHE"
