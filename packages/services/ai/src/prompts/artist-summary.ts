@@ -71,6 +71,8 @@ export async function generateArtistSummary(
 
 Use Markdown formatting for the summary. Do NOT use bullet points.
 
+Begin with the opening sentence of the first paragraph. The page already displays the artist's name as a heading directly above your text, so do not open with a title, a heading, or the artist's name on a line of its own.
+
 IMPORTANT: If you cannot find sufficient verifiable information about this artist, respond with ONLY the text "Not enough information available for this artist." and nothing else. Do not explain what you couldn't find or apologize.`;
 
   const response = await client.chatCompletion({
