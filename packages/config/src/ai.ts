@@ -10,7 +10,7 @@ export const AI_PROVIDERS = {
   },
   anthropic: {
     baseUrl: 'https://api.anthropic.com/v1',
-    defaultModel: 'claude-sonnet-4-6',
+    defaultModel: 'claude-sonnet-5',
   },
 } as const;
 
@@ -18,11 +18,18 @@ export type AIProvider = keyof typeof AI_PROVIDERS;
 
 /**
  * Reasoning effort levels for GPT-5 models (Responses API only)
- * - GPT-5.2: 'none' (default) | 'low' | 'medium' | 'high' | 'xhigh'
- * - GPT-5.1: 'none' (default) | 'low' | 'medium' | 'high'
+ * - GPT-5.6 (sol/terra/luna): 'none' | 'low' | 'medium' (default) | 'high' | 'xhigh' | 'max'
+ * - GPT-5.4: 'none' (default) | 'low' | 'medium' | 'high' | 'xhigh'
  * - GPT-5/gpt-5-mini: 'minimal' | 'low' | 'medium' (default) | 'high'
  */
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
 
 /** Verbosity levels for GPT-5 models (Responses API only) */
 export type Verbosity = 'low' | 'medium' | 'high';
@@ -42,15 +49,23 @@ export interface AITaskConfig {
 }
 
 /**
- * AI task configurations. All tasks use OpenAI models.
+ * AI task configurations. OpenAI for everything except userInsightsSummary,
+ * which runs on Anthropic.
  *
- * ┌─────────────────────────────────────────────────────────────────────────────┐
- * │ MODEL CAPABILITIES & CONSTRAINTS                                            │
- * ├─────────────────┬──────────────────────┬──────────────────────┤
- * │ Model           │ gpt-5.4              │ gpt-5-mini/nano      │
+ * OpenAI tasks run on gpt-5.6-terra, except randomFact (gpt-5.6-luna — uncached,
+ * so the cheap tier earns its keep) and playlistCoverPrompt (still on the older
+ * gpt-5-nano). GPT-5.6 ships as three fixed tiers rather than one model with
+ * capability dials; luna is a drop-in swap for any task here if cost bites:
+ *
+ * ┌─────────────────┬──────────────────────┬──────────────────────┐
+ * │ Tier            │ gpt-5.6-terra        │ gpt-5.6-luna         │
  * ├─────────────────┼──────────────────────┼──────────────────────┤
- * │ reasoning       │ none*, low,          │ minimal, low,        │
- * │                 │ medium, high, xhigh  │ medium*, high        │
+ * │ Positioning     │ balanced default     │ fast / high-volume   │
+ * ├─────────────────┼──────────────────────┼──────────────────────┤
+ * │ $/1M in/out     │ $2.00 / $12.00       │ $0.20 / $1.20        │
+ * ├─────────────────┼──────────────────────┼──────────────────────┤
+ * │ reasoning       │ none, low, medium*,  │ none, low, medium*,  │
+ * │                 │ high, xhigh, max     │ high, xhigh, max     │
  * ├─────────────────┼──────────────────────┼──────────────────────┤
  * │ verbosity       │ low, medium, high    │ low, medium, high    │
  * ├─────────────────┼──────────────────────┼──────────────────────┤
@@ -59,16 +74,20 @@ export interface AITaskConfig {
  * │ temperature     │ Only without         │ Only without         │
  * │                 │ reasoning            │ reasoning            │
  * └─────────────────┴──────────────────────┴──────────────────────┘
- * (* = default when not set)
+ * (* = default when not set. gpt-5.6-sol is the flagship tier at $5/$30 —
+ *  nothing here needs it.)
  *
  * IMPORTANT CONSTRAINTS:
  * - temperature is ignored when reasoning is set to any level
  * - GPT-5.x models only support temperature=1 regardless of what you set
+ * - Both 5.6 tiers default to medium reasoning effort, so even a short
+ *   generation spends ~75-100 reasoning tokens. Set reasoning: 'none' on a
+ *   task if you want to buy that latency back.
  */
 export const AI_TASKS = {
   artistSummary: {
     provider: 'openai',
-    model: 'gpt-5.4-mini',
+    model: 'gpt-5.6-terra',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
@@ -77,7 +96,7 @@ export const AI_TASKS = {
 
   albumDetail: {
     provider: 'openai',
-    model: 'gpt-5.4-mini',
+    model: 'gpt-5.6-terra',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 120,
@@ -86,7 +105,7 @@ export const AI_TASKS = {
 
   genreSummary: {
     provider: 'openai',
-    model: 'gpt-5.4-mini',
+    model: 'gpt-5.6-terra',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
@@ -95,7 +114,7 @@ export const AI_TASKS = {
 
   artistSentence: {
     provider: 'openai',
-    model: 'gpt-5.4-mini',
+    model: 'gpt-5.6-terra',
     maxTokens: 150,
     temperature: 1,
     cacheTtlDays: 180,
@@ -104,7 +123,9 @@ export const AI_TASKS = {
 
   randomFact: {
     provider: 'openai',
-    model: 'gpt-5-mini',
+    // luna, not terra: this task is uncached, so every call hits the API, and
+    // Terra's rate is ~8x input / 6x output for one line of music trivia.
+    model: 'gpt-5.6-luna',
     maxTokens: 10000,
     temperature: 1,
     cacheTtlDays: 0, // No caching - always fresh
@@ -120,7 +141,7 @@ export const AI_TASKS = {
 
   listenAi: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.6-terra',
     maxTokens: 500,
     temperature: 1,
     cacheTtlDays: 0,
@@ -130,7 +151,7 @@ export const AI_TASKS = {
 
   albumRecommendations: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.6-terra',
     maxTokens: 1000,
     temperature: 1,
     cacheTtlDays: 30,
@@ -153,7 +174,7 @@ export const AI_TASKS = {
 
   userInsightsRecommendations: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.6-terra',
     maxTokens: 4000, // Increased from 1500 to avoid timeout
     temperature: 1,
     cacheTtlDays: 1,

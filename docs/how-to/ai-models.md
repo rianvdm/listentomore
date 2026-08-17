@@ -4,11 +4,12 @@ This guide covers how to configure AI tasks, switch between providers, and use O
 
 ## Overview
 
-ListenToMore uses **OpenAI** as its sole AI provider:
+ListenToMore uses **OpenAI** for most AI tasks and **Anthropic** for the weekly insights summary:
 
 | Provider | Best For | Models |
 |----------|----------|--------|
-| **OpenAI** | All AI tasks including web search, reasoning, creative tasks | `gpt-5.4`, `gpt-5-mini`, `gpt-5-nano` |
+| **OpenAI** | Web search, reasoning, chat, generation | `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5-nano` |
+| **Anthropic** | Warm, voice-driven long-form writing | `claude-sonnet-5` |
 
 All AI configuration lives in `packages/config/src/ai.ts`.
 
@@ -16,22 +17,37 @@ All AI configuration lives in `packages/config/src/ai.ts`.
 
 ## Current Model Lineup
 
-| Model | Best For | Context | Reasoning Efforts | Pricing (per 1M tokens) |
-|-------|----------|---------|-------------------|------------------------|
-| `gpt-5.4` | Flagship — web search, reasoning, all content tasks | 1M+ | `none` (default), `low`, `medium`, `high`, `xhigh` | ~$1.75 in / $14.00 out |
-| `gpt-5-mini` | Cost-optimized — simple generation tasks | 1M | `minimal`, `low`, `medium` (default), `high` | $0.25 in / $2.00 out |
-| `gpt-5-nano` | High-throughput simple tasks | 1M | `minimal`, `low`, `medium` (default), `high` | $0.05 in / $0.40 out |
+GPT-5.6 ships as three fixed tiers (Sol / Terra / Luna) rather than one model with
+capability dials. Nothing here needs Sol.
+
+| Model | Best For | Reasoning Efforts | Pricing (per 1M tokens) |
+|-------|----------|-------------------|------------------------|
+| `gpt-5.6-terra` | Default for cached and reasoning-heavy tasks | `none`, `low`, `medium` (default), `high`, `xhigh`, `max` | $2.00 in / $12.00 out |
+| `gpt-5.6-luna` | Cheap tier — uncached, high-volume tasks | `none`, `low`, `medium` (default), `high`, `xhigh`, `max` | $0.20 in / $1.20 out |
+| `gpt-5-nano` | Legacy — still used by playlist cover prompts | `minimal`, `low`, `medium` (default), `high` | $0.05 in / $0.40 out |
+| `claude-sonnet-5` | Weekly insights summary | adaptive thinking (no effort set) | $3.00 in / $15.00 out |
+
+The Terra/Luna split here is about **caching, not capability**. Tasks that cache
+for months cost almost nothing regardless of tier, so they take the better model;
+uncached tasks pay per call, so they take the cheap one. Luna measured no less
+accurate than Terra on a small sample of artist-fact prompts, so treat it as a
+live option rather than a downgrade.
+
+Both 5.6 tiers default to **medium** reasoning effort, so even a short generation
+spends ~75–100 reasoning tokens before it starts writing. Set `reasoning: 'none'`
+on a task to buy that latency back.
 
 ### Choosing a Model
 
 | Use Case | Current Model | Why |
 |----------|---------------|-----|
-| Web-grounded summaries (artist, album, genre) | `gpt-5.4` | Strong web search, great accuracy |
-| Short descriptions (artist sentence) | `gpt-5.4` | Web-grounded for accuracy |
-| Album recommendations | `gpt-5.4` | Web search for current album data |
-| Complex AI chat (ListenAI) | `gpt-5.4` | Reasoning + conversational quality |
-| User insights analysis | `gpt-5.4` | Complex multi-step analysis |
-| Random facts, simple generation | `gpt-5-mini` | No web search needed, cost-effective |
+| Web-grounded summaries (artist, album, genre) | `gpt-5.6-terra` | Cached 120–180 days, so the better tier costs almost nothing |
+| Short descriptions (artist sentence) | `gpt-5.6-terra` | Same — heavily cached, web-grounded |
+| Album recommendations | `gpt-5.6-terra` | Web search plus judgement about what to recommend |
+| Complex AI chat (ListenAI) | `gpt-5.6-terra` | Reasoning + conversational quality, low latency |
+| User insights summary | `claude-sonnet-5` | Warmer voice, follows the few-shot exemplars closely |
+| User insights recommendations | `gpt-5.6-terra` | Multi-step analysis over listening history |
+| Random facts, simple generation | `gpt-5.6-luna` | Uncached, so every call is billed — the one task where the Terra rate would bite |
 | Playlist cover prompts | `gpt-5-nano` | High-throughput, minimal reasoning needed |
 
 ---
@@ -44,11 +60,11 @@ All task configs live in `packages/config/src/ai.ts` under `AI_TASKS`. To change
 export const AI_TASKS = {
   artistSummary: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.6-luna',
     maxTokens: 1500,
     temperature: 1,
     cacheTtlDays: 180,
-    webSearch: true,
+    webSearch: false,
   },
   // ...
 } as const satisfies Record<string, AITaskConfig>;
@@ -58,8 +74,8 @@ export const AI_TASKS = {
 
 All `gpt-5.x` models route to the **Responses API** automatically. The `shouldUseResponsesApi()` method in `openai.ts` handles this — any model starting with `gpt-5` goes to the Responses API, which supports web search, reasoning, and verbosity controls.
 
-| Feature | `gpt-5.4` (Responses API) |
-|---------|--------------------------|
+| Feature | `gpt-5.6-*` (Responses API) |
+|---------|----------------------------|
 | Web search | Via `web_search` tool |
 | Reasoning control | `reasoning.effort` param |
 | Verbosity control | `text.verbosity` param |
@@ -77,11 +93,12 @@ Controls how many reasoning tokens the model generates:
 
 | Setting | Use Case | Notes |
 |---------|----------|-------|
-| `none` | No reasoning, temperature works | **Default for gpt-5.4** |
+| `none` | No reasoning, temperature works | Fastest — set this explicitly if latency matters |
 | `low` | Light reasoning | Fast |
-| `medium` | Standard reasoning | Moderate |
+| `medium` | Standard reasoning | **Default for gpt-5.6-terra / gpt-5.6-luna** |
 | `high` | Complex multi-step planning | Slow |
-| `xhigh` | Maximum reasoning depth | Slowest, gpt-5.4 only |
+| `xhigh` | Deeper reasoning | Slower |
+| `max` | Maximum reasoning depth | Slowest, gpt-5.6 only |
 
 **Important:** `temperature`, `top_p`, and `logprobs` only work when reasoning effort is `none`.
 
@@ -109,7 +126,7 @@ export const AI_TASKS = {
 
   myNewTask: {
     provider: 'openai',
-    model: 'gpt-5.4',
+    model: 'gpt-5.6-terra',
     maxTokens: 1000,
     temperature: 1,
     cacheTtlDays: 30,
