@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface ArtistSummaryResult {
   summary: string;
@@ -100,10 +101,21 @@ IMPORTANT: If you cannot find sufficient verifiable information about this artis
     metadata: response.metadata,
   };
 
-  // Cache the result (without metadata - it's only for fresh responses)
-  await cache.set('artistSummary', [normalizedName], {
-    summary: result.summary,
-  });
+  // Cache the result (without metadata - it's only for fresh responses).
+  // Checked against the raw response, not the link-substituted summary, so a
+  // truncated body can't be masked by placeholder expansion.
+  if (
+    isCacheableResponse(
+      response.content,
+      response.metadata,
+      'artistSummary',
+      normalizedName
+    )
+  ) {
+    await cache.set('artistSummary', [normalizedName], {
+      summary: result.summary,
+    });
+  }
 
   return result;
 }

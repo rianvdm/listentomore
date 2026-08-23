@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface AlbumRecommendationsResult {
   content: string;
@@ -124,10 +125,22 @@ IMPORTANT:
     metadata: response.metadata,
   };
 
-  // Cache the result (without metadata - it's only for fresh responses)
-  await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], {
-    content: result.content,
-  });
+  // Cache the result (without metadata - it's only for fresh responses).
+  // Truncation is most likely here of all the tasks: web search is always on
+  // and each hop spends reasoning tokens out of the same budget.
+  if (
+    isCacheableResponse(
+      result.content,
+      response.metadata,
+      'albumRecommendations',
+      normalizedArtist,
+      normalizedAlbum
+    )
+  ) {
+    await cache.set('albumRecommendations', [normalizedArtist, normalizedAlbum], {
+      content: result.content,
+    });
+  }
 
   return result;
 }

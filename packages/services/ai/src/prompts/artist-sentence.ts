@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface ArtistSentenceResult {
   sentence: string;
@@ -72,8 +73,18 @@ CRITICAL REQUIREMENTS:
     sentence: cleanedContent,
   };
 
-  // Cache the result
-  await cache.set('artistSentence', [normalizedName], result);
+  // Cache the result. This one has 180-day TTL and the largest key count in
+  // KV, so a fragment stored here is the longest-lived of any task.
+  if (
+    isCacheableResponse(
+      cleanedContent,
+      response.metadata,
+      'artistSentence',
+      normalizedName
+    )
+  ) {
+    await cache.set('artistSentence', [normalizedName], result);
+  }
 
   return result;
 }

@@ -48,7 +48,23 @@ export interface AIResponseMetadata {
     inputTokens: number | null;
     outputTokens: number | null;
     totalTokens: number | null;
+    /**
+     * Reasoning tokens included in outputTokens (GPT-5.x Responses API).
+     * These are invisible in the response body but spend the same budget as
+     * prose, so they are the usual explanation for an unexpected truncation.
+     */
+    reasoningTokens?: number | null;
   };
+  /**
+   * True when the model stopped because it ran out of output budget rather
+   * than because it finished. The content is a fragment: do NOT cache it.
+   *
+   * Every provider signals this with a 200 OK and a field most callers never
+   * read — OpenAI Responses `status: "incomplete"`, Chat Completions
+   * `finish_reason: "length"`, Anthropic `stop_reason: "max_tokens"` — which
+   * is why a truncated summary used to sit in KV for the full TTL.
+   */
+  truncated?: boolean;
   /** Features that were actually used in this request */
   features?: {
     /** Whether web search was performed (OpenAI Responses API) */

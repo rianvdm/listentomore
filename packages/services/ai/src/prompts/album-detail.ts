@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface AlbumDetailResult {
   content: string;
@@ -77,10 +78,22 @@ IMPORTANT: If you cannot find sufficient information about this album to write a
     metadata: response.metadata,
   };
 
-  // Cache the result (without metadata - it's only for fresh responses)
-  await cache.set('albumDetail', [normalizedArtist, normalizedAlbum], {
-    content: result.content,
-  });
+  // Cache the result (without metadata - it's only for fresh responses).
+  // A truncated or empty response is returned to this caller but not stored,
+  // so the next request regenerates instead of serving a fragment for 120 days.
+  if (
+    isCacheableResponse(
+      result.content,
+      response.metadata,
+      'albumDetail',
+      normalizedArtist,
+      normalizedAlbum
+    )
+  ) {
+    await cache.set('albumDetail', [normalizedArtist, normalizedAlbum], {
+      content: result.content,
+    });
+  }
 
   return result;
 }

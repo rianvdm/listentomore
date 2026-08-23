@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, ChatMessage, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface UserInsightsSummaryResult {
   content: string;
@@ -225,9 +226,14 @@ export async function generateUserInsightsSummary(
           { role: 'user', content: `${SCRUB_INSTRUCTION}\n\nSummary:\n${content}` },
         ],
       });
+      // Only take the rewrite if it actually finished. A scrub pass that ran
+      // out of budget would otherwise replace a complete summary with a
+      // fragment — worse than leaving the banned construction in place.
       const cleaned = scrub.content.trim();
-      if (cleaned) {
+      if (cleaned && !scrub.metadata?.truncated) {
         content = cleaned;
+      } else if (scrub.metadata?.truncated) {
+        console.warn('[Insights Summary] Scrub pass truncated — keeping the original');
       }
       if (containsForbiddenConstruction(content)) {
         console.warn('[Insights Summary] Construction still present after scrub pass');
@@ -242,10 +248,20 @@ export async function generateUserInsightsSummary(
     metadata: response.metadata,
   };
 
-  // Cache the result (without metadata)
-  await cache.set('userInsightsSummary', [normalizedUsername, USER_INSIGHTS_PROMPT_VERSION], {
-    content,
-  });
+  // Cache the result (without metadata). Sonnet 5's adaptive thinking spends
+  // max_tokens too, so this task can truncate the same way the OpenAI ones do.
+  if (
+    isCacheableResponse(
+      content,
+      response.metadata,
+      'userInsightsSummary',
+      normalizedUsername
+    )
+  ) {
+    await cache.set('userInsightsSummary', [normalizedUsername, USER_INSIGHTS_PROMPT_VERSION], {
+      content,
+    });
+  }
 
   return result;
 }

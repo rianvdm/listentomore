@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface AlbumRecommendation {
   albumName: string;
@@ -144,10 +145,22 @@ Just the 4 formatted recommendations, one per line.`;
     metadata: response.metadata,
   };
 
-  // Cache the result (without metadata)
-  await cache.set('userInsightsRecommendations', [normalizedUsername], {
-    recommendations: result.recommendations,
-  });
+  // Cache the result (without metadata). Checked against the raw text: a
+  // truncation lands in the final recommendation, which parses into a
+  // plausible-looking entry with a half-finished reason.
+  if (
+    recommendations.length > 0 &&
+    isCacheableResponse(
+      response.content,
+      response.metadata,
+      'userInsightsRecommendations',
+      normalizedUsername
+    )
+  ) {
+    await cache.set('userInsightsRecommendations', [normalizedUsername], {
+      recommendations: result.recommendations,
+    });
+  }
 
   return result;
 }

@@ -81,6 +81,7 @@ export class AnthropicClient implements ChatClient {
     const data = (await response.json()) as {
       model: string;
       content: Array<{ type: string; text?: string }>;
+      stop_reason?: string | null;
       usage?: { input_tokens?: number; output_tokens?: number };
     };
 
@@ -88,6 +89,20 @@ export class AnthropicClient implements ChatClient {
       .filter((b) => b.type === 'text' && typeof b.text === 'string')
       .map((b) => b.text)
       .join('');
+
+    // Same trap as the OpenAI Responses API: a budget exhaustion arrives as a
+    // 200 with a fragment. Sonnet 5's adaptive thinking spends max_tokens too,
+    // so the visible prose can be well under the limit and still be cut off.
+    const truncated = data.stop_reason === 'max_tokens';
+
+    if (truncated) {
+      console.warn(
+        `[Anthropic] Truncated on max_tokens: model=${data.model} ` +
+        `limit=${options.maxTokens ?? 1500} ` +
+        `output=${data.usage?.output_tokens ?? '?'} ` +
+        `visibleChars=${content.length}.`
+      );
+    }
 
     const metadata: AIResponseMetadata = {
       provider: 'anthropic',
@@ -102,6 +117,7 @@ export class AnthropicClient implements ChatClient {
               null,
           }
         : undefined,
+      truncated,
     };
 
     return { content, metadata };

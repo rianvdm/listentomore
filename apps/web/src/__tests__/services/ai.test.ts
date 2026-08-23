@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse } from '@listentomore/ai';
 import { getTaskConfig } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
@@ -576,5 +576,257 @@ describe('userInsightsSummary provider flip', () => {
   it('routes the task to the anthropic client', () => {
     const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
     expect(ai.getClientForTask('userInsightsSummary')).toBe(ai.anthropic);
+  });
+});
+
+// Regression coverage for the 2026-08-23 truncation bug.
+//
+// GPT-5.6 defaults to medium reasoning effort, and reasoning tokens are billed
+// against max_output_tokens. When they exhaust the budget the API returns
+// HTTP 200 with status "incomplete" and a fragment (sometimes an empty
+// string). Nothing read those fields, so the fragment was cached for the full
+// TTL — an albumDetail page sat truncated in KV for a day before anyone saw it.
+describe('truncation detection', () => {
+  it('flags a Responses API result that ran out of output budget', async () => {
+    const client = new OpenAIClient('test-api-key');
+    setupFetchMock([{
+      pattern: /api\.openai\.com/,
+      response: {
+        model: 'gpt-5.6-terra',
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'For fans, those qualities were often a virtue—the set' }],
+        }],
+        usage: {
+          input_tokens: 180,
+          output_tokens: 1500,
+          total_tokens: 1680,
+          output_tokens_details: { reasoning_tokens: 1024 },
+        },
+      },
+    }]);
+
+    const result = await client.chatCompletion({
+      model: 'gpt-5.6-terra',
+      messages: [{ role: 'user', content: 'summarize an album' }],
+      maxTokens: 1500,
+    });
+
+    expect(result.metadata?.truncated).toBe(true);
+    expect(result.metadata?.usage?.reasoningTokens).toBe(1024);
+  });
+
+  it('does not flag a completed Responses API result', async () => {
+    const client = new OpenAIClient('test-api-key');
+    setupFetchMock([{
+      pattern: /api\.openai\.com/,
+      response: {
+        model: 'gpt-5.6-terra',
+        status: 'completed',
+        incomplete_details: null,
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'A complete summary.' }] }],
+        usage: {
+          input_tokens: 180,
+          output_tokens: 500,
+          total_tokens: 680,
+          output_tokens_details: { reasoning_tokens: 294 },
+        },
+      },
+    }]);
+
+    const result = await client.chatCompletion({
+      model: 'gpt-5.6-terra',
+      messages: [{ role: 'user', content: 'summarize an album' }],
+      maxTokens: 4000,
+    });
+
+    expect(result.metadata?.truncated).toBe(false);
+    expect(result.metadata?.usage?.reasoningTokens).toBe(294);
+  });
+
+  it('flags a Chat Completions result with finish_reason "length"', async () => {
+    const client = new OpenAIClient('test-api-key');
+    setupFetchMock([{
+      pattern: /api\.openai\.com/,
+      response: {
+        model: 'gpt-4o-mini',
+        choices: [{ message: { content: 'half a sentence' }, finish_reason: 'length' }],
+        usage: { prompt_tokens: 10, completion_tokens: 100, total_tokens: 110 },
+      },
+    }]);
+
+    // A non-gpt-5 model with no Responses-only features stays on Chat Completions.
+    const result = await client.chatCompletion({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 100,
+    });
+
+    expect(result.metadata?.api).toBe('chat_completions');
+    expect(result.metadata?.truncated).toBe(true);
+  });
+
+  it('flags an Anthropic result with stop_reason "max_tokens"', async () => {
+    const client = new AnthropicClient('test-api-key');
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5',
+        content: [{ type: 'text', text: 'a partial insight' }],
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 500, output_tokens: 5000 },
+      },
+    }]);
+
+    const result = await client.chatCompletion({
+      model: 'claude-sonnet-5',
+      messages: [{ role: 'user', content: 'insights please' }],
+      maxTokens: 5000,
+    });
+
+    expect(result.metadata?.truncated).toBe(true);
+  });
+});
+
+describe('isCacheableResponse', () => {
+  it('rejects a truncated response', () => {
+    const metadata = {
+      provider: 'openai' as const,
+      model: 'gpt-5.6-terra',
+      api: 'responses' as const,
+      truncated: true,
+      usage: { inputTokens: 180, outputTokens: 1500, totalTokens: 1680, reasoningTokens: 1024 },
+    };
+    expect(isCacheableResponse('a fragment', metadata, 'albumDetail', 'artist', 'album')).toBe(false);
+  });
+
+  it('rejects an empty response even when the API says it completed', () => {
+    const metadata = {
+      provider: 'openai' as const,
+      model: 'gpt-5.6-terra',
+      api: 'responses' as const,
+      truncated: false,
+    };
+    expect(isCacheableResponse('   ', metadata, 'albumDetail', 'artist', 'album')).toBe(false);
+  });
+
+  it('accepts a complete, non-empty response', () => {
+    const metadata = {
+      provider: 'openai' as const,
+      model: 'gpt-5.6-terra',
+      api: 'responses' as const,
+      truncated: false,
+    };
+    expect(isCacheableResponse('A complete summary.', metadata, 'albumDetail', 'artist', 'album')).toBe(true);
+  });
+
+  it('accepts a response from a client that reports no metadata', () => {
+    expect(isCacheableResponse('A complete summary.', undefined, 'albumDetail', 'artist', 'album')).toBe(true);
+  });
+});
+
+describe('truncated responses are not cached', () => {
+  const truncatedResponse = {
+    content: 'For fans, those qualities were often a virtue—the set',
+    metadata: {
+      provider: 'openai' as const,
+      model: 'gpt-5.6-terra',
+      api: 'responses' as const,
+      truncated: true,
+      usage: { inputTokens: 180, outputTokens: 1500, totalTokens: 1680, reasoningTokens: 1024 },
+    },
+  };
+
+  it('returns the fragment to the caller but leaves KV empty (albumDetail)', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    const client = { chatCompletion: vi.fn(async () => truncatedResponse) } as unknown as OpenAIClient;
+
+    const result = await generateAlbumDetail(
+      'Counting Crows', 'Across a Wire', client, cache, 1998
+    );
+
+    expect(result.content).toBe(truncatedResponse.content);
+    expect(mockKV.put).not.toHaveBeenCalled();
+
+    // And the next request regenerates rather than serving the fragment.
+    await generateAlbumDetail('Counting Crows', 'Across a Wire', client, cache, 1998);
+    expect(client.chatCompletion).toHaveBeenCalledTimes(2);
+  });
+
+  it('caches a complete albumDetail response (control)', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    const client = {
+      chatCompletion: vi.fn(async () => ({
+        content: 'A complete album summary.',
+        metadata: { ...truncatedResponse.metadata, truncated: false },
+      })),
+    } as unknown as OpenAIClient;
+
+    await generateAlbumDetail('Counting Crows', 'Across a Wire', client, cache, 1998);
+    expect(mockKV.put).toHaveBeenCalledTimes(1);
+
+    // Second call is served from cache.
+    await generateAlbumDetail('Counting Crows', 'Across a Wire', client, cache, 1998);
+    expect(client.chatCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves KV empty for a truncated artistSummary', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    const client = { chatCompletion: vi.fn(async () => truncatedResponse) } as unknown as OpenAIClient;
+
+    await generateArtistSummary('Counting Crows', client, cache);
+    expect(mockKV.put).not.toHaveBeenCalled();
+  });
+
+  it('leaves KV empty for a truncated artistSentence', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    const client = { chatCompletion: vi.fn(async () => truncatedResponse) } as unknown as OpenAIClient;
+
+    await generateArtistSentence('Counting Crows', client, cache);
+    expect(mockKV.put).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original summary when the insights scrub pass truncates', async () => {
+    const mockKV = createMockKV();
+    const cache = new AICache(mockKV);
+    let call = 0;
+    const client = {
+      chatCompletion: vi.fn(async () => {
+        call += 1;
+        return call === 1
+          ? { content: "That's not a discovery, that's a whole new direction." }
+          : { content: "That's a whole new", metadata: { ...truncatedResponse.metadata } };
+      }),
+    } as unknown as AnthropicClient;
+
+    const result = await generateUserInsightsSummary('bordesak', insightsSample, client, cache);
+
+    expect(client.chatCompletion).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe("That's not a discovery, that's a whole new direction.");
+  });
+});
+
+describe('AI task token budgets', () => {
+  // Reasoning effort must be explicit: the 5.6 tiers default to 'medium',
+  // which is what produced the 2025-token reasoning outlier that truncated
+  // albumDetail. See the maxTokens note in packages/config/src/ai.ts.
+  it.each([
+    'artistSummary', 'albumDetail', 'genreSummary', 'artistSentence',
+    'listenAi', 'albumRecommendations',
+  ] as const)('%s pins an explicit reasoning effort', (task) => {
+    expect(getTaskConfig(task).reasoning).toBeDefined();
+  });
+
+  it('gives the long-form web-search tasks room for reasoning plus prose', () => {
+    // Worst observed real spend was ~2450 total on albumDetail and ~1000 on
+    // albumRecommendations, against prose of only ~500-700 tokens.
+    expect(getTaskConfig('albumDetail').maxTokens).toBeGreaterThanOrEqual(4000);
+    expect(getTaskConfig('albumRecommendations').maxTokens).toBeGreaterThanOrEqual(3000);
   });
 });

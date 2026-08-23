@@ -32,6 +32,8 @@ export type {
 export { AICache } from './cache';
 export type { CacheOptions } from './cache';
 
+export { isCacheableResponse } from './cacheable';
+
 export { AIRateLimiter } from './rate-limit';
 export type { AIRateLimitState, AIProvider } from './rate-limit';
 

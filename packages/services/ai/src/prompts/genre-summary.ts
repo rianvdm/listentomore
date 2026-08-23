@@ -3,6 +3,7 @@
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, AIResponseMetadata } from '../types';
 import type { AICache } from '../cache';
+import { isCacheableResponse } from '../cacheable';
 
 export interface GenreSummaryResult {
   content: string;
@@ -124,12 +125,21 @@ IMPORTANT: If you cannot find sufficient verifiable information about this music
       };
 
       // Cache the result (without metadata - it's only for fresh responses)
-      try {
-        await cache.set('genreSummary', [normalizedGenre], {
-          content: result.content,
-        });
-      } catch (err) {
-        console.error(`[Genre Summary] Cache write failed for "${genreName}":`, err);
+      if (
+        isCacheableResponse(
+          response.content,
+          response.metadata,
+          'genreSummary',
+          normalizedGenre
+        )
+      ) {
+        try {
+          await cache.set('genreSummary', [normalizedGenre], {
+            content: result.content,
+          });
+        } catch (err) {
+          console.error(`[Genre Summary] Cache write failed for "${genreName}":`, err);
+        }
       }
 
       return result;

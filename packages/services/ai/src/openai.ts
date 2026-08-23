@@ -59,6 +59,38 @@ export interface ResponsesResult {
   metadata?: AIResponseMetadata;
 }
 
+/**
+ * The subset of POST /v1/responses we read.
+ *
+ * `status` and `incomplete_details` matter as much as the content: the API
+ * returns 200 OK when it runs out of budget mid-generation, so a truncated
+ * response is indistinguishable from a complete one unless you check them.
+ */
+interface ResponsesApiPayload {
+  model: string;
+  status?: string;
+  incomplete_details?: { reason?: string } | null;
+  output_text?: string | null;
+  output?: Array<{
+    type: string;
+    content?: Array<{
+      type: string;
+      text?: string;
+      annotations?: Array<{
+        type: string;
+        url?: string;
+        title?: string;
+      }>;
+    }>;
+  }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    output_tokens_details?: { reasoning_tokens?: number };
+  };
+}
+
 export interface ImageGenerationOptions {
   prompt: string;
   model?: string;
@@ -233,15 +265,32 @@ export class OpenAIClient implements ChatClient {
         message: {
           content: string;
         };
+        finish_reason?: string;
       }>;
       usage?: {
         prompt_tokens?: number;
         completion_tokens?: number;
         total_tokens?: number;
+        completion_tokens_details?: { reasoning_tokens?: number };
       };
     };
 
     const content = data.choices[0].message.content;
+
+    // Chat Completions' equivalent of the Responses `status: "incomplete"`.
+    const truncated = data.choices[0].finish_reason === 'length';
+    const reasoningTokens =
+      data.usage?.completion_tokens_details?.reasoning_tokens;
+
+    if (truncated) {
+      console.warn(
+        `[OpenAI] Truncated on max_completion_tokens: model=${data.model} ` +
+        `limit=${options.maxTokens ?? 10000} ` +
+        `completion=${data.usage?.completion_tokens ?? '?'} ` +
+        `reasoning=${reasoningTokens ?? '?'} ` +
+        `visibleChars=${content.length}.`
+      );
+    }
 
     // Build metadata from actual API response
     const metadata: AIResponseMetadata = {
@@ -253,8 +302,10 @@ export class OpenAIClient implements ChatClient {
           inputTokens: data.usage.prompt_tokens ?? null,
           outputTokens: data.usage.completion_tokens ?? null,
           totalTokens: data.usage.total_tokens ?? null,
+          reasoningTokens: reasoningTokens ?? null,
         }
         : undefined,
+      truncated,
     };
 
     return { content, metadata };
@@ -325,27 +376,7 @@ export class OpenAIClient implements ChatClient {
       throw new Error(`OpenAI Responses API error: ${response.statusText}`);
     }
 
-    const data = (await response.json()) as {
-      model: string;
-      output_text?: string;
-      output?: Array<{
-        type: string;
-        content?: Array<{
-          type: string;
-          text?: string;
-          annotations?: Array<{
-            type: string;
-            url?: string;
-            title?: string;
-          }>;
-        }>;
-      }>;
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-        total_tokens?: number;
-      };
-    };
+    const data = (await response.json()) as ResponsesApiPayload;
 
     return this.parseResponsesResult(data, options);
   }
@@ -356,27 +387,7 @@ export class OpenAIClient implements ChatClient {
    * Also extracts metadata from the response.
    */
   private parseResponsesResult(
-    data: {
-      model: string;
-      output_text?: string | null;
-      output?: Array<{
-        type: string;
-        content?: Array<{
-          type: string;
-          text?: string;
-          annotations?: Array<{
-            type: string;
-            url?: string;
-            title?: string;
-          }>;
-        }>;
-      }>;
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-        total_tokens?: number;
-      };
-    },
+    data: ResponsesApiPayload,
     options: ResponsesOptions
   ): ResponsesResult {
     const result: ResponsesResult = {
@@ -408,6 +419,23 @@ export class OpenAIClient implements ChatClient {
       }
     }
 
+    // A 200 does not mean the model finished. `status: "incomplete"` with
+    // reason "max_output_tokens" means reasoning + prose exhausted
+    // max_output_tokens, leaving a fragment (sometimes an empty string).
+    const truncated = data.incomplete_details?.reason === 'max_output_tokens';
+    const reasoningTokens = data.usage?.output_tokens_details?.reasoning_tokens;
+
+    if (truncated) {
+      console.warn(
+        `[OpenAI Responses] Truncated on max_output_tokens: model=${data.model} ` +
+        `limit=${options.maxOutputTokens ?? 'default'} ` +
+        `output=${data.usage?.output_tokens ?? '?'} ` +
+        `reasoning=${reasoningTokens ?? '?'} ` +
+        `visibleChars=${result.content.length}. ` +
+        `Raise maxTokens or lower reasoning effort for this task.`
+      );
+    }
+
     // Build metadata from actual API response
     result.metadata = {
       provider: 'openai',
@@ -418,8 +446,10 @@ export class OpenAIClient implements ChatClient {
           inputTokens: data.usage.input_tokens ?? null,
           outputTokens: data.usage.output_tokens ?? null,
           totalTokens: data.usage.total_tokens ?? null,
+          reasoningTokens: reasoningTokens ?? null,
         }
         : undefined,
+      truncated,
       features: {
         webSearchUsed,
         reasoning: options.reasoning?.effort,
