@@ -179,6 +179,8 @@ Mount in the directory's `index.ts` via `app.route('/path', myRoutes)`.
 - **Single Worker** -- all code runs in one Cloudflare Worker, no separate services
 - **No client-side framework** -- vanilla JS only for progressive loading
 - Cache TTLs come from `packages/config/src/cache.ts` via `getTtlSeconds()` -- never hardcode
+- **`maxTokens` in `packages/config/src/ai.ts` is a budget for reasoning + prose, not prose.** Reasoning tokens are invisible and highly variable -- 294 to 2025 measured on one unchanged prompt -- so a cap sized for the visible answer truncates. Set `reasoning` explicitly on every task (the 5.6 tiers default to `medium`) and leave 3-4x headroom. Read the comment block above `AI_TASKS` before changing either
+- **Never cache an AI response without `isCacheableResponse()`** (`packages/services/ai/src/cacheable.ts`). Truncation arrives as a 200 OK with `status: "incomplete"`, and these TTLs run 1-180 days, so one bad response becomes a bad page for months
 - Services accessed via Hono context: `c.get('spotify')`, `c.get('lastfm')`, `c.get('ai')`, `c.get('db')`
 - User auth state: `c.get('currentUser')`, `c.get('isAuthenticated')`
 - Check `profile_visibility` before exposing any user profile data
