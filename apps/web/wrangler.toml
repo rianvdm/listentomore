@@ -28,6 +28,11 @@ enabled = true
 [observability.traces]
 enabled = true
 
+# Real-time Issues in the Workers Observability dashboard. Needs Wrangler
+# 4.134.0+, the first release whose config schema includes this key.
+[observability.issues]
+enabled = true
+
 # KV Namespace for caching
 [[kv_namespaces]]
 binding = "CACHE"
