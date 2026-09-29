@@ -1,0 +1,29 @@
+apps/web/src/__tests__/handlers/artist-sentence.test.ts
+  s_90edf1fa05f7da::t_1686b036ff07ad 1-62
+apps/web/src/__tests__/services/ai.test.ts
+  s_90edf1fa05f7da::t_c90616cd4bb260 3-4,833-910
+apps/web/src/api/internal/artist.ts
+  s_90edf1fa05f7da::t_9f3dfa6270fb3a 4,68-72
+packages/services/ai/src/errors.ts
+  s_90edf1fa05f7da::t_a8638d0f008c70 1-29
+packages/services/ai/src/index.ts
+  s_90edf1fa05f7da::t_90e11f2d10b5f7 23
+packages/services/ai/src/openai.ts
+  s_90edf1fa05f7da::t_724302048c27c0 15,171-181,270,386
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6299298c67222aabf996f1302b307a61388d9b5d",
+  "prompts": {},
+  "sessions": {
+    "s_90edf1fa05f7da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7926c15d-06cd-4797-88e6-8e419ffa4074",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
