@@ -1,0 +1,23 @@
+packages/services/musicbrainz/src/recording-lookup.ts
+  s_90edf1fa05f7da::t_d01693a986a342 6,127,133-141,143-145
+packages/services/musicbrainz/src/release-lookup.ts
+  s_90edf1fa05f7da::t_132f5a90eec4f2 6,131,137-138,140-142,144-146
+packages/services/musicbrainz/__tests__/musicbrainz.test.ts
+  s_90edf1fa05f7da::t_b41a1f0031f44b 299-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a5bb15a910163680e3ac0e62b327ebb44de20ca7",
+  "prompts": {},
+  "sessions": {
+    "s_90edf1fa05f7da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7926c15d-06cd-4797-88e6-8e419ffa4074",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
