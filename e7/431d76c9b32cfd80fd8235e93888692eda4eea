@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-09-28-observability-issues-35-design.md
+  s_2703a19749789f::t_64c9749f9baa84 1-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e7431d76c9b32cfd80fd8235e93888692eda4eea",
+  "prompts": {},
+  "sessions": {
+    "s_2703a19749789f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_2703a19749789f",
+        "model": "unknown"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
