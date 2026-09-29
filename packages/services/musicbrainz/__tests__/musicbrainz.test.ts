@@ -296,6 +296,44 @@ describe('MusicBrainzService', () => {
       vi.useRealTimers();
     });
 
+    it('does not cache null when the UPC follow-up lookup fails with a 500', async () => {
+      setupFetchMock([
+        { pattern: /musicbrainz\.org\/ws\/2\/release\/\?/, response: releaseSearchNoBarcode },
+        { pattern: /musicbrainz\.org\/ws\/2\/release\/release-mbid-456/, response: {}, options: { status: 500, ok: false } },
+      ]);
+
+      const result = await service.getAlbumUpc('Radiohead', 'In Rainbows');
+
+      expect(result).toBeNull();
+      expect(mockKV.put).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalled();
+    });
+
+    it('does not cache null when the ISRC recording lookup fails with a 500', async () => {
+      setupFetchMock([
+        { pattern: /musicbrainz\.org\/ws\/2\/recording\/\?/, response: recordingSearchResponse },
+        { pattern: /musicbrainz\.org\/ws\/2\/recording\/recording-mbid-123/, response: {}, options: { status: 500, ok: false } },
+      ]);
+
+      const result = await service.getTrackIsrc('Radiohead', 'Reckoner');
+
+      expect(result).toBeNull();
+      expect(mockKV.put).not.toHaveBeenCalled();
+    });
+
+    it('does not cache null when the limiter rejects during the UPC follow-up', async () => {
+      limiter.reserve.mockResolvedValueOnce(0).mockRejectedValueOnce(new Error('DO reset'));
+      setupFetchMock([
+        { pattern: /musicbrainz\.org\/ws\/2\/release\/\?/, response: releaseSearchNoBarcode },
+        { pattern: /musicbrainz\.org\/ws\/2\/release\/release-mbid-456/, response: releaseLookupWithBarcode },
+      ]);
+
+      const result = await service.getAlbumUpc('Radiohead', 'In Rainbows');
+
+      expect(result).toBeNull();
+      expect(mockKV.put).not.toHaveBeenCalled();
+    });
+
     it('reserves a slot with the 5000ms cap before each request', async () => {
       setupFetchMock([{ pattern: /musicbrainz\.org\/ws\/2\/release\//, response: releaseSearchResponse }]);
 

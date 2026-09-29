@@ -3,7 +3,7 @@
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { musicbrainzFetch } from './fetch';
-import { MusicBrainzRateLimitError, logLookupFailure } from './errors';
+import { logLookupFailure } from './errors';
 import type { MusicBrainzRateLimiter } from './rate-limit';
 import type {
   MusicBrainzReleaseSearchResponse,
@@ -128,28 +128,22 @@ function pickBestRelease(releases: MusicBrainzRelease[]): MusicBrainzRelease {
 
 /**
  * Look up a release by MBID to get its barcode.
+ * Errors propagate: the caller logs them and skips caching (a real "no barcode" is a 200, never a throw).
  */
 async function lookupReleaseBarcode(
   mbid: string,
   limiter: MusicBrainzRateLimiter
 ): Promise<string | null> {
-  try {
-    const response = await musicbrainzFetch(`/release/${mbid}?fmt=json`, limiter);
-    const data = (await response.json()) as MusicBrainzReleaseLookup;
+  const response = await musicbrainzFetch(`/release/${mbid}?fmt=json`, limiter);
+  const data = (await response.json()) as MusicBrainzReleaseLookup;
 
-    if (data.barcode) {
-      console.log(`[MusicBrainz] Found barcode via lookup: ${data.barcode}`);
-      return data.barcode;
-    }
-
-    console.log(`[MusicBrainz] No barcode on release ${mbid}`);
-    return null;
-  } catch (error) {
-    // Rate-limit failures must reach lookupAlbumUpc so it doesn't cache a false "no UPC"
-    if (error instanceof MusicBrainzRateLimitError) throw error;
-    logLookupFailure(`Release barcode lookup failed for ${mbid}`, error);
-    return null;
+  if (data.barcode) {
+    console.log(`[MusicBrainz] Found barcode via lookup: ${data.barcode}`);
+    return data.barcode;
   }
+
+  console.log(`[MusicBrainz] No barcode on release ${mbid}`);
+  return null;
 }
 
 /**

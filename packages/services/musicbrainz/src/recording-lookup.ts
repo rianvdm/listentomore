@@ -3,7 +3,7 @@
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { musicbrainzFetch } from './fetch';
-import { MusicBrainzRateLimitError, logLookupFailure } from './errors';
+import { logLookupFailure } from './errors';
 import type { MusicBrainzRateLimiter } from './rate-limit';
 import type {
   MusicBrainzRecordingSearchResponse,
@@ -124,31 +124,25 @@ function sortRecordings(recordings: MusicBrainzRecording[]): MusicBrainzRecordin
 
 /**
  * Look up a recording by MBID with ISRCs included.
+ * Errors propagate: the caller logs them and skips caching (a real "no ISRC" is a 200, never a throw).
  */
 async function lookupRecordingIsrc(
   mbid: string,
   limiter: MusicBrainzRateLimiter
 ): Promise<string | null> {
-  try {
-    const response = await musicbrainzFetch(
-      `/recording/${mbid}?inc=isrcs&fmt=json`,
-      limiter
-    );
-    const data = (await response.json()) as MusicBrainzRecordingLookup;
+  const response = await musicbrainzFetch(
+    `/recording/${mbid}?inc=isrcs&fmt=json`,
+    limiter
+  );
+  const data = (await response.json()) as MusicBrainzRecordingLookup;
 
-    if (data.isrcs?.length) {
-      console.log(`[MusicBrainz] Found ISRC: ${data.isrcs[0]} (${data.isrcs.length} total)`);
-      return data.isrcs[0];
-    }
-
-    console.log(`[MusicBrainz] No ISRCs on recording ${mbid}`);
-    return null;
-  } catch (error) {
-    // Rate-limit failures must reach lookupTrackIsrc so it doesn't cache a false "no ISRC"
-    if (error instanceof MusicBrainzRateLimitError) throw error;
-    logLookupFailure(`Recording ISRC lookup failed for ${mbid}`, error);
-    return null;
+  if (data.isrcs?.length) {
+    console.log(`[MusicBrainz] Found ISRC: ${data.isrcs[0]} (${data.isrcs.length} total)`);
+    return data.isrcs[0];
   }
+
+  console.log(`[MusicBrainz] No ISRCs on recording ${mbid}`);
+  return null;
 }
 
 /**
