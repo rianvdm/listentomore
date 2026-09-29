@@ -1,0 +1,35 @@
+apps/web/src/__tests__/handlers/detail-not-found.test.ts
+  s_90edf1fa05f7da::t_99256ad0fb5d12 1-67
+apps/web/src/__tests__/utils/spotify-id.test.ts
+  s_90edf1fa05f7da::t_c8f39a2ba6cf92 1-39
+apps/web/src/components/ui/NotFoundPage.tsx
+  s_90edf1fa05f7da::t_04585f03e03cf6 1-20
+apps/web/src/components/ui/index.ts
+  s_90edf1fa05f7da::t_f7e0d802d9c5e2 8
+apps/web/src/index.tsx
+  s_90edf1fa05f7da::t_59f974293f492f 29,780
+apps/web/src/pages/album/detail.tsx
+  s_90edf1fa05f7da::t_731753576a1fcd 6,8,210-214
+apps/web/src/pages/artist/detail.tsx
+  s_90edf1fa05f7da::t_a0f1ef37837728 6,8,274-278
+packages/shared/src/utils/index.ts
+  s_90edf1fa05f7da::t_6ffad7339916d1 7
+packages/shared/src/utils/spotify-id.ts
+  s_90edf1fa05f7da::t_b95960a5a3c5cd 1-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ea2cf0584f1cfae428aa2d0a0cdfb36011d36773",
+  "prompts": {},
+  "sessions": {
+    "s_90edf1fa05f7da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7926c15d-06cd-4797-88e6-8e419ffa4074",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
