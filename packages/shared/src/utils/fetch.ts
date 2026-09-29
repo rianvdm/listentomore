@@ -21,14 +21,32 @@ export interface FetchWithTimeoutOptions extends RequestInit {
 }
 
 /**
- * Error thrown when a fetch request times out
+ * Remove the query string and fragment from a URL.
+ * Query strings can carry credentials (e.g. Last.fm api_key), which must not reach logs.
+ */
+function stripQuery(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url.split(/[?#]/)[0];
+  }
+}
+
+/**
+ * Error thrown when a fetch request times out.
+ * The URL is stored and reported without its query string.
  */
 export class TimeoutError extends Error {
+  public url: string;
+
   constructor(
-    public url: string,
+    url: string,
     public timeoutMs: number
   ) {
-    super(`Request to ${url} timed out after ${timeoutMs}ms`);
+    const safeUrl = stripQuery(url);
+    super(`Request to ${safeUrl} timed out after ${timeoutMs}ms`);
+    this.url = safeUrl;
     this.name = 'TimeoutError';
   }
 }
