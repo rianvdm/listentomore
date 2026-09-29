@@ -1,0 +1,21 @@
+apps/web/src/__tests__/utils/fetch-timeout.test.ts
+  s_98655a5927ff8c::t_a6b7c972f4a828 1-41
+packages/shared/src/utils/fetch.ts
+  s_98655a5927ff8c::t_272421c952104e 24-38,41-42,44,47-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b5b795b84c549ac9137374b9d1914d08b50cc557",
+  "prompts": {},
+  "sessions": {
+    "s_98655a5927ff8c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_98655a5927ff8c",
+        "model": "unknown"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
