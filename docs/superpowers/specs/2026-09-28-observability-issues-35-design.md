@@ -96,6 +96,7 @@ Testing strategy: the pure function and the fetch wrapper are tested in node wit
 
 ## Delivery
 
-- One commit per item, each referencing #35, on `fix/observability-issues-35`.
+- One commit per plan task (item 3 splits into the limiter and its wiring), each referencing #35, on `fix/observability-issues-35`.
+- Inner MBID lookups (`lookupReleaseBarcode`, `lookupRecordingIsrc`) rethrow `MusicBrainzRateLimitError` so the outer lookup doesn't cache a rate-limit failure as a 30-day "not found". Today a 503 on the follow-up call is cached that way.
 - `pnpm typecheck` and `pnpm test` pass before the branch is offered for review.
 - No deploy until Rian says so. The Durable Object migration applies on the first deploy.
