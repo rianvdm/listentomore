@@ -925,6 +925,9 @@ async function scheduled(
   }
 }
 
+// Durable Object classes must be exported from the Worker entry point
+export { MusicBrainzRateLimiterDO } from './durable-objects/musicbrainz-rate-limiter';
+
 export default {
   fetch: app.fetch,
   scheduled,

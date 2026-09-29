@@ -5,6 +5,8 @@ import { lookupAlbumUpc } from './release-lookup';
 import { lookupTrackIsrc } from './recording-lookup';
 
 export type { MusicBrainzRelease, MusicBrainzRecording } from './types';
+export { reserveSlot, MUSICBRAINZ_INTERVAL_MS, MUSICBRAINZ_MAX_WAIT_MS } from './rate-limit';
+export type { MusicBrainzRateLimiter, SlotReservation } from './rate-limit';
 
 export class MusicBrainzService {
   constructor(private cache: KVNamespace) {}
