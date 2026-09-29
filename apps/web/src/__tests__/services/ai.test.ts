@@ -1,7 +1,7 @@
 // AIService integration tests
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse } from '@listentomore/ai';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError } from '@listentomore/ai';
 import { getTaskConfig } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
@@ -828,5 +828,83 @@ describe('AI task token budgets', () => {
     // albumRecommendations, against prose of only ~500-700 tokens.
     expect(getTaskConfig('albumDetail').maxTokens).toBeGreaterThanOrEqual(4000);
     expect(getTaskConfig('albumRecommendations').maxTokens).toBeGreaterThanOrEqual(3000);
+  });
+});
+
+describe('OpenAIClient region blocks', () => {
+  const regionBody = {
+    error: {
+      code: 'unsupported_country_region_territory',
+      message: 'Country, region, or territory not supported',
+      param: null,
+      type: 'request_forbidden',
+    },
+  };
+  let client: OpenAIClient;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    client = new OpenAIClient('test-api-key');
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('responses() throws RegionUnsupportedError and warns on a region 403', async () => {
+    setupFetchMock([{ pattern: /api\.openai\.com/, response: regionBody, options: { status: 403, ok: false } }]);
+
+    await expect(client.responses({ model: 'gpt-5.6-terra', input: 'hi' })).rejects.toBeInstanceOf(RegionUnsupportedError);
+    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('chat completions path throws RegionUnsupportedError on a region 403', async () => {
+    setupFetchMock([{ pattern: /api\.openai\.com/, response: regionBody, options: { status: 403, ok: false } }]);
+
+    await expect(
+      client.chatCompletion({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }] }),
+    ).rejects.toBeInstanceOf(RegionUnsupportedError);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the generic error for other 403s', async () => {
+    setupFetchMock([{
+      pattern: /api\.openai\.com/,
+      response: { error: { code: 'insufficient_quota', message: 'quota' } },
+      options: { status: 403, ok: false },
+    }]);
+
+    const promise = client.responses({ model: 'gpt-5.6-terra', input: 'hi' });
+    await expect(promise).rejects.toThrow('OpenAI Responses API error');
+    await expect(promise).rejects.not.toBeInstanceOf(RegionUnsupportedError);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('keeps the generic error for a 500', async () => {
+    setupFetchMock([{ pattern: /api\.openai\.com/, response: { error: 'boom' }, options: { status: 500, ok: false } }]);
+
+    await expect(client.responses({ model: 'gpt-5.6-terra', input: 'hi' })).rejects.not.toBeInstanceOf(RegionUnsupportedError);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('falls through to the generic error when a 403 body is not JSON', async () => {
+    const htmlResponse = {
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token <')),
+      text: vi.fn().mockResolvedValue('<html><body>Forbidden</body></html>'),
+      headers: new Headers(),
+    } as unknown as Response;
+    globalThis.fetch = vi.fn().mockResolvedValue(htmlResponse) as typeof fetch;
+
+    const promise = client.responses({ model: 'gpt-5.6-terra', input: 'hi' });
+    await expect(promise).rejects.toThrow('OpenAI Responses API error: Forbidden');
+    await expect(promise).rejects.not.toBeInstanceOf(RegionUnsupportedError);
   });
 });

@@ -1,6 +1,7 @@
 // Internal artist API routes for progressive loading
 
 import { Hono } from 'hono';
+import { RegionUnsupportedError } from '@listentomore/ai';
 import type { Bindings, Variables } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
 
@@ -64,6 +65,11 @@ app.get('/artist-sentence', async (c) => {
     const result = await ai.getArtistSentence(name);
     return c.json({ data: result });
   } catch (error) {
+    // OpenAI refuses visitors' regions it doesn't serve (e.g. CN, RU); omit the sentence.
+    if (error instanceof RegionUnsupportedError) {
+      console.warn('Internal artist sentence skipped: provider does not serve this region');
+      return c.json({ data: null });
+    }
     console.error('Internal artist sentence error:', error);
     return c.json({ error: 'Failed to generate artist sentence' }, 500);
   }
