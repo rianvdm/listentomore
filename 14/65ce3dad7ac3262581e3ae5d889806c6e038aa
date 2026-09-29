@@ -1,0 +1,21 @@
+docs/superpowers/plans/2026-09-28-observability-issues-35.md
+  s_bd0967d0a5e329::t_abb539a244b085 1-1363
+docs/superpowers/specs/2026-09-28-observability-issues-35-design.md
+  s_bd0967d0a5e329::t_6772f48ae9077a 99-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1465ce3dad7ac3262581e3ae5d889806c6e038aa",
+  "prompts": {},
+  "sessions": {
+    "s_bd0967d0a5e329": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_bd0967d0a5e329",
+        "model": "unknown"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
