@@ -1,0 +1,19 @@
+apps/web/src/durable-objects/musicbrainz-rate-limiter.ts
+  s_90edf1fa05f7da::t_1649f87403986c 9-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "548416f73900af7b96e1a4c2321113b9c675e480",
+  "prompts": {},
+  "sessions": {
+    "s_90edf1fa05f7da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7926c15d-06cd-4797-88e6-8e419ffa4074",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
