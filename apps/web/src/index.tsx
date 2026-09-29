@@ -45,6 +45,7 @@ import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
 import { DiscordPage } from './pages/discord';
+import { getMusicBrainzLimiter } from './durable-objects/musicbrainz-rate-limiter';
 import { enrichLinksScript } from './utils/client-scripts';
 import { apiRoutes } from './api';
 import type { Bindings, Variables } from './types';
@@ -124,7 +125,10 @@ app.use('*', async (c, next) => {
             privateKey: c.env.APPLE_PRIVATE_KEY,
           }
           : undefined,
-      musicbrainz: new MusicBrainzService(c.env.CACHE),
+      musicbrainz: new MusicBrainzService(
+        c.env.CACHE,
+        getMusicBrainzLimiter(c.env.MUSICBRAINZ_RATE_LIMITER)
+      ),
     })
   );
 

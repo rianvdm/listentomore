@@ -3,13 +3,15 @@
 
 import { lookupAlbumUpc } from './release-lookup';
 import { lookupTrackIsrc } from './recording-lookup';
+import type { MusicBrainzRateLimiter } from './rate-limit';
 
 export type { MusicBrainzRelease, MusicBrainzRecording } from './types';
+export { MusicBrainzRateLimitError } from './errors';
 export { reserveSlot, MUSICBRAINZ_INTERVAL_MS, MUSICBRAINZ_MAX_WAIT_MS } from './rate-limit';
 export type { MusicBrainzRateLimiter, SlotReservation } from './rate-limit';
 
 export class MusicBrainzService {
-  constructor(private cache: KVNamespace) {}
+  constructor(private cache: KVNamespace, private limiter: MusicBrainzRateLimiter) {}
 
   /**
    * Look up the UPC (barcode) for an album.
@@ -26,7 +28,7 @@ export class MusicBrainzService {
       console.log('[MusicBrainz] Missing artist or album for UPC lookup');
       return null;
     }
-    return lookupAlbumUpc(artist, album, this.cache);
+    return lookupAlbumUpc(artist, album, this.cache, this.limiter);
   }
 
   /**
@@ -44,6 +46,6 @@ export class MusicBrainzService {
       console.log('[MusicBrainz] Missing artist or track for ISRC lookup');
       return null;
     }
-    return lookupTrackIsrc(artist, track, this.cache);
+    return lookupTrackIsrc(artist, track, this.cache, this.limiter);
   }
 }
