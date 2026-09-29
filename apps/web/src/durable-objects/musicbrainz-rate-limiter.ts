@@ -6,7 +6,11 @@ import { reserveSlot, MUSICBRAINZ_INTERVAL_MS } from '@listentomore/musicbrainz'
 import type { MusicBrainzRateLimiter } from '@listentomore/musicbrainz';
 
 export class MusicBrainzRateLimiterDO extends DurableObject {
-  // Resets to 0 on eviction; worst case is one extra request within a second.
+  // Resets to 0 on eviction. Callers already holding reservations (up to ~5,
+  // bounded by maxWaitMs) can then overlap with new callers granted immediately.
+  // The 1100ms spacing is between slot grants; callers with different RPC
+  // round-trip times can reach MusicBrainz slightly closer together (the 100ms
+  // margin absorbs typical skew).
   private nextSlotAt = 0;
 
   reserve(maxWaitMs: number): number | null {
