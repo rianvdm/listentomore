@@ -6,6 +6,7 @@ import type { SpotifyService } from '@listentomore/spotify';
 import type { LastfmService } from '@listentomore/lastfm';
 import type { StreamingLinksService } from '@listentomore/streaming-links';
 import type { AIService } from '@listentomore/ai';
+import type { MusicBrainzRateLimiterDO } from './durable-objects/musicbrainz-rate-limiter';
 
 // Environment bindings (Cloudflare Workers)
 export type Bindings = {
@@ -13,6 +14,9 @@ export type Bindings = {
   DB: D1Database;
   // KV Namespaces
   CACHE: KVNamespace;
+
+  // Durable Objects
+  MUSICBRAINZ_RATE_LIMITER: DurableObjectNamespace<MusicBrainzRateLimiterDO>;
   // Environment variables
   SPOTIFY_CLIENT_ID: string;
   SPOTIFY_CLIENT_SECRET: string;

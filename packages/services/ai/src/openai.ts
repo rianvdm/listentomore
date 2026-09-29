@@ -12,6 +12,7 @@ import type {
   AIResponseMetadata,
 } from './types';
 import type { AIRateLimiter } from './rate-limit';
+import { isOpenAIRegionBlock, RegionUnsupportedError } from './errors';
 
 // Re-export for backwards compatibility
 export type { ChatMessage } from './types';
@@ -168,6 +169,17 @@ export class OpenAIClient implements ChatClient {
   }
 
   /**
+   * Throw RegionUnsupportedError (logged at warn) when OpenAI rejected the caller's region.
+   * Other error responses are left to the caller's existing error handling.
+   */
+  private throwIfRegionBlocked(label: string, status: number, errorBody: string): void {
+    if (isOpenAIRegionBlock(status, errorBody)) {
+      console.warn(`${label} Request region not supported by OpenAI; skipping`);
+      throw new RegionUnsupportedError('openai');
+    }
+  }
+
+  /**
    * Check and update rate limiting using distributed KV-based limiter
    */
   private async checkRateLimit(): Promise<void> {
@@ -255,6 +267,7 @@ export class OpenAIClient implements ChatClient {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      this.throwIfRegionBlocked('[OpenAI]', response.status, errorBody);
       console.error(`[OpenAI] API error: ${response.status} - ${errorBody}`);
       throw new Error(`OpenAI API error: ${response.statusText}`);
     }
@@ -370,6 +383,7 @@ export class OpenAIClient implements ChatClient {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      this.throwIfRegionBlocked('[OpenAI Responses]', response.status, errorBody);
       console.error(
         `[OpenAI Responses] API error: ${response.status} - ${errorBody}`
       );

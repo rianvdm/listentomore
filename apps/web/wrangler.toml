@@ -46,6 +46,15 @@ database_name = "listentomore"
 database_id = "512d0c41-502c-41ba-82ff-635d0413b071"
 migrations_dir = "../../packages/db/src/migrations"
 
+# Durable Object: global MusicBrainz rate limiter (1 request per 1.1s across all instances)
+[[durable_objects.bindings]]
+name = "MUSICBRAINZ_RATE_LIMITER"
+class_name = "MusicBrainzRateLimiterDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MusicBrainzRateLimiterDO"]
+
 # Environment variables
 # ENVIRONMENT controls CORS and origin-validation strictness (see middleware/security.ts).
 # It is set to "production" here for the main deployment.

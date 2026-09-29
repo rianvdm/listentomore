@@ -3,6 +3,8 @@
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { musicbrainzFetch } from './fetch';
+import { logLookupFailure } from './errors';
+import type { MusicBrainzRateLimiter } from './rate-limit';
 import type {
   MusicBrainzReleaseSearchResponse,
   MusicBrainzRelease,
@@ -40,7 +42,8 @@ function normalizeForCacheKey(str: string): string {
 export async function lookupAlbumUpc(
   artist: string,
   album: string,
-  cache: KVNamespace
+  cache: KVNamespace,
+  limiter: MusicBrainzRateLimiter
 ): Promise<string | null> {
   const cacheKey = `musicbrainz:release:${normalizeForCacheKey(artist)}:${normalizeForCacheKey(album)}`;
 
@@ -61,7 +64,7 @@ export async function lookupAlbumUpc(
     const encoded = encodeURIComponent(query);
     const response = await musicbrainzFetch(
       `/release/?query=${encoded}&fmt=json&limit=5`,
-      cache
+      limiter
     );
 
     const data = (await response.json()) as MusicBrainzReleaseSearchResponse;
@@ -91,13 +94,12 @@ export async function lookupAlbumUpc(
 
     // Best match has no barcode in search -- try a direct lookup
     console.log(`[MusicBrainz] No barcode in search result, looking up MBID: ${bestMatch.id}`);
-    const upc = await lookupReleaseBarcode(bestMatch.id, cache);
+    const upc = await lookupReleaseBarcode(bestMatch.id, limiter);
 
     await cacheResult(cache, cacheKey, upc);
     return upc;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[MusicBrainz] Release lookup failed for ${artist} - ${album}:`, errorMessage);
+    logLookupFailure(`Release lookup failed for ${artist} - ${album}`, error);
     // Don't cache errors -- they might be transient
     return null;
   }
@@ -126,27 +128,22 @@ function pickBestRelease(releases: MusicBrainzRelease[]): MusicBrainzRelease {
 
 /**
  * Look up a release by MBID to get its barcode.
+ * Errors propagate: the caller logs them and skips caching (a real "no barcode" is a 200, never a throw).
  */
 async function lookupReleaseBarcode(
   mbid: string,
-  cache: KVNamespace
+  limiter: MusicBrainzRateLimiter
 ): Promise<string | null> {
-  try {
-    const response = await musicbrainzFetch(`/release/${mbid}?fmt=json`, cache);
-    const data = (await response.json()) as MusicBrainzReleaseLookup;
+  const response = await musicbrainzFetch(`/release/${mbid}?fmt=json`, limiter);
+  const data = (await response.json()) as MusicBrainzReleaseLookup;
 
-    if (data.barcode) {
-      console.log(`[MusicBrainz] Found barcode via lookup: ${data.barcode}`);
-      return data.barcode;
-    }
-
-    console.log(`[MusicBrainz] No barcode on release ${mbid}`);
-    return null;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[MusicBrainz] Release barcode lookup failed for ${mbid}:`, errorMessage);
-    return null;
+  if (data.barcode) {
+    console.log(`[MusicBrainz] Found barcode via lookup: ${data.barcode}`);
+    return data.barcode;
   }
+
+  console.log(`[MusicBrainz] No barcode on release ${mbid}`);
+  return null;
 }
 
 /**

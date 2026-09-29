@@ -26,6 +26,7 @@ import { sessionMiddleware } from './middleware/session';
 import { crawlerLoggingMiddleware } from './middleware/crawler-logging';
 import { generateInternalToken } from './utils/internal-token';
 import { Layout } from './components/layout';
+import { NotFoundPage } from './components/ui';
 import { handleAlbumSearch } from './pages/album/search';
 import { handleAlbumDetail } from './pages/album/detail';
 import { handleArtistSearch } from './pages/artist/search';
@@ -44,6 +45,7 @@ import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
 import { DiscordPage } from './pages/discord';
+import { getMusicBrainzLimiter } from './durable-objects/musicbrainz-rate-limiter';
 import { enrichLinksScript } from './utils/client-scripts';
 import { apiRoutes } from './api';
 import type { Bindings, Variables } from './types';
@@ -123,7 +125,10 @@ app.use('*', async (c, next) => {
             privateKey: c.env.APPLE_PRIVATE_KEY,
           }
           : undefined,
-      musicbrainz: new MusicBrainzService(c.env.CACHE),
+      musicbrainz: new MusicBrainzService(
+        c.env.CACHE,
+        getMusicBrainzLimiter(c.env.MUSICBRAINZ_RATE_LIMITER)
+      ),
     })
   );
 
@@ -776,20 +781,7 @@ app.route('/api', apiRoutes);
 
 // 404 handler
 app.notFound((c) => {
-  return c.html(
-    <Layout title="Page Not Found">
-      <div class="text-center" style={{ paddingTop: '4rem' }}>
-        <h1 style={{ fontSize: '4rem', marginBottom: '0.5rem' }}>404</h1>
-        <p>The page you're looking for doesn't exist.</p>
-        <p class="mt-2">
-          <a href="/" class="button">
-            Go Home
-          </a>
-        </p>
-      </div>
-    </Layout>,
-    404
-  );
+  return c.html(<NotFoundPage />, 404);
 });
 
 // Scheduled handler for CRON jobs (runs every 5 minutes)
@@ -936,6 +928,9 @@ async function scheduled(
     console.error('[CRON] Failed to pre-warm user listens cache:', error);
   }
 }
+
+// Durable Object classes must be exported from the Worker entry point
+export { MusicBrainzRateLimiterDO } from './durable-objects/musicbrainz-rate-limiter';
 
 export default {
   fetch: app.fetch,
