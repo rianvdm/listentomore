@@ -3,8 +3,9 @@
 
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
+import { isSpotifyId } from '@listentomore/shared';
 import { Layout } from '../../components/layout';
-import { RateLimitedPage, SignInGate } from '../../components/ui';
+import { NotFoundPage, RateLimitedPage, SignInGate } from '../../components/ui';
 import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript } from '../../utils/client-scripts';
 
@@ -206,6 +207,11 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
 // Route handler - now only fetches Spotify data (fast)
 export async function handleAlbumDetail(c: Context) {
   const spotifyId = c.req.param('id');
+
+  // Legacy slug URLs (e.g. /album/radiohead_pablo-honey) predate ID-based routes; Spotify 400s them.
+  if (!isSpotifyId(spotifyId)) {
+    return c.html(<NotFoundPage />, 404);
+  }
   const spotify = c.get('spotify') as SpotifyService;
   const internalToken = c.get('internalToken') as string;
   const currentUser = c.get('currentUser') as User | null;
