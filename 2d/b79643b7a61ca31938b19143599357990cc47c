@@ -1,0 +1,25 @@
+apps/web/src/__tests__/services/ai.test.ts
+  s_140497fd498054::t_0e7091054d384e 4,911-1077
+packages/services/ai/src/tracing.ts
+  s_140497fd498054::t_84f6314050015f 1-106
+apps/web/src/index.tsx
+  s_140497fd498054::t_a978c62d036572 5,64-77,156
+packages/services/ai/src/index.ts
+  s_140497fd498054::t_349f9440aac51a 8,42-43,81-85,98,101-102,122-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2db79643b7a61ca31938b19143599357990cc47c",
+  "prompts": {},
+  "sessions": {
+    "s_140497fd498054": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b225a687-1013-4dd4-9bb5-0961080dc415",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
