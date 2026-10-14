@@ -5,6 +5,7 @@ import { OpenAIClient } from './openai';
 import { AnthropicClient } from './anthropic';
 import { AICache } from './cache';
 import { AIRateLimiter } from './rate-limit';
+import { withAgentTracing } from './tracing';
 import type { ChatClient } from './types';
 
 // Re-export common types from types.ts
@@ -37,6 +38,8 @@ export { isCacheableResponse } from './cacheable';
 
 export { AIRateLimiter } from './rate-limit';
 export type { AIRateLimitState, AIProvider } from './rate-limit';
+
+export { withAgentTracing } from './tracing';
 
 // Re-export all prompt functions and types
 export {
@@ -75,6 +78,11 @@ export interface AIServiceConfig {
   openaiApiKey: string;
   anthropicApiKey: string;
   cache: KVNamespace;
+  /**
+   * Workers custom spans API (ctx.tracing). When set, clients returned by
+   * getClientForTask emit agent trace spans for the Cloudflare Agents view.
+   */
+  tracing?: Tracing;
 }
 
 /**
@@ -87,8 +95,11 @@ export class AIService {
   public readonly kv: KVNamespace;
   public readonly openaiRateLimiter: AIRateLimiter;
   public readonly anthropicRateLimiter: AIRateLimiter;
+  private readonly tracing?: Tracing;
 
   constructor(config: AIServiceConfig) {
+    this.tracing = config.tracing;
+
     // Create distributed rate limiters per provider
     this.openaiRateLimiter = new AIRateLimiter(config.cache, 'openai');
     this.anthropicRateLimiter = new AIRateLimiter(config.cache, 'anthropic');
@@ -108,7 +119,8 @@ export class AIService {
    */
   getClientForTask(task: AITask): ChatClient {
     const { provider } = getTaskConfig(task);
-    return provider === 'anthropic' ? this.anthropic : this.openai;
+    const client = provider === 'anthropic' ? this.anthropic : this.openai;
+    return this.tracing ? withAgentTracing(client, task, this.tracing) : client;
   }
 
   // Convenience methods that use the appropriate client based on config
