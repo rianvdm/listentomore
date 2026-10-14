@@ -1,7 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
@@ -906,5 +906,172 @@ describe('OpenAIClient region blocks', () => {
     const promise = client.responses({ model: 'gpt-5.6-terra', input: 'hi' });
     await expect(promise).rejects.toThrow('OpenAI Responses API error: Forbidden');
     await expect(promise).rejects.not.toBeInstanceOf(RegionUnsupportedError);
+  });
+});
+
+describe('withAgentTracing', () => {
+  interface RecordedSpan {
+    name: string;
+    parent: string | null;
+    attributes: Record<string, boolean | number | string | undefined>;
+    exceptions: unknown[];
+    status?: { code: string; message?: string };
+  }
+
+  // Minimal stand-in for the Workers custom spans API: records each span,
+  // its parent, and its attributes.
+  function createFakeTracing() {
+    const spans: RecordedSpan[] = [];
+    const stack: RecordedSpan[] = [];
+    const tracing = {
+      enterSpan(name: string, callback: (span: unknown) => unknown) {
+        const record: RecordedSpan = {
+          name,
+          parent: stack.at(-1)?.name ?? null,
+          attributes: {},
+          exceptions: [],
+        };
+        spans.push(record);
+        const span = {
+          setAttribute(key: string, value: boolean | number | string) {
+            record.attributes[key] = value;
+            return span;
+          },
+          setAttributes(attrs: Record<string, boolean | number | string | undefined>) {
+            Object.assign(record.attributes, attrs);
+            return span;
+          },
+          recordException(exception: unknown) {
+            record.exceptions.push(exception);
+          },
+          setStatus(status: { code: string; message?: string }) {
+            record.status = status;
+            return span;
+          },
+        };
+        stack.push(record);
+        try {
+          const result = callback(span);
+          return result instanceof Promise ? result.finally(() => stack.pop()) : (stack.pop(), result);
+        } catch (error) {
+          stack.pop();
+          throw error;
+        }
+      },
+    };
+    return { tracing: tracing as unknown as Tracing, spans };
+  }
+
+  const okClient = {
+    chatCompletion: vi.fn(async () => ({
+      content: 'They are an English rock band.',
+      metadata: {
+        provider: 'openai' as const,
+        model: 'gpt-5.6-terra-2026-09-01',
+        api: 'responses' as const,
+        usage: { inputTokens: 120, outputTokens: 45, totalTokens: 165 },
+        features: { webSearchUsed: true },
+      },
+    })),
+  };
+
+  const options = {
+    model: 'gpt-5.6-terra',
+    maxTokens: 400,
+    messages: [
+      { role: 'system' as const, content: 'Be succinct.' },
+      { role: 'user' as const, content: 'Write about Radiohead.' },
+    ],
+  };
+
+  beforeEach(() => okClient.chatCompletion.mockClear());
+
+  it('emits invoke_agent with a nested chat span and agent identity on both', async () => {
+    const { tracing, spans } = createFakeTracing();
+    const client = withAgentTracing(okClient, 'artistSentence', tracing);
+
+    const response = await client.chatCompletion(options);
+
+    expect(response.content).toBe('They are an English rock band.');
+    expect(okClient.chatCompletion).toHaveBeenCalledWith(options);
+    expect(spans.map((s) => [s.name, s.parent])).toEqual([
+      ['invoke_agent artistSentence', null],
+      ['chat gpt-5.6-terra', 'invoke_agent artistSentence'],
+    ]);
+    const [agent, chat] = spans;
+    for (const span of [agent, chat]) {
+      expect(span.attributes['gen_ai.agent.name']).toBe('artistSentence');
+      expect(span.attributes['gen_ai.agent.id']).toBe('listentomore-artistSentence');
+      expect(span.attributes['gen_ai.conversation.id']).toEqual(expect.any(String));
+    }
+    expect(agent.attributes['gen_ai.conversation.id']).toBe(chat.attributes['gen_ai.conversation.id']);
+    expect(agent.attributes['gen_ai.operation.name']).toBe('invoke_agent');
+    expect(chat.attributes).toMatchObject({
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.request.model': 'gpt-5.6-terra',
+      'gen_ai.response.model': 'gpt-5.6-terra-2026-09-01',
+      'gen_ai.provider.name': 'openai',
+      'gen_ai.usage.input_tokens': 120,
+      'gen_ai.usage.output_tokens': 45,
+      'listentomore.web_search_used': true,
+    });
+  });
+
+  it('records prompt and answer for public-input tasks', async () => {
+    const { tracing, spans } = createFakeTracing();
+    await withAgentTracing(okClient, 'artistSentence', tracing).chatCompletion(options);
+
+    const chat = spans[1];
+    expect(JSON.parse(chat.attributes['gen_ai.system_instructions'] as string)).toEqual([
+      { type: 'text', content: 'Be succinct.' },
+    ]);
+    expect(JSON.parse(chat.attributes['gen_ai.input.messages'] as string)).toEqual([
+      { role: 'user', parts: [{ type: 'text', content: 'Write about Radiohead.' }] },
+    ]);
+    expect(JSON.parse(chat.attributes['gen_ai.output.messages'] as string)).toEqual([
+      { role: 'assistant', parts: [{ type: 'text', content: 'They are an English rock band.' }] },
+    ]);
+  });
+
+  it.each(['listenAi', 'userInsightsSummary', 'userInsightsRecommendations'] as const)(
+    'never records prompt or answer text for %s',
+    async (task) => {
+      const { tracing, spans } = createFakeTracing();
+      await withAgentTracing(okClient, task, tracing).chatCompletion(options);
+
+      const keys = spans.flatMap((s) => Object.keys(s.attributes));
+      expect(keys).not.toContain('gen_ai.input.messages');
+      expect(keys).not.toContain('gen_ai.output.messages');
+      expect(keys).not.toContain('gen_ai.system_instructions');
+      expect(spans[1].attributes['gen_ai.usage.input_tokens']).toBe(120);
+    }
+  );
+
+  it('records the error on the chat span and rethrows', async () => {
+    const { tracing, spans } = createFakeTracing();
+    const failing = { chatCompletion: vi.fn(async () => { throw new Error('OpenAI API error: 500'); }) };
+
+    await expect(
+      withAgentTracing(failing, 'artistSentence', tracing).chatCompletion(options)
+    ).rejects.toThrow('OpenAI API error: 500');
+
+    const chat = spans[1];
+    expect(chat.exceptions).toEqual([{ name: 'Error', message: 'OpenAI API error: 500' }]);
+    expect(chat.status).toEqual({ code: 'error', message: 'OpenAI API error: 500' });
+  });
+
+  it('AIService wraps task clients only when tracing is provided', async () => {
+    const { tracing, spans } = createFakeTracing();
+    const untraced = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
+    expect(untraced.getClientForTask('artistSentence')).toBe(untraced.openai);
+
+    const traced = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV(), tracing });
+    const client = traced.getClientForTask('artistSentence');
+    expect(client).not.toBe(traced.openai);
+
+    const spy = vi.spyOn(traced.openai, 'chatCompletion').mockResolvedValue({ content: 'ok' });
+    await client.chatCompletion(options);
+    expect(spy).toHaveBeenCalledWith(options);
+    expect(spans.map((s) => s.name)).toEqual(['invoke_agent artistSentence', 'chat gpt-5.6-terra']);
   });
 });

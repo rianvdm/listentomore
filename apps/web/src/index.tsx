@@ -2,6 +2,7 @@
 // Built with Hono on Cloudflare Workers
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { SITE_CONFIG, CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { Database } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
@@ -58,6 +59,20 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Workers custom spans API for this request, if the runtime provides one.
+ * Hono's executionCtx getter throws when there is no ExecutionContext
+ * (app.request() in tests), so fall back to no tracing. Hono types its own
+ * ExecutionContext without `tracing`, hence the cast.
+ */
+function getTracing(c: Context<{ Bindings: Bindings; Variables: Variables }>): Tracing | undefined {
+  try {
+    return (c.executionCtx as { tracing?: Tracing }).tracing;
+  } catch {
+    return undefined;
+  }
 }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -138,6 +153,7 @@ app.use('*', async (c, next) => {
       openaiApiKey: c.env.OPENAI_API_KEY,
       anthropicApiKey: c.env.ANTHROPIC_API_KEY,
       cache: c.env.CACHE,
+      tracing: getTracing(c),
     })
   );
 
