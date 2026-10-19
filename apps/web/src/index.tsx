@@ -48,6 +48,8 @@ import { AboutPage } from './pages/about';
 import { DiscordPage } from './pages/discord';
 import { getMusicBrainzLimiter } from './durable-objects/musicbrainz-rate-limiter';
 import { enrichLinksScript } from './utils/client-scripts';
+import { loadCachedRecentTrack, recentTrackKey } from './utils/recent-track-cache';
+import type { RecentTrackData } from './utils/recent-track-cache';
 import { apiRoutes } from './api';
 import type { Bindings, Variables } from './types';
 
@@ -840,7 +842,7 @@ async function scheduled(
     let lastfmSuccessCount = 0;
     let lastfmErrorCount = 0;
 
-    type TrackData = { username: string; artist: string; album: string; track: string; image: string | null; playedAt: string | null; nowPlaying: boolean };
+    type TrackData = RecentTrackData;
     const userTracks: (TrackData | null)[] = [];
     const totalBatches = Math.ceil(users.length / BATCH_SIZE);
 
@@ -874,7 +876,7 @@ async function scheduled(
               // Persist for /widget/recent so the widget keeps working when Last.fm flakes.
               // 7-day TTL: if the CRON has been broken for a week, stale is no longer useful.
               await env.CACHE.put(
-                `widget:recent:${user.lastfm_username}`,
+                recentTrackKey(user.lastfm_username),
                 JSON.stringify(trackData),
                 { expirationTtl: 604800 }
               );
@@ -883,6 +885,8 @@ async function scheduled(
           } catch (error) {
             lastfmErrorCount++;
             console.error(`[CRON] Failed to fetch recent track for ${user.lastfm_username}:`, error);
+            // Keep the user on the list with their last saved track rather than dropping them for 5 minutes.
+            return loadCachedRecentTrack(env.CACHE, user.lastfm_username);
           }
           return null;
         })

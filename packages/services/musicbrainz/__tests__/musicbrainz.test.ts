@@ -412,6 +412,19 @@ describe('MusicBrainzService', () => {
       expect(errorSpy).toHaveBeenCalled();
     });
 
+    it('logs a MusicBrainz 503 at error once, with the per-album context at warn', async () => {
+      setupFetchMock([{ pattern: /musicbrainz\.org/, response: { error: 'unavailable' }, options: { status: 503, ok: false } }]);
+
+      await service.getAlbumUpc('Radiohead', 'In Rainbows');
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith('[MusicBrainz] 503 Service Unavailable - rate limited or down');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[MusicBrainz] Release lookup failed for Radiohead - In Rainbows:',
+        'MusicBrainz API rate limited (503)'
+      );
+    });
+
     it('returns null without fetching when the limiter itself fails', async () => {
       limiter.reserve.mockRejectedValue(new Error('Durable Object unavailable'));
       const mockFetch = setupFetchMock([{ pattern: /musicbrainz\.org/, response: releaseSearchResponse }]);
