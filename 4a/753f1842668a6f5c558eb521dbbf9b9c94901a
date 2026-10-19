@@ -1,0 +1,27 @@
+apps/web/src/index.tsx
+  s_cde54a693ffd4f::t_09302e04cb01f6 51-52,845,879,888-889
+packages/services/musicbrainz/__tests__/musicbrainz.test.ts
+  s_cde54a693ffd4f::t_f47ebe1dab2277 415-427
+packages/services/musicbrainz/src/errors.ts
+  s_cde54a693ffd4f::t_68f1b8a48cd3b9 2,19-23,27
+apps/web/src/__tests__/utils/recent-track-cache.test.ts
+  s_cde54a693ffd4f::t_bdf027a90d0130 1-47
+apps/web/src/utils/recent-track-cache.ts
+  s_cde54a693ffd4f::t_0bc4d50d1d291f 1-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4a753f1842668a6f5c558eb521dbbf9b9c94901a",
+  "prompts": {},
+  "sessions": {
+    "s_cde54a693ffd4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4653379-ef8f-4db0-a8ea-09d297077680",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rian van der Merwe <rianvdm@gmail.com>"
+    }
+  }
+}
