@@ -3,10 +3,13 @@
 //
 // Usage (from apps/web):
 //   pnpm dlx tsx scripts/ai-eval.ts --label openai-baseline [--concurrency 4]
+//   pnpm dlx tsx scripts/ai-eval.ts --rescore openai-baseline
 //
-// Spends real money: every case is a live API call, and nothing is served from
-// cache because each run gets a fresh in-memory KV. Exit code 1 means at least
-// one record has a violation or was truncated; 2 means the run could not start.
+// --label spends real money: every case is a live API call, and nothing is
+// served from cache because each run gets a fresh in-memory KV. --rescore makes
+// no API calls: it reruns the current checks over a saved run and writes the
+// result to eval-output/<label>-rescored/. Exit code 1 means at least one record
+// has a violation or was truncated; 2 means the run could not start.
 
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -51,6 +54,22 @@ interface EvalRecord {
   ms: number;
   /** API calls behind this record (userInsightsSummary may add a scrub pass) */
   calls: number;
+  /** The model's text before any post-processing, so --rescore can rerun every check */
+  rawContent?: string;
+  /** userInsightsRecommendations only: entries the production parser extracted */
+  parsedRecommendations?: number;
+}
+
+/** Everything the checks read, built from a live call or from a saved record. */
+interface ScoringInput {
+  task: AITask;
+  label: string;
+  content: string;
+  /** null for records saved before rawContent was recorded */
+  raw: string | null;
+  placeholders: { artists: number; albums: number };
+  truncated: boolean;
+  parsedRecommendations?: number;
 }
 
 interface CaseOutput {
@@ -87,6 +106,21 @@ const TITLE_LINE_TASKS = new Set<AITask>([
   'userInsightsSummary',
 ]);
 
+// Fewest search links a healthy row produces. A model that writes plain names
+// instead of [[Artist]] / {{Album}} placeholders yields zero links and would
+// otherwise pass every other check. Baseline: 16-25, 10-16 and 3 per row.
+const MIN_LINKS: Partial<Record<AITask, number>> = {
+  artistSummary: 1,
+  genreSummary: 1,
+  albumRecommendations: 3,
+};
+
+// These prompt functions substitute {{Album by Artist}} first and strip any
+// [[Artist]] nested inside it instead of linking it, so a nested artist
+// placeholder legitimately yields no artist link. artistSummary substitutes
+// artists first, so its nested artists do become links.
+const STRIPS_NESTED_ARTISTS = new Set<AITask>(['genreSummary', 'albumRecommendations']);
+
 const FALLBACK_PATTERN =
   /^(Not enough information available|There is no information available)/i;
 
@@ -97,15 +131,25 @@ const WEB_ROOT = join(SCRIPT_DIR, '..');
 // Setup helpers
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { label: string; concurrency: number } {
+interface CliArgs {
+  mode: 'run' | 'rescore';
+  label: string;
+  concurrency: number;
+}
+
+function parseArgs(argv: string[]): CliArgs {
   const valueOf = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
     return i >= 0 ? argv[i + 1] : undefined;
   };
 
-  const label = valueOf('--label');
-  if (!label || !/^[\w.-]+$/.test(label)) {
-    throw new Error('--label <name> is required (letters, digits, dot, dash, underscore)');
+  const runLabel = valueOf('--label');
+  const rescoreLabel = valueOf('--rescore');
+  const label = runLabel ?? rescoreLabel;
+  if (!label || (runLabel && rescoreLabel) || !/^[\w.-]+$/.test(label)) {
+    throw new Error(
+      'Pass exactly one of --label <name> or --rescore <name> (letters, digits, dot, dash, underscore)'
+    );
   }
 
   const concurrency = Number(valueOf('--concurrency') ?? 4);
@@ -113,7 +157,7 @@ function parseArgs(argv: string[]): { label: string; concurrency: number } {
     throw new Error('--concurrency must be a positive integer');
   }
 
-  return { label, concurrency };
+  return { mode: rescoreLabel ? 'rescore' : 'run', label, concurrency };
 }
 
 /** Parse KEY=value lines from a .dev.vars file. Values may be quoted. */
@@ -300,19 +344,85 @@ function firstMatch(text: string, pattern: RegExp): string {
   return (text.match(pattern)?.[0] ?? '').slice(0, 60);
 }
 
-function findViolations(task: AITask, output: CaseOutput, raw: string): string[] {
-  const { content } = output;
+function countPlaceholders(raw: string): { artists: number; albums: number } {
+  return {
+    artists: countMatches(raw, /\[\[[^\]]+\]\]/g),
+    albums: countMatches(raw, /\{\{[^}]+\}\}/g),
+  };
+}
+
+/** Artist placeholders written inside an album placeholder: {{Album by [[Artist]]}} */
+function countNestedArtists(raw: string): number {
+  return [...raw.matchAll(/\{\{([^}]+)\}\}/g)].reduce(
+    (sum, m) => sum + countMatches(m[1], /\[\[[^\]]+\]\]/g),
+    0
+  );
+}
+
+/**
+ * Placeholder integrity, the owner's top concern, in both directions: a model
+ * that drops the convention (zero links), a substitution that silently loses a
+ * placeholder (count mismatch), and a malformed placeholder that survives
+ * substitution as literal brackets on the page.
+ */
+function placeholderViolations(input: ScoringInput): string[] {
+  const { task, content, raw, placeholders } = input;
+  const violations: string[] = [];
+
+  if (/\[\[|\{\{/.test(content)) {
+    violations.push(`unreplaced placeholder: ${firstMatch(content, /(\[\[|\{\{)[^\n]{0,40}/)}`);
+  }
+
+  // Remove everything that legitimately carries brackets (our <a> tags,
+  // Markdown links, footnote markers, which have their own check) and flag
+  // what is left: [[Artist], {Album}, [[Artist]]] and the like.
+  const residue = content
+    .replace(/<[^>]+>/g, '')
+    .replace(/\[[^\]\n]*\]\([^)\s]*\)/g, '')
+    .replace(/\[\d+\]/g, '');
+  if (/[[\]{}]/.test(residue)) {
+    violations.push(`stray bracket: ${firstMatch(residue, /.{0,20}[[\]{}].{0,20}/)}`);
+  }
+
+  const linksProduced = countLinks(content);
+  const minLinks = MIN_LINKS[task];
+  if (minLinks !== undefined && linksProduced < minLinks) {
+    violations.push(`${linksProduced} search links (expected at least ${minLinks})`);
+  }
+
+  const albumLinks = countMatches(content, /\]\(\/album\?q=|href="\/album\?q=/g);
+  const artistLinks = countMatches(content, /\]\(\/artist\?q=|href="\/artist\?q=/g);
+  if (albumLinks !== placeholders.albums) {
+    violations.push(`${placeholders.albums} album placeholders became ${albumLinks} links`);
+  }
+  if (!STRIPS_NESTED_ARTISTS.has(task)) {
+    if (artistLinks !== placeholders.artists) {
+      violations.push(`${placeholders.artists} artist placeholders became ${artistLinks} links`);
+    }
+  } else if (raw !== null) {
+    const expected = placeholders.artists - countNestedArtists(raw);
+    if (artistLinks !== expected) {
+      violations.push(`${expected} unnested artist placeholders became ${artistLinks} links`);
+    }
+  } else if (artistLinks > placeholders.artists) {
+    // Saved before rawContent existed: the nested count is unknowable, so only
+    // the direction that can never be legitimate is checked.
+    violations.push(`${placeholders.artists} artist placeholders became ${artistLinks} links`);
+  }
+
+  return violations;
+}
+
+/** Every content check. Runtime errors are recorded by the caller, not here. */
+function scoreRecord(input: ScoringInput): string[] {
+  const { task, content } = input;
   const violations: string[] = [];
 
   if (FALLBACK_PATTERN.test(content.trim())) {
     violations.push('fallback: model said there is not enough information');
   }
 
-  // The owner's top concern: a placeholder the substitution step did not
-  // replace renders as literal brackets on the page.
-  if (/\[\[|\{\{/.test(content)) {
-    violations.push(`unreplaced placeholder: ${firstMatch(content, /(\[\[|\{\{)[^\n]{0,40}/)}`);
-  }
+  violations.push(...placeholderViolations(input));
   if (/\]\(https?:\/\//.test(content)) {
     violations.push(`external markdown link: ${firstMatch(content, /\]\(https?:\/\/[^)\s]*/)}`);
   }
@@ -343,14 +453,19 @@ function findViolations(task: AITask, output: CaseOutput, raw: string): string[]
   }
 
   if (task === 'userInsightsRecommendations') {
-    const boldPairs = countMatches(raw, /\*\*[^*]+\*\*/g);
+    // content is the raw model text for this task (see buildCases)
+    const boldPairs = countMatches(content, /\*\*[^*]+\*\*/g);
     if (boldPairs < 3 || boldPairs > 5) {
       violations.push(`${boldPairs} bold pairs (expected 3-5)`);
     }
-    const parsed = output.parsedRecommendations ?? 0;
-    if (parsed !== boldPairs) {
+    const parsed = input.parsedRecommendations;
+    if (parsed !== undefined && parsed !== boldPairs) {
       violations.push(`parser recovered ${parsed} of ${boldPairs} bold entries`);
     }
+  }
+
+  if (!input.truncated && !isCacheableResponse(input.raw ?? content, undefined, task, input.label)) {
+    violations.push('empty response');
   }
 
   return violations;
@@ -390,10 +505,18 @@ async function runCase(evalCase: EvalCase, kv: KVNamespace, keys: { openai: stri
   const raw = primary?.content ?? '';
   const truncated = metadata?.truncated ?? false;
 
-  const violations = error ? [`error: ${error}`] : findViolations(task, output, raw);
-  if (!error && !truncated && !isCacheableResponse(raw, metadata, task, label)) {
-    violations.push('empty response');
-  }
+  const placeholders = countPlaceholders(raw);
+  const violations = error
+    ? [`error: ${error}`]
+    : scoreRecord({
+        task,
+        label,
+        content: output.content,
+        raw,
+        placeholders,
+        truncated,
+        parsedRecommendations: output.parsedRecommendations,
+      });
 
   const config = AI_TASKS[task];
   return {
@@ -402,10 +525,7 @@ async function runCase(evalCase: EvalCase, kv: KVNamespace, keys: { openai: stri
     provider: metadata?.provider ?? config.provider,
     model: metadata?.model ?? config.model,
     content: output.content,
-    placeholders: {
-      artists: countMatches(raw, /\[\[[^\]]+\]\]/g),
-      albums: countMatches(raw, /\{\{[^}]+\}\}/g),
-    },
+    placeholders,
     linksProduced: countLinks(output.content),
     violations,
     truncated,
@@ -415,6 +535,34 @@ async function runCase(evalCase: EvalCase, kv: KVNamespace, keys: { openai: stri
     outputTokens: sumUsage(rawCalls, 'outputTokens'),
     ms,
     calls: rawCalls.length,
+    rawContent: raw,
+    ...(output.parsedRecommendations !== undefined && {
+      parsedRecommendations: output.parsedRecommendations,
+    }),
+  };
+}
+
+/** Rerun the current checks over a saved record. Runtime errors carry over. */
+function rescoreRecord(record: EvalRecord): EvalRecord {
+  const carried = record.violations.filter((v) => v.startsWith('error: '));
+  if (carried.length) return record;
+
+  // userInsightsRecommendations stores the raw text as content, so it never
+  // needs rawContent; every other task falls back to the legacy-safe checks.
+  const raw =
+    record.rawContent ?? (record.task === 'userInsightsRecommendations' ? record.content : null);
+  return {
+    ...record,
+    linksProduced: countLinks(record.content),
+    violations: scoreRecord({
+      task: record.task,
+      label: describeInput(record.task, record.input),
+      content: record.content,
+      raw,
+      placeholders: record.placeholders,
+      truncated: record.truncated,
+      parsedRecommendations: record.parsedRecommendations,
+    }),
   };
 }
 
@@ -482,15 +630,15 @@ function blockquote(text: string): string {
     .join('\n');
 }
 
-function renderSummary(label: string, records: EvalRecord[], wallMs: number, ref: string): string {
+/** runInfo: one sentence on where the records came from (live run or rescore). */
+function renderSummary(label: string, records: EvalRecord[], runInfo: string): string {
   const lines: string[] = [];
   const total = (field: 'inputTokens' | 'outputTokens') =>
     records.reduce((sum, r) => sum + (r[field] ?? 0), 0);
 
   lines.push(`# AI eval: ${label}`, '');
   lines.push(
-    `Run ${new Date().toISOString()} at ${ref}. ${records.length} rows, ` +
-      `wall time ${(wallMs / 1000).toFixed(0)}s, ` +
+    `${runInfo} ${records.length} rows, ` +
       `${total('inputTokens')} input / ${total('outputTokens')} output tokens.`,
     ''
   );
@@ -561,8 +709,8 @@ function gitRef(): string {
 // Main
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<number> {
-  const { label, concurrency } = parseArgs(process.argv.slice(2));
+/** Live run: one API call (or two) per case. */
+async function runEval(concurrency: number): Promise<{ records: EvalRecord[]; runInfo: string }> {
   const inputs = JSON.parse(readFileSync(join(SCRIPT_DIR, 'ai-eval-inputs.json'), 'utf8')) as EvalInputs;
 
   const devVars = readDevVars(join(WEB_ROOT, '.dev.vars'));
@@ -573,23 +721,57 @@ async function main(): Promise<number> {
   };
 
   const cases = buildCases(inputs);
-  console.log(`[eval] ${label}: ${cases.length} cases, concurrency ${concurrency}`);
+  console.log(`[eval] ${cases.length} cases, concurrency ${concurrency}`);
 
   const kv = createMemoryKV();
   const started = performance.now();
   const records = await runAll(cases, concurrency, (c) => runCase(c, kv, keys));
-  const wallMs = Math.round(performance.now() - started);
+  const wallSeconds = ((performance.now() - started) / 1000).toFixed(0);
 
-  const outDir = join(WEB_ROOT, 'eval-output', label);
+  return {
+    records,
+    runInfo: `Run ${new Date().toISOString()} at ${gitRef()}, wall time ${wallSeconds}s.`,
+  };
+}
+
+/** No API calls: the current checks over a saved run's records. */
+function rescoreEval(sourceLabel: string): EvalRecord[] {
+  const sourceDir = join(WEB_ROOT, 'eval-output', sourceLabel);
+  if (!existsSync(sourceDir)) {
+    throw new Error(`No saved run at ${sourceDir}`);
+  }
+  return TASK_ORDER.flatMap((task) => {
+    const path = join(sourceDir, `${task}.json`);
+    if (!existsSync(path)) return [];
+    return (JSON.parse(readFileSync(path, 'utf8')) as EvalRecord[]).map(rescoreRecord);
+  });
+}
+
+async function main(): Promise<number> {
+  const { mode, label, concurrency } = parseArgs(process.argv.slice(2));
+
+  let records: EvalRecord[];
+  let outLabel: string;
+  let runInfo: string;
+  if (mode === 'rescore') {
+    records = rescoreEval(label);
+    outLabel = `${label}-rescored`;
+    runInfo = `Rescored ${new Date().toISOString()} from saved run "${label}" with the checks at ${gitRef()}; no API calls.`;
+  } else {
+    ({ records, runInfo } = await runEval(concurrency));
+    outLabel = label;
+  }
+
+  const outDir = join(WEB_ROOT, 'eval-output', outLabel);
   mkdirSync(outDir, { recursive: true });
   for (const task of TASK_ORDER) {
     const rows = records.filter((r) => r.task === task);
     writeFileSync(join(outDir, `${task}.json`), `${JSON.stringify(rows, null, 2)}\n`);
   }
-  writeFileSync(join(outDir, 'summary.md'), renderSummary(label, records, wallMs, gitRef()));
+  writeFileSync(join(outDir, 'summary.md'), renderSummary(outLabel, records, runInfo));
 
   const failing = records.filter((r) => r.violations.length || r.truncated);
-  console.log(`[eval] Wrote ${outDir}/summary.md (${records.length} rows, ${failing.length} failing, ${(wallMs / 1000).toFixed(0)}s)`);
+  console.log(`[eval] Wrote ${outDir}/summary.md (${records.length} rows, ${failing.length} failing)`);
   for (const r of failing) {
     const reasons = [...(r.truncated ? ['truncated'] : []), ...r.violations];
     console.log(`[eval]   ${r.task} | ${describeInput(r.task, r.input)} | ${reasons.join('; ')}`);
