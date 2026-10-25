@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
 import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
-import { getTaskConfig, AI_TASKS } from '@listentomore/config';
+import { getTaskConfig, AI_TASKS, type AITask } from '@listentomore/config';
 import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -531,9 +531,10 @@ describe('AIService.getClientForTask', () => {
     return new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
   }
 
-  it('returns the OpenAI client for an openai-provider task', () => {
+  it('returns the Anthropic client for an anthropic-provider task', () => {
     const ai = makeService();
-    expect(ai.getClientForTask('artistSummary')).toBe(ai.openai);
+    expect(ai.getClientForTask('artistSummary')).toBe(ai.anthropic);
+    expect(ai.getClientForTask('listenAi')).toBe(ai.anthropic);
   });
 
   it('exposes a constructed anthropic client', () => {
@@ -699,10 +700,10 @@ describe('generateUserInsightsSummary — scrub pass', () => {
 });
 
 describe('userInsightsSummary provider flip', () => {
-  it('is configured for anthropic sonnet', () => {
+  it('is configured for anthropic opus', () => {
     const cfg = getTaskConfig('userInsightsSummary');
     expect(cfg.provider).toBe('anthropic');
-    expect(cfg.model).toBe('claude-sonnet-5');
+    expect(cfg.model).toBe('claude-opus-5-5');
   });
 
   it('routes the task to the anthropic client', () => {
@@ -945,6 +946,22 @@ describe('truncated responses are not cached', () => {
 });
 
 describe('AI task token budgets', () => {
+  it('every task runs on anthropic with explicit low effort', () => {
+    for (const task of Object.keys(AI_TASKS) as AITask[]) {
+      expect(getTaskConfig(task).provider).toBe('anthropic');
+      expect(getTaskConfig(task).reasoning).toBe('low');
+    }
+  });
+
+  it('splits models as designed', () => {
+    for (const t of ['artistSentence', 'listenAi', 'randomFact'] as const) {
+      expect(getTaskConfig(t).model).toBe('claude-sonnet-5-5');
+    }
+    for (const t of ['artistSummary', 'albumDetail', 'genreSummary', 'albumRecommendations', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
+      expect(getTaskConfig(t).model).toBe('claude-opus-5-5');
+    }
+  });
+
   // Reasoning effort must be explicit: the 5.6 tiers default to 'medium',
   // which is what produced the 2025-token reasoning outlier that truncated
   // albumDetail. See the maxTokens note in packages/config/src/ai.ts.
@@ -1195,13 +1212,13 @@ describe('withAgentTracing', () => {
   it('AIService wraps task clients only when tracing is provided', async () => {
     const { tracing, spans } = createFakeTracing();
     const untraced = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
-    expect(untraced.getClientForTask('artistSentence')).toBe(untraced.openai);
+    expect(untraced.getClientForTask('artistSentence')).toBe(untraced.anthropic);
 
     const traced = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV(), tracing });
     const client = traced.getClientForTask('artistSentence');
-    expect(client).not.toBe(traced.openai);
+    expect(client).not.toBe(traced.anthropic);
 
-    const spy = vi.spyOn(traced.openai, 'chatCompletion').mockResolvedValue({ content: 'ok' });
+    const spy = vi.spyOn(traced.anthropic, 'chatCompletion').mockResolvedValue({ content: 'ok' });
     await client.chatCompletion(options);
     expect(spy).toHaveBeenCalledWith(options);
     expect(spans.map((s) => s.name)).toEqual(['invoke_agent artistSentence', 'chat gpt-5.6-terra']);
