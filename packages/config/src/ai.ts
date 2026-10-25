@@ -17,7 +17,10 @@ export const AI_PROVIDERS = {
 export type AIProvider = keyof typeof AI_PROVIDERS;
 
 /**
- * Reasoning effort levels for GPT-5 models (Responses API only)
+ * Reasoning effort: the shared config vocabulary for both providers.
+ * OpenAIClient sends it as the Responses API reasoning effort; AnthropicClient
+ * maps it to output_config.effort ('none' and 'minimal' become 'low').
+ * OpenAI levels by model:
  * - GPT-5.6 (sol/terra/luna): 'none' | 'low' | 'medium' (default) | 'high' | 'xhigh' | 'max'
  * - GPT-5.4: 'none' (default) | 'low' | 'medium' | 'high' | 'xhigh'
  * - GPT-5/gpt-5-mini: 'minimal' | 'low' | 'medium' (default) | 'high'
@@ -60,17 +63,17 @@ export interface AITaskConfig {
  * latency-sensitive, where the cheaper tier earns its keep. randomFact runs on
  * gpt-5.6-luna.
  *
- * ┌──────────────────┬───────────────┬────────────────┬──────────────────┐
- * │ Model            │ $/1M in/out   │ Provider       │ Role             │
- * ├──────────────────┼───────────────┼────────────────┼──────────────────┤
- * │ claude-opus-5-5  │ $4.00 / $20.00│ anthropic      │ long-form tasks  │
- * ├──────────────────┼───────────────┼────────────────┼──────────────────┤
- * │ claude-sonnet-5-5│ $2.00 / $10.00│ anthropic      │ short / uncached │
- * ├──────────────────┼───────────────┼────────────────┼──────────────────┤
- * │ gpt-5.6-terra    │ $2.00 / $12.00│ openai         │ switch-back      │
- * ├──────────────────┼───────────────┼────────────────┼──────────────────┤
- * │ gpt-5.6-luna     │ $0.20 / $1.20 │ openai         │ switch-back (low)│
- * └──────────────────┴───────────────┴────────────────┴──────────────────┘
+ * ┌──────────────────┬───────────────┬────────────────┬──────────────────────────┐
+ * │ Model            │ $/1M in/out   │ Provider       │ Role                     │
+ * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
+ * │ claude-opus-5-5  │ $4.00 / $20.00│ anthropic      │ long-form tasks          │
+ * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
+ * │ claude-sonnet-5-5│ $2.00 / $10.00│ anthropic      │ short / uncached         │
+ * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
+ * │ gpt-5.6-terra    │ $2.00 / $12.00│ openai         │ switch-back              │
+ * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
+ * │ gpt-5.6-luna     │ $0.20 / $1.20 │ openai         │ randomFact / switch-back │
+ * └──────────────────┴───────────────┴────────────────┴──────────────────────────┘
  * Claude web search costs $10 per 1,000 searches; search results are billed
  * as input tokens on top of that.
  *
@@ -101,15 +104,16 @@ export interface AITaskConfig {
  *
  * Two rules follow, and both are applied below:
  *  1. Set `reasoning` explicitly on every task. The default effort is
- *     'medium' on both Opus 5.5 and GPT-5.6, which is what produced the
- *     2025-token outlier. 'low' held reasoning under ~560 tokens on the same
- *     prompts and ran faster.
+ *     'medium' on both Opus 5.5 and GPT-5.6. Under GPT-5.6, 'medium'
+ *     produced the 2025-token outlier above, and 'low' held reasoning under
+ *     ~560 tokens on the same prompts and ran faster; neither figure was
+ *     measured on Opus.
  *  2. Give long-form tasks 3-4x headroom over worst-observed total spend.
  *     Only tokens actually generated are billed, so the ceiling is free.
  *
  * Web search makes both worse: each search hop emits its own reasoning, and
- * albumRecommendations (search always on) burned 831 reasoning tokens against
- * a 1000 cap on one of four test albums.
+ * under GPT-5.6 albumRecommendations (search always on) burned 831 reasoning
+ * tokens against a 1000 cap on one of four test albums.
  */
 export const AI_TASKS = {
   artistSummary: {
@@ -165,7 +169,8 @@ export const AI_TASKS = {
     // safer one..."), 461-521 chars against the 300-char limit, on 2 of 4 runs.
     provider: 'openai',
     // luna, not terra: this task is uncached, so every call hits the API, and
-    // Terra's rate is ~8x input / 6x output for one line of music trivia.
+    // Terra's rate is 10x Luna's on both input and output ($2/$12 vs
+    // $0.20/$1.20) for one line of music trivia.
     model: 'gpt-5.6-luna',
     maxTokens: 10000,
     temperature: 1,
@@ -188,9 +193,9 @@ export const AI_TASKS = {
   albumRecommendations: {
     provider: 'anthropic',
     model: 'claude-opus-5-5',
-    // Search is always on here, and each hop reasons: 831 reasoning tokens
-    // against the old 1000 cap on 1 of 4 test albums, and 2 of 7 entries
-    // generated after the model switch were truncated in KV.
+    // Search is always on here, and each hop reasons: under GPT-5.6, 831
+    // reasoning tokens against the old 1000 cap on 1 of 4 test albums, and 2
+    // of 7 entries generated after that model switch were truncated in KV.
     maxTokens: 3000,
     temperature: 1,
     cacheTtlDays: 30,

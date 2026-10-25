@@ -65,7 +65,7 @@ export const AI_TASKS = {
 } as const satisfies Record<string, AITaskConfig>;
 ```
 
-Both secrets (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) must be set on a Worker for either provider to work.
+Each API key is needed only by the tasks routed to its provider: `ANTHROPIC_API_KEY` for Anthropic tasks, `OPENAI_API_KEY` for OpenAI tasks. Today both must be set, because `randomFact` runs on OpenAI and every other task on Anthropic.
 
 ### Routing
 
@@ -82,7 +82,8 @@ Both secrets (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) must be set on a Worker for
 Anthropic client behavior worth knowing:
 
 - `stop_reason: max_tokens` and `refusal` both mark the response uncacheable.
-- A `pause_turn` stop is resumed once automatically.
+- A `pause_turn` stop is resumed once automatically. Usage covers both requests; a second `pause_turn` marks the response uncacheable.
+- When a response contains search results, only text after the last result is kept, so narration such as "I'll search for..." never reaches the page or the cache.
 - Requests with web search use the 60-second timeout tier.
 - `max_uses: 5` allows album recommendations to verify the seed album plus three picks (four searches). The newer `web_search_20260209` tool was tried first; its model-written filter scripts crashed while still consuming searches, which produced empty summaries.
 
@@ -104,7 +105,7 @@ Controls how many reasoning (GPT) or thinking (Claude) tokens the model spends b
 | `minimal` | OpenAI `gpt-5` / `gpt-5-mini` only. Claude: treated as `low` |
 | `low` | Light reasoning, fast. Used by most tasks |
 | `medium` | Default on Opus 5.5 and the GPT-5.6 tiers. Used by `userInsightsRecommendations` |
-| `high`, `xhigh`, `max` | Deeper and slower; `max` is GPT-5.6 only |
+| `high`, `xhigh`, `max` | Deeper and slower. Claude receives all three unchanged; on OpenAI, `max` exists on GPT-5.6 only |
 
 Set `reasoning` explicitly on every task. On OpenAI, an unset value falls to the model default (`medium` on GPT-5.6), which is slower and spends more tokens. The Anthropic client maps an unset value to `low`.
 

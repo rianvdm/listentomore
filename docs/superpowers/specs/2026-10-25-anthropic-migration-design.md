@@ -70,13 +70,13 @@ Anthropic client mapping:
 
 ### 4. Web search in the Anthropic client
 
-- Request: add the tool above when `webSearch` is set. `max_uses: 3` is the ceiling per call (my call; `albumRecommendations` is the only task that routinely needs more than one search).
+- Request: add the tool above when `webSearch` is set. `max_uses: 5` is the ceiling per call, set by the round-4 note below; `albumRecommendations` is the only task that routinely needs more than one search.
 - Tool version changed from `web_search_20260209` to the basic `web_search_20250305` during eval round 1: the dynamic-filtering variant's model-written filter scripts crashed and still consumed `max_uses`, so searches ran out and the model returned "Not enough information" instead of a summary.
 - `max_uses` raised from 3 to 5 in eval round 4, client-wide: `albumRecommendations` verifies the seed plus 3 picks, which needs 4 searches; at 3 Claude returned only 2 picks.
 - Response handling: collect **only** `text` blocks, in order, and join them. Ignore `server_tool_use`, `web_search_tool_result`, and `thinking` blocks. Ignore the `citations` array on text blocks; the prose itself must carry no citation markup. Set `features.webSearchUsed` when any `server_tool_use` block has `name: 'web_search'`, and record `usage.server_tool_use.web_search_requests` in metadata for cost visibility.
 - `stop_reason: 'pause_turn'`: resend with the assistant turn appended (no extra user message) at most once, then treat as a normal response. Expected to be rare for single-shot prompts.
 - `stop_reason: 'refusal'`: log at warn, return the content, mark `truncated: true` so `isCacheableResponse()` refuses to cache it. (Reusing the flag avoids a new field; the log line says "refusal".) No server-side fallback parameter: a refusal on a music summary is rare enough to regenerate next request.
-- Timeout: web-search tasks use the `verySlow` (60s) tier of `fetchWithTimeout`; others stay on `slow` (30s). The current 30s is tight for Opus plus three searches.
+- Timeout: web-search tasks use the `verySlow` (60s) tier of `fetchWithTimeout`; others stay on `slow` (30s). The current 30s is tight for Opus plus up to five searches (the round-4 ceiling).
 - Reference: `https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool.md` for block shapes. Verify against the live doc rather than memory; the tool version string above is current as of this design.
 
 ### 5. Route the hardwired tasks through the provider router
