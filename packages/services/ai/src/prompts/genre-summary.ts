@@ -91,6 +91,8 @@ Enclose artist names in double square brackets like [[Artist Name]] and album na
 
 Use Markdown formatting for the summary. Do NOT start with a preamble or end with follow-up suggestions.
 
+Begin with the opening sentence of the first paragraph. The page already displays the genre's name as a heading directly above your text, so do not open with a title, a heading, or the genre's name on a line of its own.
+
 IMPORTANT: If you cannot find sufficient verifiable information about this music genre, respond with ONLY the text "Not enough information available for this genre." and nothing else. Do not explain what you couldn't find or apologize.`;
 
 

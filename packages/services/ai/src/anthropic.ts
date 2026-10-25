@@ -36,6 +36,18 @@ export function mapReasoningToEffort(
   return reasoning ? EFFORT_BY_REASONING[reasoning] : 'low';
 }
 
+// Basic web search, not the dynamic-filtering web_search_20260209. The 2026
+// variant runs each search from model-written code inside code execution; in
+// the eval its first script crashed on every traced call and still spent
+// searches, so max_uses: 3 ran out before recommendations could be verified and
+// the model fell back to "Not enough information". With the basic variant each
+// search is a direct tool call, so the ceiling buys three real searches.
+export const WEB_SEARCH_TOOL = {
+  type: 'web_search_20250305',
+  name: 'web_search',
+  max_uses: 3,
+} as const;
+
 // Server-side web search runs inside the request, so it needs the 60s preset.
 export function timeoutPresetFor(webSearch: boolean | undefined): TimeoutPreset {
   return webSearch ? 'verySlow' : 'slow';
@@ -87,7 +99,7 @@ export class AnthropicClient implements ChatClient {
     const effort = mapReasoningToEffort(options.reasoning);
     body.output_config = { effort };
     if (options.webSearch === true) {
-      body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }];
+      body.tools = [WEB_SEARCH_TOOL];
     }
 
     let data = await this.post(body, options.webSearch);

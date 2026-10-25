@@ -388,7 +388,8 @@ describe('AnthropicClient.chatCompletion', () => {
     await new AnthropicClient('key').chatCompletion({
       model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
     });
-    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }]);
+    // Basic search, not dynamic filtering: see WEB_SEARCH_TOOL in anthropic.ts.
+    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
 
     mockFetch = setupFetchMock([
       { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
