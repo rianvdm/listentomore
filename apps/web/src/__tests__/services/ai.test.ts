@@ -947,11 +947,15 @@ describe('truncated responses are not cached', () => {
 });
 
 describe('AI task token budgets', () => {
-  // userInsightsRecommendations runs at medium: at low effort it filtered its
-  // exclusion list in visible text (eval round 2). See its note in ai.ts.
-  it('every task runs on anthropic with explicit effort, low unless noted', () => {
+  // albumRecommendations and randomFact stay on OpenAI after eval round 3, and
+  // userInsightsRecommendations runs at medium effort (eval round 2). See
+  // their notes in packages/config/src/ai.ts.
+  const OPENAI_TASKS: AITask[] = ['albumRecommendations', 'randomFact'];
+
+  it('every Claude task runs with explicit effort, low unless noted', () => {
     const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsRecommendations'];
     for (const task of Object.keys(AI_TASKS) as AITask[]) {
+      if (OPENAI_TASKS.includes(task)) continue;
       expect(getTaskConfig(task).provider).toBe('anthropic');
       expect(getTaskConfig(task).reasoning).toBe(
         MEDIUM_EFFORT_TASKS.includes(task) ? 'medium' : 'low'
@@ -960,12 +964,14 @@ describe('AI task token budgets', () => {
   });
 
   it('splits models as designed', () => {
-    for (const t of ['artistSentence', 'listenAi', 'randomFact'] as const) {
+    for (const t of ['artistSentence', 'listenAi'] as const) {
       expect(getTaskConfig(t).model).toBe('claude-sonnet-5-5');
     }
-    for (const t of ['artistSummary', 'albumDetail', 'genreSummary', 'albumRecommendations', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
+    for (const t of ['artistSummary', 'albumDetail', 'genreSummary', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
       expect(getTaskConfig(t).model).toBe('claude-opus-5-5');
     }
+    expect(getTaskConfig('albumRecommendations')).toMatchObject({ provider: 'openai', model: 'gpt-5.6-terra' });
+    expect(getTaskConfig('randomFact')).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' });
   });
 
   // Reasoning effort must be explicit: the 5.6 tiers default to 'medium',
