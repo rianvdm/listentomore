@@ -49,16 +49,16 @@ export interface AITaskConfig {
 }
 
 /**
- * AI task configurations. Seven tasks run on Anthropic Claude; two stay on
- * OpenAI after the migration eval (see their entries). The OpenAI client stays
- * wired up as a switch-back path: flip a task's `provider` and `model` to the
- * GPT-5.6 row below and it works without code changes.
+ * AI task configurations. Eight tasks run on Anthropic Claude; randomFact
+ * stays on OpenAI after the migration eval (see its entry). The OpenAI client
+ * stays wired up as a switch-back path: flip a task's `provider` and `model`
+ * to the GPT-5.6 row below and it works without code changes.
  *
- * Five tasks run on claude-opus-5-5 (artistSummary, albumDetail, genreSummary,
- * userInsightsSummary, userInsightsRecommendations). Two run on
- * claude-sonnet-5-5 (artistSentence, listenAi): short output, latency-sensitive,
- * where the cheaper tier earns its keep. albumRecommendations runs on
- * gpt-5.6-terra and randomFact on gpt-5.6-luna.
+ * Six tasks run on claude-opus-5-5 (artistSummary, albumDetail, genreSummary,
+ * albumRecommendations, userInsightsSummary, userInsightsRecommendations). Two
+ * run on claude-sonnet-5-5 (artistSentence, listenAi): short output,
+ * latency-sensitive, where the cheaper tier earns its keep. randomFact runs on
+ * gpt-5.6-luna.
  *
  * ┌──────────────────┬───────────────┬────────────────┬──────────────────┐
  * │ Model            │ $/1M in/out   │ Provider       │ Role             │
@@ -186,12 +186,8 @@ export const AI_TASKS = {
   },
 
   albumRecommendations: {
-    // Stays on OpenAI after eval round 3: the prompt asks Claude to verify the
-    // seed and each pick by search, which takes 4 searches against the
-    // web search tool's max_uses of 3. Claude returned "Not enough
-    // information" (round 1) or only 2 picks (round 3) instead of guessing.
-    provider: 'openai',
-    model: 'gpt-5.6-terra',
+    provider: 'anthropic',
+    model: 'claude-opus-5-5',
     // Search is always on here, and each hop reasons: 831 reasoning tokens
     // against the old 1000 cap on 1 of 4 test albums, and 2 of 7 entries
     // generated after the model switch were truncated in KV.

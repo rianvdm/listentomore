@@ -3,12 +3,14 @@
 //
 // Usage (from apps/web):
 //   pnpm dlx tsx scripts/ai-eval.ts --label openai-baseline [--concurrency 4]
+//   pnpm dlx tsx scripts/ai-eval.ts --label claude-r4 --only artistSummary,albumDetail
 //   pnpm dlx tsx scripts/ai-eval.ts --rescore openai-baseline
 //
 // --label spends real money: every case is a live API call, and nothing is
 // served from cache because each run gets a fresh in-memory KV. --rescore makes
 // no API calls: it reruns the current checks over a saved run and writes the
-// result to eval-output/<label>-rescored/. Exit code 1 means at least one record
+// result to eval-output/<label>-rescored/. --only <task,task,...> limits a live
+// run to those tasks; the output holds only their JSON files. Exit code 1 means at least one record
 // has a violation or was truncated; 2 means the run could not start.
 
 import { execSync } from 'node:child_process';
@@ -135,6 +137,8 @@ interface CliArgs {
   mode: 'run' | 'rescore';
   label: string;
   concurrency: number;
+  /** Tasks to run, in TASK_ORDER; every task when --only is absent. */
+  tasks: AITask[];
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -157,7 +161,26 @@ function parseArgs(argv: string[]): CliArgs {
     throw new Error('--concurrency must be a positive integer');
   }
 
-  return { mode: rescoreLabel ? 'rescore' : 'run', label, concurrency };
+  const only = valueOf('--only');
+  if (only !== undefined && rescoreLabel) {
+    throw new Error('--only applies to --label runs; --rescore rescores whatever the saved run holds');
+  }
+  const tasks = only === undefined ? TASK_ORDER : parseTaskList(only);
+
+  return { mode: rescoreLabel ? 'rescore' : 'run', label, concurrency, tasks };
+}
+
+/** Comma-separated task names, validated and returned in TASK_ORDER. */
+function parseTaskList(value: string): AITask[] {
+  const names = value.split(',').map((n) => n.trim()).filter(Boolean);
+  const unknown = names.filter((n) => !TASK_ORDER.includes(n as AITask));
+  if (!names.length || unknown.length) {
+    throw new Error(
+      `--only takes a comma-separated list of tasks from: ${TASK_ORDER.join(', ')}` +
+        (unknown.length ? ` (unknown: ${unknown.join(', ')})` : '')
+    );
+  }
+  return TASK_ORDER.filter((t) => names.includes(t));
 }
 
 /** Parse KEY=value lines from a .dev.vars file. Values may be quoted. */
@@ -710,18 +733,22 @@ function gitRef(): string {
 // ---------------------------------------------------------------------------
 
 /** Live run: one API call (or two) per case. */
-async function runEval(concurrency: number): Promise<{ records: EvalRecord[]; runInfo: string }> {
+async function runEval(
+  concurrency: number,
+  tasks: AITask[]
+): Promise<{ records: EvalRecord[]; runInfo: string }> {
   const inputs = JSON.parse(readFileSync(join(SCRIPT_DIR, 'ai-eval-inputs.json'), 'utf8')) as EvalInputs;
 
   const devVars = readDevVars(join(WEB_ROOT, '.dev.vars'));
-  const providers = new Set(TASK_ORDER.map((t) => AI_TASKS[t].provider as string));
+  const providers = new Set(tasks.map((t) => AI_TASKS[t].provider as string));
   const keys = {
     openai: resolveKey('OPENAI_API_KEY', devVars, providers.has('openai')),
     anthropic: resolveKey('ANTHROPIC_API_KEY', devVars, providers.has('anthropic')),
   };
 
-  const cases = buildCases(inputs);
-  console.log(`[eval] ${cases.length} cases, concurrency ${concurrency}`);
+  const cases = buildCases(inputs).filter((c) => tasks.includes(c.task));
+  const scope = tasks.length === TASK_ORDER.length ? 'all tasks' : tasks.join(', ');
+  console.log(`[eval] ${cases.length} cases (${scope}), concurrency ${concurrency}`);
 
   const kv = createMemoryKV();
   const started = performance.now();
@@ -748,7 +775,7 @@ function rescoreEval(sourceLabel: string): EvalRecord[] {
 }
 
 async function main(): Promise<number> {
-  const { mode, label, concurrency } = parseArgs(process.argv.slice(2));
+  const { mode, label, concurrency, tasks } = parseArgs(process.argv.slice(2));
 
   let records: EvalRecord[];
   let outLabel: string;
@@ -758,14 +785,16 @@ async function main(): Promise<number> {
     outLabel = `${label}-rescored`;
     runInfo = `Rescored ${new Date().toISOString()} from saved run "${label}" with the checks at ${gitRef()}; no API calls.`;
   } else {
-    ({ records, runInfo } = await runEval(concurrency));
+    ({ records, runInfo } = await runEval(concurrency, tasks));
     outLabel = label;
   }
 
   const outDir = join(WEB_ROOT, 'eval-output', outLabel);
   mkdirSync(outDir, { recursive: true });
+  // Tasks left out by --only get no file, so a later --rescore skips them.
   for (const task of TASK_ORDER) {
     const rows = records.filter((r) => r.task === task);
+    if (!rows.length) continue;
     writeFileSync(join(outDir, `${task}.json`), `${JSON.stringify(rows, null, 2)}\n`);
   }
   writeFileSync(join(outDir, 'summary.md'), renderSummary(outLabel, records, runInfo));

@@ -85,7 +85,7 @@ export async function generateGenreSummary(
 
   const config = getTaskConfig('genreSummary');
 
-  const prompt = `Write a 2-3 paragraph summary of the music genre "${genreName}" (be sure to add line breaks between paragraphs). Describe the history, musical elements that characterize the genre, the artists who pioneered it, and notable events. Follow this with a bullet list of 4-6 seminal albums that provide a good overview of the genre, with a one-sentence description of each album's significance. Format each album entry as: **{{Album Name by Artist Name}}**: Description.
+  const prompt = `Write a 2-3 paragraph summary of the music genre "${genreName}" (be sure to add line breaks between paragraphs). Describe the history, musical elements that characterize the genre, the artists who pioneered it, and notable events. Follow this with a bullet list of 4-6 seminal albums that provide a good overview of the genre, with a one-sentence description of each album's significance. Keep the whole summary under 350 words. Format each album entry as: **{{Album Name by Artist Name}}**: Description.
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 

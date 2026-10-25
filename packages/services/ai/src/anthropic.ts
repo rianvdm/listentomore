@@ -39,13 +39,15 @@ export function mapReasoningToEffort(
 // Basic web search, not the dynamic-filtering web_search_20260209. The 2026
 // variant runs each search from model-written code inside code execution; in
 // the eval its first script crashed on every traced call and still spent
-// searches, so max_uses: 3 ran out before recommendations could be verified and
+// searches, so max_uses ran out before recommendations could be verified and
 // the model fell back to "Not enough information". With the basic variant each
-// search is a direct tool call, so the ceiling buys three real searches.
+// search is a direct tool call, so the ceiling counts real searches.
+// max_uses is 5, not 3 (raised in eval round 4): albumRecommendations verifies
+// the seed plus 3 picks, which needs 4 searches; at 3 Claude returned 2 picks.
 export const WEB_SEARCH_TOOL = {
   type: 'web_search_20250305',
   name: 'web_search',
-  max_uses: 3,
+  max_uses: 5,
 } as const;
 
 // Server-side web search runs inside the request, so it needs the 60s preset.

@@ -389,7 +389,7 @@ describe('AnthropicClient.chatCompletion', () => {
       model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
     });
     // Basic search, not dynamic filtering: see WEB_SEARCH_TOOL in anthropic.ts.
-    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
+    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]);
 
     mockFetch = setupFetchMock([
       { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
@@ -947,10 +947,10 @@ describe('truncated responses are not cached', () => {
 });
 
 describe('AI task token budgets', () => {
-  // albumRecommendations and randomFact stay on OpenAI after eval round 3, and
+  // randomFact stays on OpenAI after eval round 3, and
   // userInsightsRecommendations runs at medium effort (eval round 2). See
   // their notes in packages/config/src/ai.ts.
-  const OPENAI_TASKS: AITask[] = ['albumRecommendations', 'randomFact'];
+  const OPENAI_TASKS: AITask[] = ['randomFact'];
 
   it('every Claude task runs with explicit effort, low unless noted', () => {
     const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsRecommendations'];
@@ -967,10 +967,9 @@ describe('AI task token budgets', () => {
     for (const t of ['artistSentence', 'listenAi'] as const) {
       expect(getTaskConfig(t).model).toBe('claude-sonnet-5-5');
     }
-    for (const t of ['artistSummary', 'albumDetail', 'genreSummary', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
+    for (const t of ['artistSummary', 'albumDetail', 'genreSummary', 'albumRecommendations', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
       expect(getTaskConfig(t).model).toBe('claude-opus-5-5');
     }
-    expect(getTaskConfig('albumRecommendations')).toMatchObject({ provider: 'openai', model: 'gpt-5.6-terra' });
     expect(getTaskConfig('randomFact')).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' });
   });
 

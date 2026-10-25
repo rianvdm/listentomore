@@ -48,7 +48,7 @@ export async function generateAlbumDetail(
     ? `\n\nAlways search the web for the latest information about this album before responding. Do not rely solely on your training data.`
     : '';
 
-  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2-3 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes.
+  const prompt = `I'm listening to the album "${albumName}" by ${artistName}. Provide a 2-3 paragraph summary of the album's history and genres/styles. Then provide a 1-2 paragraph summary of the album's critical reception (if available), with examples/quotes. Keep the whole response under 350 words.
 
 Use Markdown formatting with bold and italic text where appropriate, and h3 (###) headers for each section.${webSearchInstruction}
 

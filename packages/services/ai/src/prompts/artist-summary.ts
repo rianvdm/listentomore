@@ -68,7 +68,7 @@ export async function generateArtistSummary(
 
   const config = getTaskConfig('artistSummary');
 
-  const prompt = `Write a summary of the music artist/band ${artistName}. Include verifiable facts about the artist's history, genres, styles, and most popular albums. Include one or two interesting facts about them (without stating that it's an interesting fact). Also recommend similar artists to check out if one likes their music. Write no more than three paragraphs. Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name}}.
+  const prompt = `Write a summary of the music artist/band ${artistName}. Include verifiable facts about the artist's history, genres, styles, and most popular albums. Include one or two interesting facts about them (without stating that it's an interesting fact). Also recommend similar artists to check out if one likes their music. Write no more than three paragraphs, and keep the whole summary under 180 words. Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name}}.
 
 Use Markdown formatting for the summary. Do NOT use bullet points.
 

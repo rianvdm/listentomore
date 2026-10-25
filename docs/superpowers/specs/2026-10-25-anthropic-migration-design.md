@@ -66,12 +66,13 @@ Anthropic client mapping:
 | `reasoning` unset | send `output_config: { effort: 'low' }` anyway, because Opus 5.5 defaults to `medium` and every task here wants `low` (my call; document it next to the mapping) |
 | `verbosity` | ignored; the prompts already state length |
 | `temperature` | never sent for any Claude model. Replace the `MODELS_WITHOUT_TEMPERATURE` denylist with "omit for all Claude models" since every current model rejects it |
-| `webSearch: true` | `tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]` |
+| `webSearch: true` | `tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]` |
 
 ### 4. Web search in the Anthropic client
 
 - Request: add the tool above when `webSearch` is set. `max_uses: 3` is the ceiling per call (my call; `albumRecommendations` is the only task that routinely needs more than one search).
 - Tool version changed from `web_search_20260209` to the basic `web_search_20250305` during eval round 1: the dynamic-filtering variant's model-written filter scripts crashed and still consumed `max_uses`, so searches ran out and the model returned "Not enough information" instead of a summary.
+- `max_uses` raised from 3 to 5 in eval round 4, client-wide: `albumRecommendations` verifies the seed plus 3 picks, which needs 4 searches; at 3 Claude returned only 2 picks.
 - Response handling: collect **only** `text` blocks, in order, and join them. Ignore `server_tool_use`, `web_search_tool_result`, and `thinking` blocks. Ignore the `citations` array on text blocks; the prose itself must carry no citation markup. Set `features.webSearchUsed` when any `server_tool_use` block has `name: 'web_search'`, and record `usage.server_tool_use.web_search_requests` in metadata for cost visibility.
 - `stop_reason: 'pause_turn'`: resend with the assistant turn appended (no extra user message) at most once, then treat as a normal response. Expected to be rare for single-shot prompts.
 - `stop_reason: 'refusal'`: log at warn, return the content, mark `truncated: true` so `isCacheableResponse()` refuses to cache it. (Reusing the flag avoids a new field; the log line says "refusal".) No server-side fallback parameter: a refusal on a music summary is rare enough to regenerate next request.

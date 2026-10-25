@@ -86,7 +86,7 @@ export async function generateAlbumRecommendations(
 
 Use Markdown for formatting.
 
-Use bullets for the album recommendations. Format each recommendation as: **{{Album Name by Artist Name}}**: Brief description of why the album is recommended.
+Use bullets for the album recommendations. Format each recommendation as: **{{Album Name by Artist Name}}**: Brief description of why the album is recommended. Write each description in your own words; if you quote a review, quote it exactly inside quotation marks, with no square-bracketed edits.
 
 Enclose artist names in double square brackets like [[Artist Name]] and album names in double curly braces like {{Album Name by Artist Name}}.
 
