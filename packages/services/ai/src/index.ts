@@ -168,20 +168,19 @@ export class AIService {
 
   /**
    * Get a random music fact from the cached pool (fast - just KV read)
-   * Note: Always uses OpenAI as it needs KV storage for fact rotation
+   * (provider determined by config)
    */
   async getRandomFact() {
     const { generateRandomFact } = await import('./prompts/random-fact');
-    return generateRandomFact(this.openai, this.kv);
+    return generateRandomFact(this.getClientForTask('randomFact'), this.kv);
   }
 
   /**
-   * Generate and store a new random fact (called by CRON job)
-   * Note: Always uses OpenAI as it needs KV storage for fact rotation
+   * Generate and store a new random fact (called by CRON job; provider determined by config)
    */
   async generateAndStoreRandomFact() {
     const { generateAndStoreFact } = await import('./prompts/random-fact');
-    return generateAndStoreFact(this.openai, this.kv);
+    return generateAndStoreFact(this.getClientForTask('randomFact'), this.kv);
   }
 
   /**

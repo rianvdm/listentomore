@@ -540,6 +540,17 @@ describe('AIService.getClientForTask', () => {
     const ai = makeService();
     expect(ai.anthropic).toBeInstanceOf(AnthropicClient);
   });
+
+  it('routes random facts through getClientForTask', async () => {
+    const ai = makeService();
+    const spy = vi.spyOn(ai, 'getClientForTask');
+    setupFetchMock([
+      { pattern: /api\.openai\.com/, response: { model: 'm', output_text: 'Did you know...', output: [], usage: {} } },
+      { pattern: /api\.anthropic\.com/, response: { model: 'm', content: [{ type: 'text', text: 'Did you know...' }] } },
+    ]);
+    await ai.generateAndStoreRandomFact();
+    expect(spy).toHaveBeenCalledWith('randomFact');
+  });
 });
 
 const insightsSample = {
