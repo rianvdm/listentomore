@@ -1,5 +1,5 @@
-// ABOUTME: Distributed rate limiting for Spotify API using KV storage.
-// ABOUTME: Coordinates rate limits across Worker instances.
+// ABOUTME: In-isolate rate limiting for Spotify API calls, scoped per Spotify app.
+// ABOUTME: Counts requests per window and honours 429 cooldowns without KV round trips.
 
 import { RATE_LIMITS } from '@listentomore/config';
 
@@ -9,12 +9,27 @@ export interface RateLimitState {
   retryAfter?: number;
 }
 
+/**
+ * Limiter state lives at module scope so it survives across requests served by the
+ * same isolate, keyed by scope (the Spotify client ID) because Spotify limits per app.
+ *
+ * Trade-off: this state is not shared across isolates or colos. The previous KV-backed
+ * state cost a KV read plus an awaited KV write on every Spotify call (~400 ms at p50)
+ * and its single key exceeded KV's one-write-per-second-per-key limit under bursts.
+ * Spotify enforces a per-app rolling 30-second window and this site sends a few thousand
+ * Spotify calls per day, so the limiter here is a local brake; the real protection is
+ * the 429 Retry-After handling in spotifyFetch, which feeds the cooldown below.
+ */
+const STATES = new Map<string, RateLimitState>();
+
 export class SpotifyRateLimiter {
-  private readonly cacheKey = 'spotify:ratelimit:state';
   private readonly windowMs = 60000; // 1 minute window
   private readonly maxRequests = RATE_LIMITS.spotify.requestsPerMinute;
 
-  constructor(private cache: KVNamespace) {}
+  /**
+   * @param scope - Identifies the Spotify app whose budget this limiter tracks
+   */
+  constructor(private readonly scope: string) {}
 
   /**
    * Acquire a rate limit token before making a Spotify API request.
@@ -32,7 +47,7 @@ export class SpotifyRateLimiter {
     }
 
     const now = Date.now();
-    const state = await this.getState();
+    const state = this.getState();
 
     // Check cooldown from previous 429
     if (state.retryAfter && now < state.retryAfter) {
@@ -46,7 +61,7 @@ export class SpotifyRateLimiter {
 
     // Reset window if expired
     if (now - state.windowStart >= this.windowMs) {
-      await this.setState({
+      this.setState({
         requestCount: 1,
         windowStart: now,
       });
@@ -71,7 +86,7 @@ export class SpotifyRateLimiter {
     }
 
     // Increment counter
-    await this.setState({
+    this.setState({
       ...state,
       requestCount: state.requestCount + 1,
     });
@@ -83,7 +98,7 @@ export class SpotifyRateLimiter {
    */
   async recordRateLimitResponse(retryAfterSeconds: number): Promise<void> {
     console.log(`[Spotify] 429 received, entering cooldown for ${retryAfterSeconds}s`);
-    await this.setState({
+    this.setState({
       requestCount: 0,
       windowStart: Date.now(),
       retryAfter: Date.now() + retryAfterSeconds * 1000,
@@ -99,7 +114,7 @@ export class SpotifyRateLimiter {
     windowRemainingMs: number;
     inCooldown: boolean;
   }> {
-    const state = await this.getState();
+    const state = this.getState();
     const now = Date.now();
     return {
       requestCount: state.requestCount,
@@ -109,15 +124,12 @@ export class SpotifyRateLimiter {
     };
   }
 
-  private async getState(): Promise<RateLimitState> {
-    const cached = await this.cache.get<RateLimitState>(this.cacheKey, 'json');
-    return cached ?? { requestCount: 0, windowStart: Date.now() };
+  private getState(): RateLimitState {
+    return STATES.get(this.scope) ?? { requestCount: 0, windowStart: Date.now() };
   }
 
-  private async setState(state: RateLimitState): Promise<void> {
-    await this.cache.put(this.cacheKey, JSON.stringify(state), {
-      expirationTtl: 120, // 2 minute TTL
-    });
+  private setState(state: RateLimitState): void {
+    STATES.set(this.scope, state);
   }
 
   private sleep(ms: number): Promise<void> {

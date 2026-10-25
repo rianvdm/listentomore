@@ -1,9 +1,11 @@
 // ABOUTME: Spotify artist operations - details, albums, and related artists.
-// ABOUTME: Includes caching with configurable TTLs and distributed rate limiting.
+// ABOUTME: Includes caching with configurable TTLs, deferred cache writes, and rate limiting.
 
 import { CACHE_CONFIG } from '@listentomore/config';
 import type { SpotifyAuth } from './auth';
 import type { SpotifyRateLimiter } from './rate-limit';
+import { createDefer } from './defer';
+import type { Defer } from './defer';
 import { spotifyFetch } from './fetch';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
@@ -36,11 +38,15 @@ export class SpotifyArtists {
   constructor(
     private auth: SpotifyAuth,
     private cache: KVNamespace,
-    private rateLimiter: SpotifyRateLimiter
+    private rateLimiter: SpotifyRateLimiter,
+    private defer: Defer = createDefer()
   ) {}
 
   async getArtist(artistId: string): Promise<ArtistDetails> {
     const cacheKey = `spotify:artist:${artistId}`;
+
+    // Read the token alongside the cache so a miss does not pay for it serially
+    const getAccessToken = this.auth.prefetchAccessToken();
 
     // Check cache
     const cached = await this.cache.get<ArtistDetails>(cacheKey, 'json');
@@ -50,7 +56,7 @@ export class SpotifyArtists {
     }
 
     console.log(`[Spotify] Cache miss, fetching artist ${artistId} from API`);
-    const accessToken = await this.auth.getAccessToken();
+    const accessToken = await getAccessToken();
 
     const response = await spotifyFetch(
       `${SPOTIFY_API_BASE}/artists/${encodeURIComponent(artistId)}`,
@@ -93,10 +99,13 @@ export class SpotifyArtists {
       image: data.images[0]?.url || null,
     };
 
-    // Cache the result
-    await this.cache.put(cacheKey, JSON.stringify(artist), {
-      expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
-    });
+    // Cache the result without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(artist), {
+        expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return artist;
   }
@@ -121,6 +130,9 @@ export class SpotifyArtists {
   > {
     const cacheKey = `spotify:artist:${artistId}:albums:${limit}`;
 
+    // Read the token alongside the cache so a miss does not pay for it serially
+    const getAccessToken = this.auth.prefetchAccessToken();
+
     // Check cache
     const cached = await this.cache.get(cacheKey, 'json');
     if (cached) {
@@ -133,7 +145,7 @@ export class SpotifyArtists {
       }>;
     }
 
-    const accessToken = await this.auth.getAccessToken();
+    const accessToken = await getAccessToken();
 
     const params = new URLSearchParams({
       include_groups: 'album',
@@ -166,10 +178,13 @@ export class SpotifyArtists {
 
     const albums = data.items;
 
-    // Cache the result
-    await this.cache.put(cacheKey, JSON.stringify(albums), {
-      expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
-    });
+    // Cache the result without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(albums), {
+        expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return albums;
   }
@@ -180,13 +195,16 @@ export class SpotifyArtists {
   ): Promise<Array<{ id: string; name: string; image: string | null }>> {
     const cacheKey = `spotify:artist:${artistId}:related`;
 
+    // Read the token alongside the cache so a miss does not pay for it serially
+    const getAccessToken = this.auth.prefetchAccessToken();
+
     // Check cache
     const cached = await this.cache.get(cacheKey, 'json');
     if (cached) {
       return (cached as Array<{ id: string; name: string; image: string | null }>).slice(0, limit);
     }
 
-    const accessToken = await this.auth.getAccessToken();
+    const accessToken = await getAccessToken();
 
     const response = await spotifyFetch(
       `${SPOTIFY_API_BASE}/artists/${artistId}/related-artists`,
@@ -215,10 +233,13 @@ export class SpotifyArtists {
       image: artist.images[0]?.url || null,
     }));
 
-    // Cache the full result (up to 20 artists)
-    await this.cache.put(cacheKey, JSON.stringify(relatedArtists), {
-      expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
-    });
+    // Cache the full result (up to 20 artists) without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(relatedArtists), {
+        expirationTtl: CACHE_CONFIG.spotify.artist.ttlDays * 24 * 60 * 60,
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return relatedArtists.slice(0, limit);
   }

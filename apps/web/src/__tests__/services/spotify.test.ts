@@ -1,7 +1,8 @@
-// SpotifyService integration tests
+// ABOUTME: Tests for Spotify album, artist, and search clients and the in-isolate rate limiter.
+// ABOUTME: Covers caching, deferred cache writes, error mapping, and limiter windows/cooldowns.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SpotifyAlbums, SpotifyArtists, SpotifySearch } from '@listentomore/spotify';
+import { SpotifyAlbums, SpotifyArtists, SpotifySearch, SpotifyRateLimiter, createDefer } from '@listentomore/spotify';
 import { createMockKV, setupFetchMock, createMockSpotifyAuth, createMockSpotifyRateLimiter } from '../utils/mocks';
 import { spotifyFixtures } from '../utils/fixtures';
 
@@ -94,6 +95,46 @@ describe('SpotifyAlbums', () => {
       expect(result.ean).toBeNull();
       expect(result.popularity).toBeUndefined();
       expect(result.label).toBeNull();
+    });
+  });
+
+  describe('deferred cache write', () => {
+    it('returns the album without waiting for the KV write and hands it to waitUntil', async () => {
+      setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/albums\//, response: spotifyFixtures.album }]);
+      (mockKV.put as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise(() => {}));
+      const waitUntil = vi.fn();
+      albums = new SpotifyAlbums(mockAuth as any, mockKV, mockRateLimiter as any, createDefer(waitUntil));
+
+      const result = await albums.getAlbum('4LH4d3cOWNNsVw41Gqt2kv');
+
+      expect(result.name).toBe('In Rainbows');
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs a failed KV write instead of failing the request', async () => {
+      setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/albums\//, response: spotifyFixtures.album }]);
+      (mockKV.put as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('KV PUT failed: 429'));
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result = await albums.getAlbum('4LH4d3cOWNNsVw41Gqt2kv');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(result.name).toBe('In Rainbows');
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Deferred cache write spotify:album:v2:4LH4d3cOWNNsVw41Gqt2kv failed'),
+        'KV PUT failed: 429',
+        expect.any(Error)
+      );
+      consoleError.mockRestore();
+    });
+
+    it('does not resolve the access token on a cache hit', async () => {
+      (mockKV.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ id: 'cached', name: 'Cached' });
+
+      await albums.getAlbum('cached');
+
+      expect(mockAuth.prefetchAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockAuth.getAccessToken).not.toHaveBeenCalled();
     });
   });
 
@@ -317,5 +358,64 @@ describe('SpotifySearch', () => {
         preview: 'https://p.scdn.co/mp3-preview/abc123',
       });
     });
+  });
+});
+
+describe('SpotifyRateLimiter (in-isolate)', () => {
+  // State is module-scoped per scope string, so each test uses its own scope
+  let scopeCounter = 0;
+  const newLimiter = () => new SpotifyRateLimiter(`test-scope-${++scopeCounter}`);
+
+  it('counts requests within the window without touching KV', async () => {
+    const limiter = newLimiter();
+
+    await limiter.acquire();
+    await limiter.acquire();
+    await limiter.acquire();
+
+    const stats = await limiter.getStats();
+    expect(stats.requestCount).toBe(3);
+    expect(stats.inCooldown).toBe(false);
+  });
+
+  it('enters cooldown after a 429 and resets the count', async () => {
+    const limiter = newLimiter();
+    await limiter.acquire();
+
+    await limiter.recordRateLimitResponse(5);
+
+    const stats = await limiter.getStats();
+    expect(stats.inCooldown).toBe(true);
+    expect(stats.requestCount).toBe(0);
+  });
+
+  it('waits out the cooldown before acquiring', async () => {
+    vi.useFakeTimers();
+    try {
+      const limiter = newLimiter();
+      await limiter.recordRateLimitResponse(1);
+
+      let acquired = false;
+      const pending = limiter.acquire().then(() => {
+        acquired = true;
+      });
+      await vi.advanceTimersByTimeAsync(500);
+      expect(acquired).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(3000); // 1s cooldown + up to 2s jitter
+      await pending;
+      expect(acquired).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shares state between instances with the same scope and isolates other scopes', async () => {
+    const scope = `shared-scope-${++scopeCounter}`;
+    await new SpotifyRateLimiter(scope).acquire();
+    await new SpotifyRateLimiter(scope).acquire();
+    await newLimiter().acquire();
+
+    expect((await new SpotifyRateLimiter(scope).getStats()).requestCount).toBe(2);
   });
 });

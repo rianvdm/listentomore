@@ -6,6 +6,7 @@ import type { Context } from 'hono';
 import { SITE_CONFIG, CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { Database } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
+import type { WaitUntil } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { StreamingLinksService } from '@listentomore/streaming-links';
 import { MusicBrainzService } from '@listentomore/musicbrainz';
@@ -77,6 +78,19 @@ function getTracing(c: Context<{ Bindings: Bindings; Variables: Variables }>): T
   }
 }
 
+/**
+ * The request's waitUntil, for work that must outlive the response (deferred cache writes).
+ * Same guard as getTracing: Hono's executionCtx getter throws outside a fetch event.
+ */
+function getWaitUntil(c: Context<{ Bindings: Bindings; Variables: Variables }>): WaitUntil | undefined {
+  try {
+    const ctx = c.executionCtx;
+    return ctx.waitUntil.bind(ctx);
+  } catch {
+    return undefined;
+  }
+}
+
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Apply security headers to all responses
@@ -102,11 +116,14 @@ app.use('*', async (c, next) => {
   // Initialize database first (needed by auth middleware)
   c.set('db', new Database(c.env.DB));
 
+  const waitUntil = getWaitUntil(c);
+
   // Primary Spotify service (album/artist pages, search)
   const spotify = new SpotifyService({
     clientId: c.env.SPOTIFY_CLIENT_ID,
     clientSecret: c.env.SPOTIFY_CLIENT_SECRET,
     cache: c.env.CACHE,
+    waitUntil,
   });
   c.set('spotify', spotify);
 
@@ -117,6 +134,7 @@ app.use('*', async (c, next) => {
       clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID!,
       clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
       cache: c.env.CACHE,
+      waitUntil,
     })
     : spotify;
   c.set('spotifyStreaming', spotifyStreaming);

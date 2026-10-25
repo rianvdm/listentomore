@@ -3,6 +3,8 @@
 
 import { CACHE_CONFIG } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
+import { createDefer } from './defer';
+import type { Defer } from './defer';
 
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
@@ -21,22 +23,34 @@ export class SpotifyAuth {
 
   constructor(
     private config: SpotifyAuthConfig,
-    private cache: KVNamespace
+    private cache: KVNamespace,
+    private defer: Defer = createDefer()
   ) {
     // Use client ID in cache key so each app has its own token
     this.tokenCacheKey = `spotify:token:${config.clientId}`;
   }
 
   async getAccessToken(): Promise<string> {
-    // Check cache first
+    // Use the cached token if still valid, otherwise fetch a new one
+    return (await this.readCachedToken()) ?? this.fetchAccessToken();
+  }
+
+  /**
+   * Start the cached-token KV read now and return a function that resolves the token later.
+   * Lets a caller overlap the token read with its own cache read. The prefetch never calls
+   * Spotify: a refresh only happens if the returned function is called and the cache is empty.
+   */
+  prefetchAccessToken(): () => Promise<string> {
+    const cached = this.readCachedToken();
+    // Mark the rejection handled for callers that never need the token (cache hits);
+    // awaiting `cached` below still surfaces the error to callers that do.
+    cached.catch(() => {});
+    return async () => (await cached) ?? this.fetchAccessToken();
+  }
+
+  private async readCachedToken(): Promise<string | null> {
     const cached = await this.cache.get<SpotifyTokenData>(this.tokenCacheKey, 'json');
-
-    if (cached && Date.now() < cached.expires_at) {
-      return cached.access_token;
-    }
-
-    // Token expired or not in cache - fetch a new one
-    return this.fetchAccessToken();
+    return cached && Date.now() < cached.expires_at ? cached.access_token : null;
   }
 
   private async fetchAccessToken(): Promise<string> {
@@ -72,15 +86,18 @@ export class SpotifyAuth {
     // Calculate expiration time (subtract buffer to refresh early)
     const expiresAt = Date.now() + data.expires_in * 1000 - 60000;
 
-    // Store in cache
+    // Store in cache without blocking the caller on the KV write
     const tokenData: SpotifyTokenData = {
       access_token: data.access_token,
       expires_at: expiresAt,
     };
 
-    await this.cache.put(this.tokenCacheKey, JSON.stringify(tokenData), {
-      expirationTtl: CACHE_CONFIG.spotify.token.ttlMinutes * 60,
-    });
+    this.defer(
+      this.cache.put(this.tokenCacheKey, JSON.stringify(tokenData), {
+        expirationTtl: CACHE_CONFIG.spotify.token.ttlMinutes * 60,
+      }),
+      'token cache write'
+    );
 
     return data.access_token;
   }

@@ -50,12 +50,13 @@ interface Services {
 }
 
 // Initialize services
-function createServices(env: Env): Services {
+function createServices(env: Env, ctx: ExecutionContext): Services {
   return {
     spotify: new SpotifyService({
       clientId: env.SPOTIFY_CLIENT_ID,
       clientSecret: env.SPOTIFY_CLIENT_SECRET,
       cache: env.CACHE,
+      waitUntil: ctx.waitUntil.bind(ctx),
     }),
     // Last.fm service factory - needs username per request
     lastfm: (username: string) =>
@@ -126,7 +127,7 @@ export default {
       // Handle slash commands
       if (interaction.type === InteractionType.APPLICATION_COMMAND) {
         const { name } = interaction.data;
-        const services = createServices(env);
+        const services = createServices(env, ctx);
 
         switch (name) {
           case 'listento': {

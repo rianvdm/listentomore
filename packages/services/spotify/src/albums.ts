@@ -1,9 +1,11 @@
 // ABOUTME: Spotify album operations - fetching album details and track lists.
-// ABOUTME: Includes caching with configurable TTLs and distributed rate limiting.
+// ABOUTME: Includes caching with configurable TTLs, deferred cache writes, and rate limiting.
 
 import { CACHE_CONFIG } from '@listentomore/config';
 import type { SpotifyAuth } from './auth';
 import type { SpotifyRateLimiter } from './rate-limit';
+import { createDefer } from './defer';
+import type { Defer } from './defer';
 import { spotifyFetch } from './fetch';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
@@ -69,12 +71,16 @@ export class SpotifyAlbums {
   constructor(
     private auth: SpotifyAuth,
     private cache: KVNamespace,
-    private rateLimiter: SpotifyRateLimiter
+    private rateLimiter: SpotifyRateLimiter,
+    private defer: Defer = createDefer()
   ) {}
 
   async getAlbum(albumId: string): Promise<AlbumDetails> {
     // v2: Added upc/ean fields
     const cacheKey = `spotify:album:v2:${albumId}`;
+
+    // Read the token alongside the cache so a miss does not pay for it serially
+    const getAccessToken = this.auth.prefetchAccessToken();
 
     // Check cache
     const cached = await this.cache.get<AlbumDetails>(cacheKey, 'json');
@@ -84,7 +90,7 @@ export class SpotifyAlbums {
     }
 
     console.log(`[Spotify] Cache miss, fetching album ${albumId} from API`);
-    const accessToken = await this.auth.getAccessToken();
+    const accessToken = await getAccessToken();
 
     const response = await spotifyFetch(
       `${SPOTIFY_API_BASE}/albums/${encodeURIComponent(albumId)}`,
@@ -133,10 +139,13 @@ export class SpotifyAlbums {
       })),
     };
 
-    // Cache the result
-    await this.cache.put(cacheKey, JSON.stringify(album), {
-      expirationTtl: CACHE_CONFIG.spotify.album.ttlDays * 24 * 60 * 60,
-    });
+    // Cache the result without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(album), {
+        expirationTtl: CACHE_CONFIG.spotify.album.ttlDays * 24 * 60 * 60,
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return album;
   }

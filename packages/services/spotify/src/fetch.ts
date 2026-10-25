@@ -1,5 +1,5 @@
 // ABOUTME: Spotify-specific fetch with rate limiting and retry logic.
-// ABOUTME: Wraps fetchWithTimeout with 429 handling and distributed rate limiting.
+// ABOUTME: Wraps fetchWithTimeout with 429 handling and per-app rate limiting.
 
 import { fetchWithTimeout, FetchWithTimeoutOptions } from '@listentomore/shared';
 import { RATE_LIMITS } from '@listentomore/config';

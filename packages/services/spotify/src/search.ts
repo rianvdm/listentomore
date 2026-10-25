@@ -1,9 +1,11 @@
 // ABOUTME: Spotify search functionality for tracks, albums, and artists.
-// ABOUTME: Includes caching, prefers full albums over singles/EPs, and distributed rate limiting.
+// ABOUTME: Includes caching, prefers full albums over singles/EPs, and rate limiting.
 
 import { CACHE_CONFIG } from '@listentomore/config';
 import type { SpotifyAuth } from './auth';
 import type { SpotifyRateLimiter } from './rate-limit';
+import { createDefer } from './defer';
+import type { Defer } from './defer';
 import { spotifyFetch } from './fetch';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
@@ -98,7 +100,8 @@ export class SpotifySearch {
   constructor(
     private auth: SpotifyAuth,
     private cache: KVNamespace,
-    private rateLimiter: SpotifyRateLimiter
+    private rateLimiter: SpotifyRateLimiter,
+    private defer: Defer = createDefer()
   ) {}
 
   async search<T extends SearchType>(
@@ -108,6 +111,9 @@ export class SpotifySearch {
   ): Promise<T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[]> {
     const cacheKey = `spotify:search:${type}:${query}`;
 
+    // Read the token alongside the cache so a miss does not pay for it serially
+    const getAccessToken = this.auth.prefetchAccessToken();
+
     // Check cache
     const cached = await this.cache.get(cacheKey, 'json');
     if (cached) {
@@ -115,7 +121,7 @@ export class SpotifySearch {
     }
 
     console.log(`[Spotify] Cache miss, searching API: ${type} "${query}"`);
-    const accessToken = await this.auth.getAccessToken();
+    const accessToken = await getAccessToken();
 
     const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
     const response = await spotifyFetch(
@@ -176,10 +182,13 @@ export class SpotifySearch {
       results = [];
     }
 
-    // Cache results
-    await this.cache.put(cacheKey, JSON.stringify(results), {
-      expirationTtl: CACHE_CONFIG.spotify.search.ttlDays * 24 * 60 * 60,
-    });
+    // Cache results without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(results), {
+        expirationTtl: CACHE_CONFIG.spotify.search.ttlDays * 24 * 60 * 60,
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return results as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
   }

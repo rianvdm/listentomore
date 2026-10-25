@@ -78,8 +78,10 @@ export function setupFetchMock(handlers: Array<{ pattern: RegExp | string; respo
  * Creates a mock SpotifyAuth that returns a fixed token
  */
 export function createMockSpotifyAuth() {
+  const getAccessToken = vi.fn().mockResolvedValue('mock-access-token');
   return {
-    getAccessToken: vi.fn().mockResolvedValue('mock-access-token'),
+    getAccessToken,
+    prefetchAccessToken: vi.fn(() => getAccessToken),
   };
 }
 
