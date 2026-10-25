@@ -38,7 +38,7 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 | `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
 | `artistSentence` | `claude-sonnet-5-5` | low | Short output with web search |
 | `listenAi` | `claude-sonnet-5-5` | low | Chat; the user waits on it |
-| `randomFact` | `gpt-5.6-luna` | default | Uncached hourly cron. Sonnet 5.5 at low effort shipped visible self-corrections as the fact on 2 of 12 eval runs; Luna was clean |
+| `randomFact` | `gpt-5.6-luna` | default | Uncached hourly cron. Sonnet 5.5 at low effort shipped visible self-corrections as the fact on 2 of 4 runs in the final eval round (461-521 characters against the 300-character limit); Luna was clean |
 
 The `artistSummary`, `albumDetail`, and `genreSummary` prompts carry word caps (180, 350, 350) so Claude's output matches the length GPT produced.
 
