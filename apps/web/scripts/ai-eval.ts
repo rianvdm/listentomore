@@ -17,6 +17,8 @@
 // model describing its search), and for artistSentence only, `selfCorrection`
 // (a visible redraft such as "Correction, final:") and `wordCount` (over
 // ARTIST_SENTENCE_MAX_WORDS visible words; the prompt asks for under 38).
+// For albumRecommendations only, `sourceNarration` (sources, review sites, or
+// streaming availability named in the prose, e.g. "listed as similar").
 //
 // API keys come from apps/web/.dev.vars first and fall back to process.env only
 // when the file lacks a key, so a key exported in the shell for another project
@@ -131,6 +133,10 @@ const MIN_LINKS: Partial<Record<AITask, number>> = {
 // placeholder legitimately yields no artist link. artistSummary substitutes
 // artists first, so its nested artists do become links.
 const STRIPS_NESTED_ARTISTS = new Set<AITask>(['genreSummary', 'albumRecommendations']);
+
+/** Sources, review sites, or streaming availability named in visitor-facing prose. */
+const SOURCE_NARRATION_PATTERN =
+  /\b(listed as similar|Album of the Year|Rate Your Music|AllMusic|Pitchfork|Metacritic|on Spotify|on Apple Music|on Bandcamp|according to|search results?)\b/i;
 
 // The model describing its own search instead of answering. The client drops
 // text before the last search result, so this catches what slips past it
@@ -513,6 +519,13 @@ function scoreRecord(input: ScoringInput): string[] {
     const words = content.trim().split(/\s+/).filter(Boolean).length;
     if (words > ARTIST_SENTENCE_MAX_WORDS) {
       violations.push(`wordCount: ${words} words (max ${ARTIST_SENTENCE_MAX_WORDS})`);
+    }
+  }
+
+  if (task === 'albumRecommendations') {
+    const sourceNarration = modelText.match(SOURCE_NARRATION_PATTERN)?.[0];
+    if (sourceNarration) {
+      violations.push(`sourceNarration: ${sourceNarration}`);
     }
   }
 
