@@ -16,7 +16,7 @@ A music discovery platform that combines real-time listening data with AI-powere
 - **Album & Artist Search** - Search the Spotify catalog with instant results
 - **Album Detail Pages** - Rich album pages with release info, track listings, genres, and AI-generated summaries
 - **Artist Detail Pages** - Artist profiles with biography, top albums, similar artists, and genre connections
-- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by OpenAI GPT-5.4 with web search
+- **AI-Powered Summaries** - Get rich, contextual information about any artist, album, or genre powered by Claude with web search
 - **Genre Exploration** - Discover music by genre with AI-generated descriptions, history, and key artists
 - **Cross-Platform Streaming Links** - Every album includes direct links to Spotify, Apple Music, and Songlink (for all other services)
 - **Album Recommendations** - AI-generated "if you like this, try these" recommendations on album pages
@@ -79,7 +79,7 @@ listentomore/
 │   ├── services/               # Backend service modules
 │   │   ├── spotify/            # Spotify Web API client
 │   │   ├── lastfm/             # Last.fm API client
-│   │   ├── ai/                # OpenAI client
+│   │   ├── ai/                # AI clients (Anthropic, OpenAI)
 │   │   ├── songlink/           # Odesli/Songlink API client
 │   │   └── streaming-links/    # Cross-platform link service (Apple Music, URL parsing)
 │   ├── db/                     # D1 schema, migrations, queries
@@ -122,6 +122,7 @@ SPOTIFY_REFRESH_TOKEN=your_spotify_refresh_token
 LASTFM_API_KEY=your_lastfm_api_key
 LASTFM_USERNAME=your_lastfm_username
 OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
 INTERNAL_API_SECRET=your_random_secret_for_internal_apis
 
 # Optional - for admin features
@@ -156,7 +157,8 @@ pnpm deploy
 
 - **[Spotify Web API](https://developer.spotify.com/documentation/web-api)** - Music catalog data
 - **[Last.fm API](https://www.last.fm/api)** - Listening history and scrobbles
-- **[OpenAI API](https://platform.openai.com)** - GPT-5.4 for AI summaries, web search, chatbot, and fact generation
+- **[Anthropic API](https://docs.anthropic.com)** - Claude Opus 5.5 and Sonnet 5.5 for AI summaries, web search, chatbot, and insights
+- **[OpenAI API](https://platform.openai.com)** - GPT-5.6 Luna for random facts; the alternate provider for every other task
 - **[Apple MusicKit API](https://developer.apple.com/musickit/)** - Cross-platform streaming links via UPC matching
 - **[Songlink/Odesli](https://odesli.co)** - Cross-platform streaming links for all services
 

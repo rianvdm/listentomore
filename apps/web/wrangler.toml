@@ -73,7 +73,8 @@ crons = ["*/5 * * * *"]  # Run every 5 minutes (random fact only at top of hour)
 # - SPOTIFY_STREAMING_CLIENT_ID (secondary app for streaming-links rate limit isolation)
 # - SPOTIFY_STREAMING_CLIENT_SECRET
 # - LASTFM_API_KEY
-# - OPENAI_API_KEY
+# - OPENAI_API_KEY (randomFact, and any task switched back to OpenAI)
+# - ANTHROPIC_API_KEY (all other AI tasks)
 # - DISCOGS_API_TOKEN
 # - YOUTUBE_API_KEY (for streaming links service)
 # - INTERNAL_API_SECRET (for signing internal API tokens)
