@@ -90,24 +90,23 @@ export class AnthropicClient implements ChatClient {
       body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }];
     }
 
-    const response = await fetchWithTimeout(`${this.baseUrl}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify(body),
-      timeout: timeoutPresetFor(options.webSearch),
-    });
+    let data = await this.post(body, options.webSearch);
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`[Anthropic] API error: ${response.status} - ${errorBody}`);
-      throw new Error(`Anthropic API error: ${response.statusText}`);
+    // Server-side web search hit its iteration limit: re-send the same request
+    // with the partial assistant turn appended. One resume only; the second
+    // response is final whatever its stop_reason.
+    if (data.stop_reason === 'pause_turn') {
+      data = await this.post(
+        {
+          ...body,
+          messages: [
+            ...(body.messages as unknown[]),
+            { role: 'assistant', content: data.content },
+          ],
+        },
+        options.webSearch
+      );
     }
-
-    const data = (await response.json()) as AnthropicMessagesPayload;
 
     // Only text blocks are prose; server_tool_use and web_search_tool_result
     // blocks are ignored. Join with '' so [[Artist]] placeholders split across
@@ -120,15 +119,22 @@ export class AnthropicClient implements ChatClient {
     // Same trap as the OpenAI Responses API: a budget exhaustion arrives as a
     // 200 with a fragment. Sonnet 5's adaptive thinking spends max_tokens too,
     // so the visible prose can be well under the limit and still be cut off.
-    const truncated = data.stop_reason === 'max_tokens';
+    const maxTokensHit = data.stop_reason === 'max_tokens';
+    // A safety-classifier refusal carries no usable content; reuse the
+    // truncated flag so isCacheableResponse() keeps it out of the cache.
+    const refused = data.stop_reason === 'refusal';
+    const truncated = maxTokensHit || refused;
 
-    if (truncated) {
+    if (maxTokensHit) {
       console.warn(
         `[Anthropic] Truncated on max_tokens: model=${data.model} ` +
         `limit=${options.maxTokens ?? 1500} ` +
         `output=${data.usage?.output_tokens ?? '?'} ` +
         `visibleChars=${content.length}.`
       );
+    }
+    if (refused) {
+      console.warn(`[Anthropic] Response refused (stop_reason=refusal): model=${data.model}.`);
     }
 
     const webSearchUsed = data.content.some(
@@ -159,5 +165,29 @@ export class AnthropicClient implements ChatClient {
     };
 
     return { content, metadata };
+  }
+
+  private async post(
+    body: Record<string, unknown>,
+    webSearch: boolean | undefined
+  ): Promise<AnthropicMessagesPayload> {
+    const response = await fetchWithTimeout(`${this.baseUrl}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify(body),
+      timeout: timeoutPresetFor(webSearch),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`[Anthropic] API error: ${response.status} - ${errorBody}`);
+      throw new Error(`Anthropic API error: ${response.statusText}`);
+    }
+
+    return (await response.json()) as AnthropicMessagesPayload;
   }
 }

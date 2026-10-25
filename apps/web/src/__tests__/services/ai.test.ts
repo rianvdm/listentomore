@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
 import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS } from '@listentomore/config';
-import { createMockKV, setupFetchMock } from '../utils/mocks';
+import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
   let client: OpenAIClient;
@@ -438,6 +438,53 @@ describe('AnthropicClient.chatCompletion', () => {
     });
     expect(res.content).toBe('');
     expect(isCacheableResponse(res.content, res.metadata, 'artistSummary', 'x')).toBe(false);
+  });
+
+  it('resumes a pause_turn exactly once with the assistant turn appended', async () => {
+    const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn',
+      content: [{ type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'q' } }] };
+    const done = { model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'final' }] };
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(done) as Response);
+
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('final');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const first = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const second = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(second.messages).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: paused.content },
+    ]);
+    expect({ ...second, messages: undefined }).toEqual({ ...first, messages: undefined });
+  });
+
+  it('does not loop on a second pause_turn', async () => {
+    const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn', content: [{ type: 'text', text: 'partial' }] };
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.content).toBe('partial');
+  });
+
+  it('marks a refusal as not cacheable', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setupFetchMock([{ pattern: /api\.anthropic\.com/,
+      response: { model: 'claude-opus-5-5', stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'general_harms' }, content: [] } }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(res.metadata?.truncated).toBe(true);
+    expect(isCacheableResponse(res.content, res.metadata, 'artistSummary', 'x')).toBe(false);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('refusal'))).toBe(true);
+    warn.mockRestore();
   });
 
   it('reports webSearchUsed false when the tool was offered but not called', async () => {
