@@ -37,3 +37,6 @@ coverage/
 
 # Local review notes (untracked)
 REVIEW*.md
+
+# AI eval output (apps/web/scripts/ai-eval.ts)
+apps/web/eval-output/
