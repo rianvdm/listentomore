@@ -429,6 +429,69 @@ describe('AnthropicClient.chatCompletion', () => {
     expect(res.metadata?.features?.webSearchRequests).toBe(1);
   });
 
+  it('drops narration before the search and keeps only the answer', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5-5',
+        content: [
+          { type: 'text', text: "I'll search for Jordan Rakei." },
+          { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Jordan Rakei' } },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [{ type: 'web_search_result', url: 'https://x', title: 't' }] },
+          { type: 'text', text: 'Jordan Rakei is a soul singer.' },
+        ],
+        stop_reason: 'end_turn',
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('Jordan Rakei is a soul singer.');
+    const dropped = log.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('pre-search'));
+    expect(dropped).toEqual(['[Anthropic] Dropped 29 chars of pre-search text']);
+    log.mockRestore();
+  });
+
+  it('keeps only text after the last search result when several searches ran', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5-5',
+        content: [
+          { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'a' } },
+          { type: 'web_search_tool_result', tool_use_id: 's1', content: [] },
+          { type: 'text', text: 'Let me search once more.' },
+          { type: 'server_tool_use', id: 's2', name: 'web_search', input: { query: 'b' } },
+          { type: 'web_search_tool_result', tool_use_id: 's2', content: [] },
+          { type: 'text', text: 'The answer.' },
+        ],
+        stop_reason: 'end_turn',
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('The answer.');
+    log.mockRestore();
+  });
+
+  it('joins every text block when no search result is present', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5-5',
+        content: [{ type: 'text', text: 'First half, ' }, { type: 'text', text: 'second half.' }],
+        stop_reason: 'end_turn',
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('First half, second half.');
+  });
+
   it('returns empty content when no text blocks are present', async () => {
     setupFetchMock([{
       pattern: /api\.anthropic\.com/,
@@ -443,8 +506,10 @@ describe('AnthropicClient.chatCompletion', () => {
 
   it('resumes a pause_turn exactly once with the assistant turn appended', async () => {
     const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn',
-      content: [{ type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'q' } }] };
-    const done = { model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'final' }] };
+      content: [{ type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'q' } }],
+      usage: { input_tokens: 1000, output_tokens: 100, server_tool_use: { web_search_requests: 2 } } };
+    const done = { model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'final' }],
+      usage: { input_tokens: 3000, output_tokens: 200 } };
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
     fetchMock.mockResolvedValueOnce(mockFetchResponse(done) as Response);
@@ -461,9 +526,14 @@ describe('AnthropicClient.chatCompletion', () => {
       { role: 'assistant', content: paused.content },
     ]);
     expect({ ...second, messages: undefined }).toEqual({ ...first, messages: undefined });
+    // Usage and search flags cover both requests, not just the resumed one.
+    expect(res.metadata?.usage).toEqual({ inputTokens: 4000, outputTokens: 300, totalTokens: 4300 });
+    expect(res.metadata?.features?.webSearchRequests).toBe(2);
+    expect(res.metadata?.features?.webSearchUsed).toBe(true);
   });
 
   it('does not loop on a second pause_turn', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn', content: [{ type: 'text', text: 'partial' }] };
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
@@ -473,6 +543,10 @@ describe('AnthropicClient.chatCompletion', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(res.content).toBe('partial');
+    expect(res.metadata?.truncated).toBe(true);
+    expect(isCacheableResponse(res.content, res.metadata, 'artistSentence', 'x')).toBe(false);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('pause_turn'))).toBe(true);
+    warn.mockRestore();
   });
 
   it('marks a refusal as not cacheable', async () => {

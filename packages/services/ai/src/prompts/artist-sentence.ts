@@ -42,7 +42,8 @@ CRITICAL REQUIREMENTS:
 * In total the response HAS to be less than 38 words.
 * If you don't have information about this musical artist, say "There is no information available about this artist."
 * Use plain text ONLY - NO Markdown formatting (no **bold**, no *italic*, no ### headers, etc.).
-* Do NOT include citation markers like [1], [2], etc. - this is a plain text summary with no citations.`;
+* Do NOT include citation markers like [1], [2], etc. - this is a plain text summary with no citations.
+* Do not describe or announce your search; output only the sentence itself.`;
 
   const response = await client.chatCompletion({
     model: config.model,

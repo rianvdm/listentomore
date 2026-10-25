@@ -55,15 +55,71 @@ export function timeoutPresetFor(webSearch: boolean | undefined): TimeoutPreset 
   return webSearch ? 'verySlow' : 'slow';
 }
 
+type AnthropicContentBlock = { type: string; text?: string; name?: string };
+
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  server_tool_use?: { web_search_requests?: number };
+}
+
 interface AnthropicMessagesPayload {
   model: string;
-  content: Array<{ type: string; text?: string; name?: string }>;
+  content: AnthropicContentBlock[];
   stop_reason?: string | null;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    server_tool_use?: { web_search_requests?: number };
+  usage?: AnthropicUsage;
+}
+
+// Only text blocks are prose; server_tool_use and web_search_tool_result
+// blocks are ignored. Join with '' so [[Artist]] placeholders split across
+// blocks stay intact. When the model searched, it can narrate before the
+// search ("I'll search for ..."), so only text after the last search result
+// counts as the answer.
+function extractAnswerText(content: AnthropicContentBlock[]): {
+  text: string;
+  droppedChars: number;
+} {
+  const isText = (b: AnthropicContentBlock) =>
+    b.type === 'text' && typeof b.text === 'string';
+  let lastResult = -1;
+  content.forEach((b, i) => {
+    if (b.type === 'web_search_tool_result') lastResult = i;
+  });
+  const join = (blocks: AnthropicContentBlock[]) =>
+    blocks.filter(isText).map((b) => b.text).join('');
+  return {
+    text: join(content.slice(lastResult + 1)),
+    droppedChars: join(content.slice(0, lastResult + 1)).length,
   };
+}
+
+function sumOptional(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+}
+
+// A resumed turn is billed as two requests, so usage covers both.
+function mergeUsage(
+  a: AnthropicUsage | undefined,
+  b: AnthropicUsage | undefined
+): AnthropicUsage | undefined {
+  if (!a || !b) return a ?? b;
+  const webSearchRequests = sumOptional(
+    a.server_tool_use?.web_search_requests,
+    b.server_tool_use?.web_search_requests
+  );
+  return {
+    input_tokens: sumOptional(a.input_tokens, b.input_tokens),
+    output_tokens: sumOptional(a.output_tokens, b.output_tokens),
+    ...(webSearchRequests !== undefined
+      ? { server_tool_use: { web_search_requests: webSearchRequests } }
+      : {}),
+  };
+}
+
+function calledWebSearch(payload: AnthropicMessagesPayload): boolean {
+  return payload.content.some(
+    (b) => b.type === 'server_tool_use' && b.name === 'web_search'
+  );
 }
 
 export class AnthropicClient implements ChatClient {
@@ -105,10 +161,12 @@ export class AnthropicClient implements ChatClient {
     }
 
     let data = await this.post(body, options.webSearch);
+    let usage = data.usage;
+    let webSearchUsed = calledWebSearch(data);
 
     // Server-side web search hit its iteration limit: re-send the same request
-    // with the partial assistant turn appended. One resume only; the second
-    // response is final whatever its stop_reason.
+    // with the partial assistant turn appended. One resume only; a second
+    // pause_turn is returned as truncated so the partial is never cached.
     if (data.stop_reason === 'pause_turn') {
       data = await this.post(
         {
@@ -120,15 +178,14 @@ export class AnthropicClient implements ChatClient {
         },
         options.webSearch
       );
+      usage = mergeUsage(usage, data.usage);
+      webSearchUsed = webSearchUsed || calledWebSearch(data);
     }
 
-    // Only text blocks are prose; server_tool_use and web_search_tool_result
-    // blocks are ignored. Join with '' so [[Artist]] placeholders split across
-    // blocks stay intact.
-    const content = data.content
-      .filter((b) => b.type === 'text' && typeof b.text === 'string')
-      .map((b) => b.text)
-      .join('');
+    const { text: content, droppedChars } = extractAnswerText(data.content);
+    if (droppedChars > 0) {
+      console.log(`[Anthropic] Dropped ${droppedChars} chars of pre-search text`);
+    }
 
     // Same trap as the OpenAI Responses API: a budget exhaustion arrives as a
     // 200 with a fragment. Sonnet 5's adaptive thinking spends max_tokens too,
@@ -137,7 +194,8 @@ export class AnthropicClient implements ChatClient {
     // A safety-classifier refusal carries no usable content; reuse the
     // truncated flag so isCacheableResponse() keeps it out of the cache.
     const refused = data.stop_reason === 'refusal';
-    const truncated = maxTokensHit || refused;
+    const stillPaused = data.stop_reason === 'pause_turn';
+    const truncated = maxTokensHit || refused || stillPaused;
 
     if (maxTokensHit) {
       console.warn(
@@ -150,24 +208,23 @@ export class AnthropicClient implements ChatClient {
     if (refused) {
       console.warn(`[Anthropic] Response refused (stop_reason=refusal): model=${data.model}.`);
     }
+    if (stillPaused) {
+      console.warn(`[Anthropic] Still paused after one resume (stop_reason=pause_turn): model=${data.model}.`);
+    }
 
-    const webSearchUsed = data.content.some(
-      (b) => b.type === 'server_tool_use' && b.name === 'web_search'
-    );
     const webSearchRequests =
-      data.usage?.server_tool_use?.web_search_requests ?? null;
+      usage?.server_tool_use?.web_search_requests ?? null;
 
     const metadata: AIResponseMetadata = {
       provider: 'anthropic',
       model: data.model,
       api: 'messages',
-      usage: data.usage
+      usage: usage
         ? {
-            inputTokens: data.usage.input_tokens ?? null,
-            outputTokens: data.usage.output_tokens ?? null,
+            inputTokens: usage.input_tokens ?? null,
+            outputTokens: usage.output_tokens ?? null,
             totalTokens:
-              (data.usage.input_tokens ?? 0) + (data.usage.output_tokens ?? 0) ||
-              null,
+              (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) || null,
           }
         : undefined,
       truncated,

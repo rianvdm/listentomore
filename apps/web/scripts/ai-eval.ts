@@ -12,6 +12,10 @@
 // result to eval-output/<label>-rescored/. --only <task,task,...> limits a live
 // run to those tasks; the output holds only their JSON files. Exit code 1 means at least one record
 // has a violation or was truncated; 2 means the run could not start.
+//
+// API keys come from apps/web/.dev.vars first and fall back to process.env only
+// when the file lacks a key, so a key exported in the shell for another project
+// or org is never billed for this repo's eval.
 
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -123,6 +127,14 @@ const MIN_LINKS: Partial<Record<AITask, number>> = {
 // artists first, so its nested artists do become links.
 const STRIPS_NESTED_ARTISTS = new Set<AITask>(['genreSummary', 'albumRecommendations']);
 
+// The model describing its own search instead of answering. The client drops
+// text before the last search result, so this catches what slips past it
+// ("Based on the search results, ...") as well as prompts that never searched.
+const NARRATION_PATTERNS = [
+  /^\s*(I'll|I will|Let me|I'm going to|Based on (the|my) search)/i,
+  /\b(my search|search results?|I searched)\b/i,
+];
+
 const FALLBACK_PATTERN =
   /^(Not enough information available|There is no information available)/i;
 
@@ -142,9 +154,16 @@ interface CliArgs {
 }
 
 function parseArgs(argv: string[]): CliArgs {
+  // A flag given without a value is an error, not "flag absent": a bare
+  // --only would otherwise run (and bill) every task.
   const valueOf = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
-    return i >= 0 ? argv[i + 1] : undefined;
+    if (i < 0) return undefined;
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`${flag} needs a value`);
+    }
+    return value;
   };
 
   const runLabel = valueOf('--label');
@@ -201,11 +220,11 @@ function readDevVars(path: string): Record<string, string> {
   return vars;
 }
 
-/** Resolve a secret, process.env first. Required only if a task routes to it. */
+/** Resolve a secret, .dev.vars first (see header). Required only if a task routes to it. */
 function resolveKey(name: string, devVars: Record<string, string>, required: boolean): string {
-  const value = process.env[name] || devVars[name] || '';
+  const value = devVars[name] || process.env[name] || '';
   if (required && !value) {
-    throw new Error(`${name} is not set in process.env or apps/web/.dev.vars`);
+    throw new Error(`${name} is not set in apps/web/.dev.vars or process.env`);
   }
   return value;
 }
@@ -465,6 +484,12 @@ function scoreRecord(input: ScoringInput): string[] {
 
   if (task === 'artistSummary' && /^\s*[-*]\s/m.test(content)) {
     violations.push('bullet list in artist summary');
+  }
+
+  const modelText = input.raw ?? content;
+  const narration = NARRATION_PATTERNS.map((p) => modelText.match(p)?.[0]).find(Boolean);
+  if (narration) {
+    violations.push(`narration: ${narration.slice(0, 60)}`);
   }
 
   if (task === 'artistSentence' && /[*#_\[]/.test(content)) {
