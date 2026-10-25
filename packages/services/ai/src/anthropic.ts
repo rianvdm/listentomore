@@ -1,5 +1,6 @@
 // ABOUTME: Anthropic (Claude) API client mirroring the OpenAIClient shape.
 // ABOUTME: Calls POST /v1/messages via raw fetch; no SDK dependency.
+// ABOUTME: Never sends temperature (400s on current models); maps reasoning to output_config.effort.
 
 import { AI_PROVIDERS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
@@ -8,20 +9,31 @@ import type {
   ChatCompletionOptions,
   ChatCompletionResponse,
   AIResponseMetadata,
+  ReasoningEffort,
 } from './types';
 import type { AIRateLimiter } from './rate-limit';
 
 const ANTHROPIC_VERSION = '2023-06-01';
 
-// Newer-generation models reject sampling params (temperature/top_p/top_k)
-// with a 400: opus-tier (4.7+), Fable 5, and Sonnet 5. Verified live for
-// claude-sonnet-5 on 2026-07-01 ("`temperature` is deprecated for this model").
-const MODELS_WITHOUT_TEMPERATURE = [
-  'claude-opus-4-8',
-  'claude-opus-4-7',
-  'claude-fable-5',
-  'claude-sonnet-5',
-];
+export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+// Opus 5.5 defaults to medium effort, so the client always sends one
+// explicitly. OpenAI-only levels below 'low' collapse to 'low'.
+const EFFORT_BY_REASONING: Record<ReasoningEffort, ClaudeEffort> = {
+  none: 'low',
+  minimal: 'low',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
+  max: 'max',
+};
+
+export function mapReasoningToEffort(
+  reasoning: ReasoningEffort | undefined
+): ClaudeEffort {
+  return reasoning ? EFFORT_BY_REASONING[reasoning] : 'low';
+}
 
 export class AnthropicClient implements ChatClient {
   private apiKey: string;
@@ -53,13 +65,9 @@ export class AnthropicClient implements ChatClient {
     if (systemMessage) {
       body.system = systemMessage.content;
     }
-    // Only send temperature where the model supports it.
-    if (
-      options.temperature !== undefined &&
-      !MODELS_WITHOUT_TEMPERATURE.some((m) => options.model.startsWith(m))
-    ) {
-      body.temperature = options.temperature;
-    }
+    // Current Claude models 400 on temperature, so it is never sent.
+    // Claude has no verbosity control; options.verbosity is ignored.
+    body.output_config = { effort: mapReasoningToEffort(options.reasoning) };
 
     const response = await fetchWithTimeout(`${this.baseUrl}/messages`, {
       method: 'POST',

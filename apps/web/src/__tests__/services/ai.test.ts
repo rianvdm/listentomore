@@ -1,6 +1,7 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ReasoningEffort } from '@listentomore/ai';
 import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
@@ -337,45 +338,47 @@ describe('AnthropicClient.chatCompletion', () => {
     expect(body.system).toBe('You are a friend.');
     expect(body.messages).toEqual([{ role: 'user', content: 'My week...' }]);
     expect(body.max_tokens).toBe(1500);
-    expect(body.temperature).toBe(0.8);
+    expect(body.temperature).toBeUndefined();
   });
 
-  it('omits temperature for opus-tier models', async () => {
-    const mockFetch = setupFetchMock([
-      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-4-8', content: [{ type: 'text', text: 'x' }] } },
-    ]);
-    await new AnthropicClient('key').chatCompletion({
-      model: 'claude-opus-4-8',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 1500,
-      temperature: 0.8,
-    });
-    expect(lastBody(mockFetch).temperature).toBeUndefined();
-  });
-
-  it('omits temperature for claude-sonnet-5 but keeps it for claude-sonnet-4-6', async () => {
-    const mkFetch = (model: string) =>
-      setupFetchMock([
+  it('never sends temperature for any Claude model', async () => {
+    for (const model of ['claude-sonnet-4-6', 'claude-sonnet-5-5', 'claude-opus-5-5']) {
+      const mockFetch = setupFetchMock([
         { pattern: /api\.anthropic\.com/, response: { model, content: [{ type: 'text', text: 'x' }] } },
       ]);
+      await new AnthropicClient('key').chatCompletion({
+        model, messages: [{ role: 'user', content: 'hi' }], temperature: 0.8,
+      });
+      expect(lastBody(mockFetch).temperature).toBeUndefined();
+    }
+  });
 
-    let mockFetch = mkFetch('claude-sonnet-5');
-    await new AnthropicClient('key').chatCompletion({
-      model: 'claude-sonnet-5',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 1500,
-      temperature: 0.8,
-    });
-    expect(lastBody(mockFetch).temperature).toBeUndefined();
+  it('maps reasoning to output_config.effort, defaulting to low', async () => {
+    const cases: Array<[ReasoningEffort | undefined, string]> = [
+      [undefined, 'low'], ['none', 'low'], ['minimal', 'low'], ['low', 'low'],
+      ['medium', 'medium'], ['high', 'high'], ['xhigh', 'xhigh'], ['max', 'max'],
+    ];
+    for (const [reasoning, effort] of cases) {
+      const mockFetch = setupFetchMock([
+        { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+      ]);
+      await new AnthropicClient('key').chatCompletion({
+        model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], reasoning,
+      });
+      expect(lastBody(mockFetch).output_config).toEqual({ effort });
+    }
+  });
 
-    mockFetch = mkFetch('claude-sonnet-4-6');
+  it('ignores verbosity', async () => {
+    const mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+    ]);
     await new AnthropicClient('key').chatCompletion({
-      model: 'claude-sonnet-4-6',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 1500,
-      temperature: 0.8,
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], verbosity: 'low',
     });
-    expect(lastBody(mockFetch).temperature).toBe(0.8);
+    const body = lastBody(mockFetch);
+    expect(body.text).toBeUndefined();
+    expect(body.verbosity).toBeUndefined();
   });
 
   it('maps the response to content + anthropic metadata', async () => {
