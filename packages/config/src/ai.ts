@@ -57,18 +57,18 @@ export interface AITaskConfig {
  * stays wired up as a switch-back path: flip a task's `provider` and `model`
  * to the GPT-5.6 row below and it works without code changes.
  *
- * Six tasks run on claude-opus-5-5 (artistSummary, albumDetail, genreSummary,
- * albumRecommendations, userInsightsSummary, userInsightsRecommendations). Two
- * run on claude-sonnet-5-5 (artistSentence, listenAi): short output,
- * latency-sensitive, where the cheaper tier earns its keep. randomFact runs on
- * gpt-5.6-luna.
+ * Seven tasks run on claude-opus-5-5 (artistSummary, artistSentence,
+ * albumDetail, genreSummary, albumRecommendations, userInsightsSummary,
+ * userInsightsRecommendations). One runs on claude-sonnet-5-5 (listenAi):
+ * uncached chat the user waits on, where the cheaper tier earns its keep.
+ * randomFact runs on gpt-5.6-luna.
  *
  * ┌──────────────────┬───────────────┬────────────────┬──────────────────────────┐
  * │ Model            │ $/1M in/out   │ Provider       │ Role                     │
  * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
  * │ claude-opus-5-5  │ $4.00 / $20.00│ anthropic      │ long-form tasks          │
  * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
- * │ claude-sonnet-5-5│ $2.00 / $10.00│ anthropic      │ short / uncached         │
+ * │ claude-sonnet-5-5│ $2.00 / $10.00│ anthropic      │ listenAi                 │
  * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
  * │ gpt-5.6-terra    │ $2.00 / $12.00│ openai         │ switch-back              │
  * ├──────────────────┼───────────────┼────────────────┼──────────────────────────┤
@@ -151,7 +151,9 @@ export const AI_TASKS = {
 
   artistSentence: {
     provider: 'anthropic',
-    model: 'claude-sonnet-5-5',
+    // Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval
+    // rows (64-74 words against the 38-word cap); cached 180 days, so Opus.
+    model: 'claude-opus-5-5',
     // Output is capped at 38 words (~50 tokens), but web search adds a
     // reasoning hop: Harold Budd measured 128 of the old 150-token budget,
     // i.e. one hop away from returning nothing. 400 is still a tight cap on

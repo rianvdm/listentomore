@@ -1038,10 +1038,8 @@ describe('AI task token budgets', () => {
   });
 
   it('splits models as designed', () => {
-    for (const t of ['artistSentence', 'listenAi'] as const) {
-      expect(getTaskConfig(t).model).toBe('claude-sonnet-5-5');
-    }
-    for (const t of ['artistSummary', 'albumDetail', 'genreSummary', 'albumRecommendations', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
+    expect(getTaskConfig('listenAi').model).toBe('claude-sonnet-5-5');
+    for (const t of ['artistSummary', 'artistSentence', 'albumDetail', 'genreSummary', 'albumRecommendations', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
       expect(getTaskConfig(t).model).toBe('claude-opus-5-5');
     }
     expect(getTaskConfig('randomFact')).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' });

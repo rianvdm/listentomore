@@ -13,6 +13,11 @@
 // run to those tasks; the output holds only their JSON files. Exit code 1 means at least one record
 // has a violation or was truncated; 2 means the run could not start.
 //
+// Checks beyond placeholders and formatting: `narration` on every task (the
+// model describing its search), and for artistSentence only, `selfCorrection`
+// (a visible redraft such as "Correction, final:") and `wordCount` (over
+// ARTIST_SENTENCE_MAX_WORDS visible words; the prompt asks for under 38).
+//
 // API keys come from apps/web/.dev.vars first and fall back to process.env only
 // when the file lacks a key, so a key exported in the shell for another project
 // or org is never billed for this repo's eval.
@@ -134,6 +139,14 @@ const NARRATION_PATTERNS = [
   /^\s*(I'll|I will|Let me|I'm going to|Based on (the|my) search)/i,
   /\b(my search|search results?|I searched)\b/i,
 ];
+
+// Sonnet 5.5 at low effort redrafted in the visible output ("Correction,
+// final answer: ..."), which the prompt's word cap alone does not catch.
+const SELF_CORRECTION_PATTERN = /\b(Correction|final answer|final:|Actually,|Let me (fix|correct|restate))/i;
+
+// Well over the prompt's 38-word cap, so a slightly long sentence still
+// passes but a doubled draft does not.
+const ARTIST_SENTENCE_MAX_WORDS = 60;
 
 const FALLBACK_PATTERN =
   /^(Not enough information available|There is no information available)/i;
@@ -490,6 +503,17 @@ function scoreRecord(input: ScoringInput): string[] {
   const narration = NARRATION_PATTERNS.map((p) => modelText.match(p)?.[0]).find(Boolean);
   if (narration) {
     violations.push(`narration: ${narration.slice(0, 60)}`);
+  }
+
+  if (task === 'artistSentence') {
+    const selfCorrection = modelText.match(SELF_CORRECTION_PATTERN)?.[0];
+    if (selfCorrection) {
+      violations.push(`selfCorrection: ${selfCorrection}`);
+    }
+    const words = content.trim().split(/\s+/).filter(Boolean).length;
+    if (words > ARTIST_SENTENCE_MAX_WORDS) {
+      violations.push(`wordCount: ${words} words (max ${ARTIST_SENTENCE_MAX_WORDS})`);
+    }
   }
 
   if (task === 'artistSentence' && /[*#_\[]/.test(content)) {

@@ -45,6 +45,8 @@ The repo already has the shape for this: `AI_TASKS` carries a `provider` per tas
 | artistSummary, albumDetail, genreSummary, albumRecommendations, userInsightsSummary, userInsightsRecommendations | `anthropic` / `claude-opus-5-5` | `low` | Cached for days to months; what's on the page matters more than cost |
 | artistSentence, listenAi, randomFact | `anthropic` / `claude-sonnet-5-5` | `low` | Someone is waiting, or it's the hourly cron |
 
+2026-10-25 note: `artistSentence` moved to `claude-opus-5-5` (low effort) after Sonnet 5.5 shipped visible self-corrections on 2 of 9 rows in eval `claude-r5-sentence`; `randomFact` had already moved to `gpt-5.6-luna` in round 3, so only `listenAi` stays on Sonnet.
+
 `userInsightsSummary` moves from `claude-sonnet-5` to `claude-opus-5-5` to match the other long-form tasks (my call; Rian can keep it on Sonnet if the warmer-voice work in `docs/superpowers/specs/2026-06-19-insights-warmer-voice-design.md` argues otherwise, and the eval covers it).
 
 `maxTokens` values start as they are. They were sized for reasoning plus prose on GPT-5.6, and Claude's thinking tokens count against `max_tokens` the same way. The exception is the Sonnet tasks, which have no Claude measurement behind them: `artistSentence` (400) and `listenAi` (500) are tight for adaptive thinking plus up to three search hops. If the eval shows either truncating, the builder raises `maxTokens` (only generated tokens are billed, so the ceiling is free) and reruns. Only if truncation persists after that may the builder send Sonnet 5.5 `thinking: { type: 'between_tools' }` for that task, which turns thinking off on a non-tool turn; this is a per-task mapping branch, documented next to the effort mapping, and not the default (my call).

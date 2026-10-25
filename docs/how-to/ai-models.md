@@ -20,7 +20,7 @@ All AI configuration lives in `packages/config/src/ai.ts`. The comment block abo
 | Model | Provider | Pricing (per 1M tokens) | Role |
 |-------|----------|-------------------------|------|
 | `claude-opus-5-5` | Anthropic | $4.00 in / $20.00 out | Long-form and judgement tasks |
-| `claude-sonnet-5-5` | Anthropic | $2.00 in / $10.00 out | Short, latency-sensitive tasks |
+| `claude-sonnet-5-5` | Anthropic | $2.00 in / $10.00 out | `listenAi`, the uncached chat the user waits on |
 | `gpt-5.6-terra` | OpenAI | $2.00 in / $12.00 out | Switch-back for cached tasks |
 | `gpt-5.6-luna` | OpenAI | $0.20 in / $1.20 out | `randomFact`; switch-back for cheap tasks |
 
@@ -36,7 +36,7 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 | `albumRecommendations` | `claude-opus-5-5` | low | Web search plus judgement about what to recommend |
 | `userInsightsSummary` | `claude-opus-5-5` | low | Warm long-form writing that follows the few-shot examples |
 | `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
-| `artistSentence` | `claude-sonnet-5-5` | low | Short output with web search |
+| `artistSentence` | `claude-opus-5-5` | low | Short output with web search, cached 180 days. Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval rows (64-74 words against the 38-word cap) |
 | `listenAi` | `claude-sonnet-5-5` | low | Chat; the user waits on it |
 | `randomFact` | `gpt-5.6-luna` | default | Uncached hourly cron. Sonnet 5.5 at low effort shipped visible self-corrections as the fact on 2 of 4 runs in the final eval round (461-521 characters against the 300-character limit); Luna was clean |
 
