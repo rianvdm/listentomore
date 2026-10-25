@@ -25,8 +25,6 @@ export { RegionUnsupportedError } from './errors';
 export type {
   ChatCompletionOptions,
   ChatCompletionResponse,
-  ImageGenerationOptions,
-  ImageGenerationResponse,
   ResponsesOptions,
   ResponsesResult,
 } from './openai';
@@ -50,8 +48,6 @@ export {
   generateRandomFact,
   generateAndStoreFact,
   getRandomCachedFact,
-  generatePlaylistCoverPrompt,
-  generatePlaylistCoverImage,
   generateListenAIResponse,
   generateAlbumRecommendations,
   generateUserInsightsSummary,
@@ -64,8 +60,6 @@ export {
   type GenreSummaryResult,
   type ArtistSentenceResult,
   type RandomFactResult,
-  type PlaylistCoverPromptResult,
-  type PlaylistCoverImageResult,
   type ListenAIResult,
   type AlbumRecommendationsResult,
   type UserInsightsSummaryResult,
@@ -187,24 +181,6 @@ export class AIService {
   async generateAndStoreRandomFact() {
     const { generateAndStoreFact } = await import('./prompts/random-fact');
     return generateAndStoreFact(this.openai, this.kv);
-  }
-
-  /**
-   * Generate a DALL-E prompt for a playlist cover
-   * Note: Always uses OpenAI for image generation
-   */
-  async getPlaylistCoverPrompt(playlistName: string, description: string) {
-    const { generatePlaylistCoverPrompt } = await import('./prompts/playlist-cover');
-    return generatePlaylistCoverPrompt(playlistName, description, this.openai);
-  }
-
-  /**
-   * Generate a playlist cover image (uses OpenAI DALL-E)
-   * Note: Always uses OpenAI for image generation
-   */
-  async getPlaylistCoverImage(dallePrompt: string) {
-    const { generatePlaylistCoverImage } = await import('./prompts/playlist-cover');
-    return generatePlaylistCoverImage(dallePrompt, this.openai);
   }
 
   /**

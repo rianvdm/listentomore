@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
-import { getTaskConfig } from '@listentomore/config';
+import { getTaskConfig, AI_TASKS } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -1073,5 +1073,12 @@ describe('withAgentTracing', () => {
     await client.chatCompletion(options);
     expect(spy).toHaveBeenCalledWith(options);
     expect(spans.map((s) => s.name)).toEqual(['invoke_agent artistSentence', 'chat gpt-5.6-terra']);
+  });
+});
+
+describe('playlist cover removal', () => {
+  it('has no playlist cover task or image generation', () => {
+    expect('playlistCoverPrompt' in AI_TASKS).toBe(false);
+    expect((new OpenAIClient('k') as unknown as Record<string, unknown>).generateImage).toBeUndefined();
   });
 });

@@ -53,9 +53,8 @@ export interface AITaskConfig {
  * which runs on Anthropic.
  *
  * OpenAI tasks run on gpt-5.6-terra, except randomFact (gpt-5.6-luna — uncached,
- * so the cheap tier earns its keep) and playlistCoverPrompt (still on the older
- * gpt-5-nano). GPT-5.6 ships as three fixed tiers rather than one model with
- * capability dials; luna is a drop-in swap for any task here if cost bites:
+ * so the cheap tier earns its keep). GPT-5.6 ships as three fixed tiers rather
+ * than one model with capability dials; luna is a drop-in swap for any task here if cost bites:
  *
  * ┌─────────────────┬──────────────────────┬──────────────────────┐
  * │ Tier            │ gpt-5.6-terra        │ gpt-5.6-luna         │
@@ -164,14 +163,6 @@ export const AI_TASKS = {
     cacheTtlDays: 0, // No caching - always fresh
   },
 
-  playlistCoverPrompt: {
-    provider: 'openai',
-    model: 'gpt-5-nano',
-    maxTokens: 10000,
-    temperature: 1,
-    cacheTtlDays: 0,
-  },
-
   listenAi: {
     provider: 'openai',
     model: 'gpt-5.6-terra',
@@ -224,15 +215,6 @@ export const AI_TASKS = {
 } as const satisfies Record<string, AITaskConfig>;
 
 export type AITask = keyof typeof AI_TASKS;
-
-export const IMAGE_GENERATION = {
-  playlistCover: {
-    provider: 'openai',
-    model: 'gpt-image-1',
-    size: '1024x1024' as const,
-    quality: 'standard' as const,
-  },
-} as const;
 
 export const RATE_LIMITS = {
   openai: {
