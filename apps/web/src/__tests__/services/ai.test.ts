@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS } from '@listentomore/config';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
@@ -379,6 +379,77 @@ describe('AnthropicClient.chatCompletion', () => {
     const body = lastBody(mockFetch);
     expect(body.text).toBeUndefined();
     expect(body.verbosity).toBeUndefined();
+  });
+
+  it('adds the web search tool only when webSearch is true', async () => {
+    let mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }]);
+
+    mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: false,
+    });
+    expect('tools' in lastBody(mockFetch)).toBe(false);
+  });
+
+  it('uses the 60s timeout preset for web search tasks', () => {
+    expect(timeoutPresetFor(true)).toBe('verySlow');
+    expect(timeoutPresetFor(false)).toBe('slow');
+    expect(timeoutPresetFor(undefined)).toBe('slow');
+  });
+
+  it('joins only text blocks, preserving a placeholder split across blocks', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-opus-5-5',
+        content: [
+          { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Radiohead' } },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [{ type: 'web_search_result', url: 'https://x', title: 't' }] },
+          { type: 'text', text: 'Formed in 1985, [[Radio', citations: [{ type: 'web_search_result_location', url: 'https://x' }] },
+          { type: 'text', text: 'head]] released {{OK Computer}}.' },
+        ],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 900, output_tokens: 120, server_tool_use: { web_search_requests: 1 } },
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('Formed in 1985, [[Radiohead]] released {{OK Computer}}.');
+    expect(res.metadata?.features?.webSearchUsed).toBe(true);
+    expect(res.metadata?.features?.webSearchRequests).toBe(1);
+  });
+
+  it('returns empty content when no text blocks are present', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: { model: 'claude-opus-5-5', content: [{ type: 'server_tool_use', id: 's', name: 'web_search', input: {} }], stop_reason: 'end_turn' },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('');
+    expect(isCacheableResponse(res.content, res.metadata, 'artistSummary', 'x')).toBe(false);
+  });
+
+  it('reports webSearchUsed false when the tool was offered but not called', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'plain' }], usage: { input_tokens: 10, output_tokens: 5 } },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.metadata?.features?.webSearchUsed).toBe(false);
+    expect(res.metadata?.features?.webSearchRequests).toBeNull();
   });
 
   it('maps the response to content + anthropic metadata', async () => {

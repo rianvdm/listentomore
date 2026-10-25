@@ -4,6 +4,7 @@
 
 import { AI_PROVIDERS } from '@listentomore/config';
 import { fetchWithTimeout } from '@listentomore/shared';
+import type { TimeoutPreset } from '@listentomore/shared';
 import type {
   ChatClient,
   ChatCompletionOptions,
@@ -33,6 +34,22 @@ export function mapReasoningToEffort(
   reasoning: ReasoningEffort | undefined
 ): ClaudeEffort {
   return reasoning ? EFFORT_BY_REASONING[reasoning] : 'low';
+}
+
+// Server-side web search runs inside the request, so it needs the 60s preset.
+export function timeoutPresetFor(webSearch: boolean | undefined): TimeoutPreset {
+  return webSearch ? 'verySlow' : 'slow';
+}
+
+interface AnthropicMessagesPayload {
+  model: string;
+  content: Array<{ type: string; text?: string; name?: string }>;
+  stop_reason?: string | null;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    server_tool_use?: { web_search_requests?: number };
+  };
 }
 
 export class AnthropicClient implements ChatClient {
@@ -67,7 +84,11 @@ export class AnthropicClient implements ChatClient {
     }
     // Current Claude models 400 on temperature, so it is never sent.
     // Claude has no verbosity control; options.verbosity is ignored.
-    body.output_config = { effort: mapReasoningToEffort(options.reasoning) };
+    const effort = mapReasoningToEffort(options.reasoning);
+    body.output_config = { effort };
+    if (options.webSearch === true) {
+      body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }];
+    }
 
     const response = await fetchWithTimeout(`${this.baseUrl}/messages`, {
       method: 'POST',
@@ -77,7 +98,7 @@ export class AnthropicClient implements ChatClient {
         'anthropic-version': ANTHROPIC_VERSION,
       },
       body: JSON.stringify(body),
-      timeout: 'slow', // 30 seconds for AI
+      timeout: timeoutPresetFor(options.webSearch),
     });
 
     if (!response.ok) {
@@ -86,13 +107,11 @@ export class AnthropicClient implements ChatClient {
       throw new Error(`Anthropic API error: ${response.statusText}`);
     }
 
-    const data = (await response.json()) as {
-      model: string;
-      content: Array<{ type: string; text?: string }>;
-      stop_reason?: string | null;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+    const data = (await response.json()) as AnthropicMessagesPayload;
 
+    // Only text blocks are prose; server_tool_use and web_search_tool_result
+    // blocks are ignored. Join with '' so [[Artist]] placeholders split across
+    // blocks stay intact.
     const content = data.content
       .filter((b) => b.type === 'text' && typeof b.text === 'string')
       .map((b) => b.text)
@@ -112,6 +131,12 @@ export class AnthropicClient implements ChatClient {
       );
     }
 
+    const webSearchUsed = data.content.some(
+      (b) => b.type === 'server_tool_use' && b.name === 'web_search'
+    );
+    const webSearchRequests =
+      data.usage?.server_tool_use?.web_search_requests ?? null;
+
     const metadata: AIResponseMetadata = {
       provider: 'anthropic',
       model: data.model,
@@ -126,6 +151,11 @@ export class AnthropicClient implements ChatClient {
           }
         : undefined,
       truncated,
+      features: {
+        webSearchUsed,
+        webSearchRequests,
+        reasoning: effort as ReasoningEffort,
+      },
     };
 
     return { content, metadata };

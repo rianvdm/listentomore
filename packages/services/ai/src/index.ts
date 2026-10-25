@@ -20,7 +20,7 @@ export type {
 
 // Re-export clients and cache for direct use
 export { OpenAIClient } from './openai';
-export { AnthropicClient, mapReasoningToEffort } from './anthropic';
+export { AnthropicClient, mapReasoningToEffort, timeoutPresetFor } from './anthropic';
 export type { ClaudeEffort } from './anthropic';
 export { RegionUnsupportedError } from './errors';
 export type {

@@ -69,6 +69,8 @@ export interface AIResponseMetadata {
   features?: {
     /** Whether web search was performed (OpenAI Responses API) */
     webSearchUsed?: boolean;
+    /** Number of web searches Anthropic ran (null when none) */
+    webSearchRequests?: number | null;
     /** Reasoning effort level if reasoning was used */
     reasoning?: ReasoningEffort;
     /** Verbosity level if set */

@@ -84,6 +84,7 @@ export function withAgentTracing(
               'gen_ai.usage.input_tokens': meta?.usage?.inputTokens ?? undefined,
               'gen_ai.usage.output_tokens': meta?.usage?.outputTokens ?? undefined,
               'listentomore.web_search_used': meta?.features?.webSearchUsed,
+              'listentomore.web_search_requests': meta?.features?.webSearchRequests ?? undefined,
               'listentomore.truncated': meta?.truncated,
             });
             if (recordMessages) {
