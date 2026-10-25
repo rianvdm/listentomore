@@ -947,10 +947,15 @@ describe('truncated responses are not cached', () => {
 });
 
 describe('AI task token budgets', () => {
-  it('every task runs on anthropic with explicit low effort', () => {
+  // userInsightsRecommendations runs at medium: at low effort it filtered its
+  // exclusion list in visible text (eval round 2). See its note in ai.ts.
+  it('every task runs on anthropic with explicit effort, low unless noted', () => {
+    const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsRecommendations'];
     for (const task of Object.keys(AI_TASKS) as AITask[]) {
       expect(getTaskConfig(task).provider).toBe('anthropic');
-      expect(getTaskConfig(task).reasoning).toBe('low');
+      expect(getTaskConfig(task).reasoning).toBe(
+        MEDIUM_EFFORT_TASKS.includes(task) ? 'medium' : 'low'
+      );
     }
   });
 

@@ -14,7 +14,7 @@
 
 - Conventions in `AGENTS.md`: `// ABOUTME:` headers, 2-space indent, single quotes, semicolons, `import type`, the `try/catch` + `console.error` pattern.
 - No new runtime dependencies. The eval script may use `pnpm dlx tsx`.
-- Model IDs exactly `claude-opus-5-5` and `claude-sonnet-5-5` (no date suffixes). Web search tool exactly `{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }`.
+- Model IDs exactly `claude-opus-5-5` and `claude-sonnet-5-5` (no date suffixes). Web search tool exactly `{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }` (changed from `web_search_20260209` during eval round 1: the dynamic-filtering variant's filter scripts crashed and consumed `max_uses`, yielding empty summaries).
 - Never send `temperature` for any Claude model. Always send `output_config: { effort }` for Claude; `reasoning` unset, `'none'`, and `'minimal'` all map to `'low'`.
 - `anthropic-version` header stays `2023-06-01`.
 - Web-search tasks use `fetchWithTimeout` preset `'verySlow'` (60s); others `'slow'` (30s).

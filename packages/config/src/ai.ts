@@ -215,7 +215,10 @@ export const AI_TASKS = {
     maxTokens: 4000, // Increased from 1500 to avoid timeout
     temperature: 1,
     cacheTtlDays: 1,
-    reasoning: 'low',
+    // Medium, not low: at low effort Opus 5.5 sometimes skipped thinking and
+    // filtered against the exclusion list in visible text ("Wait — excluded
+    // artist, skip."), producing 16 bold entries instead of 4 (eval round 2).
+    reasoning: 'medium',
     verbosity: 'low',
   },
 } as const satisfies Record<string, AITaskConfig>;
