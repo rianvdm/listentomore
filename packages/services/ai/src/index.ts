@@ -20,13 +20,12 @@ export type {
 
 // Re-export clients and cache for direct use
 export { OpenAIClient } from './openai';
-export { AnthropicClient } from './anthropic';
+export { AnthropicClient, mapReasoningToEffort, timeoutPresetFor } from './anthropic';
+export type { ClaudeEffort } from './anthropic';
 export { RegionUnsupportedError } from './errors';
 export type {
   ChatCompletionOptions,
   ChatCompletionResponse,
-  ImageGenerationOptions,
-  ImageGenerationResponse,
   ResponsesOptions,
   ResponsesResult,
 } from './openai';
@@ -50,8 +49,6 @@ export {
   generateRandomFact,
   generateAndStoreFact,
   getRandomCachedFact,
-  generatePlaylistCoverPrompt,
-  generatePlaylistCoverImage,
   generateListenAIResponse,
   generateAlbumRecommendations,
   generateUserInsightsSummary,
@@ -64,8 +61,6 @@ export {
   type GenreSummaryResult,
   type ArtistSentenceResult,
   type RandomFactResult,
-  type PlaylistCoverPromptResult,
-  type PlaylistCoverImageResult,
   type ListenAIResult,
   type AlbumRecommendationsResult,
   type UserInsightsSummaryResult,
@@ -173,38 +168,19 @@ export class AIService {
 
   /**
    * Get a random music fact from the cached pool (fast - just KV read)
-   * Note: Always uses OpenAI as it needs KV storage for fact rotation
+   * (provider determined by config)
    */
   async getRandomFact() {
     const { generateRandomFact } = await import('./prompts/random-fact');
-    return generateRandomFact(this.openai, this.kv);
+    return generateRandomFact(this.getClientForTask('randomFact'), this.kv);
   }
 
   /**
-   * Generate and store a new random fact (called by CRON job)
-   * Note: Always uses OpenAI as it needs KV storage for fact rotation
+   * Generate and store a new random fact (called by CRON job; provider determined by config)
    */
   async generateAndStoreRandomFact() {
     const { generateAndStoreFact } = await import('./prompts/random-fact');
-    return generateAndStoreFact(this.openai, this.kv);
-  }
-
-  /**
-   * Generate a DALL-E prompt for a playlist cover
-   * Note: Always uses OpenAI for image generation
-   */
-  async getPlaylistCoverPrompt(playlistName: string, description: string) {
-    const { generatePlaylistCoverPrompt } = await import('./prompts/playlist-cover');
-    return generatePlaylistCoverPrompt(playlistName, description, this.openai);
-  }
-
-  /**
-   * Generate a playlist cover image (uses OpenAI DALL-E)
-   * Note: Always uses OpenAI for image generation
-   */
-  async getPlaylistCoverImage(dallePrompt: string) {
-    const { generatePlaylistCoverImage } = await import('./prompts/playlist-cover');
-    return generatePlaylistCoverImage(dallePrompt, this.openai);
+    return generateAndStoreFact(this.getClientForTask('randomFact'), this.kv);
   }
 
   /**

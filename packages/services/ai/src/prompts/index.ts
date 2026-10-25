@@ -21,13 +21,6 @@ export {
   type RandomFactResult,
 } from './random-fact';
 
-export {
-  generatePlaylistCoverPrompt,
-  generatePlaylistCoverImage,
-  type PlaylistCoverPromptResult,
-  type PlaylistCoverImageResult,
-} from './playlist-cover';
-
 export { generateListenAIResponse, type ListenAIResult } from './listen-ai';
 
 export {

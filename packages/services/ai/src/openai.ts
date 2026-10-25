@@ -92,20 +92,6 @@ interface ResponsesApiPayload {
   };
 }
 
-export interface ImageGenerationOptions {
-  prompt: string;
-  model?: string;
-  size?: '1024x1024' | '1792x1024' | '1024x1792';
-  quality?: 'standard' | 'high';
-}
-
-export interface ImageGenerationResponse {
-  /** Base64-encoded image data or URL */
-  data: string;
-  /** True if data is a data URL, false if it's a regular URL */
-  isDataUrl: boolean;
-}
-
 export class OpenAIClient implements ChatClient {
   private apiKey: string;
   private baseUrl: string;
@@ -472,58 +458,5 @@ export class OpenAIClient implements ChatClient {
     };
 
     return result;
-  }
-
-  /**
-   * Generate an image using DALL-E
-   */
-  async generateImage(
-    options: ImageGenerationOptions
-  ): Promise<ImageGenerationResponse> {
-    await this.checkRateLimit();
-
-    const response = await fetchWithTimeout(`${this.baseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model ?? 'gpt-image-1',
-        prompt: options.prompt,
-        n: 1,
-        size: options.size ?? '1024x1024',
-        quality: options.quality ?? 'high',
-        moderation: 'auto',
-        output_format: 'png',
-      }),
-      timeout: 'verySlow', // 60 seconds for image generation
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`[OpenAI] Image API error: ${response.status} - ${errorBody}`);
-      throw new Error(`OpenAI Image API error: ${response.statusText}`);
-    }
-
-    const data = (await response.json()) as {
-      data: Array<{ b64_json?: string; url?: string }>;
-    };
-
-    const imageData = data.data[0];
-
-    if (imageData.b64_json) {
-      return {
-        data: `data:image/png;base64,${imageData.b64_json}`,
-        isDataUrl: true,
-      };
-    } else if (imageData.url) {
-      return {
-        data: imageData.url,
-        isDataUrl: false,
-      };
-    }
-
-    throw new Error('Unexpected response format from OpenAI Image API');
   }
 }

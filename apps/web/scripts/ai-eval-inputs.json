@@ -1,0 +1,127 @@
+{
+  "artists": [
+    "Radiohead",
+    "Fela Kuti",
+    "Harold Budd",
+    "Little Simz",
+    "Die Antwoord",
+    "Sault",
+    "Gyedu-Blay Ambolley",
+    "Nourished by Time",
+    "Jordan Rakei"
+  ],
+  "albums": [
+    { "artist": "FKA twigs", "album": "Eusexua", "year": 2025 },
+    { "artist": "Turnstile", "album": "Never Enough", "year": 2025 },
+    { "artist": "Wednesday", "album": "Bleeds", "year": 2025 },
+    { "artist": "Talk Talk", "album": "Spirit of Eden", "year": 1988 },
+    { "artist": "Fela Kuti", "album": "Zombie", "year": 1977 },
+    { "artist": "Kate Bush", "album": "Hounds of Love", "year": 1985 }
+  ],
+  "genres": ["shoegaze", "amapiano", "bebop", "post-punk"],
+  "recommendationSeeds": [
+    { "artist": "Slowdive", "album": "Souvlaki" },
+    { "artist": "Burial", "album": "Untrue" },
+    { "artist": "Little Simz", "album": "Sometimes I Might Be Introvert" },
+    { "artist": "Alice Coltrane", "album": "Journey in Satchidananda" }
+  ],
+  "insights": [
+    {
+      "username": "eval-ambient-jazz",
+      "listeningData": {
+        "weeklyPlayCount": 142,
+        "topArtists": [
+          { "name": "Stars of the Lid", "playcount": 38 },
+          { "name": "Alice Coltrane", "playcount": 27 },
+          { "name": "Nils Frahm", "playcount": 21 },
+          { "name": "Pharoah Sanders", "playcount": 16 },
+          { "name": "Grouper", "playcount": 12 }
+        ],
+        "topAlbums": [
+          { "name": "And Their Refinement of the Decline", "artist": "Stars of the Lid", "playcount": 30 },
+          { "name": "Journey in Satchidananda", "artist": "Alice Coltrane", "playcount": 19 },
+          { "name": "Promises", "artist": "Floating Points, Pharoah Sanders & The London Symphony Orchestra", "playcount": 16 },
+          { "name": "Spaces", "artist": "Nils Frahm", "playcount": 14 },
+          { "name": "Dragging a Dead Deer Up a Hill", "artist": "Grouper", "playcount": 12 }
+        ],
+        "recentTracks": [
+          { "name": "Movement 6", "artist": "Floating Points" },
+          { "name": "Journey in Satchidananda", "artist": "Alice Coltrane" },
+          { "name": "Shiva-Loka", "artist": "Alice Coltrane" },
+          { "name": "Don't Bother Calling", "artist": "Stars of the Lid" },
+          { "name": "Tippy's Demise", "artist": "Stars of the Lid" },
+          { "name": "Says", "artist": "Nils Frahm" },
+          { "name": "Heavy Water/I'd Rather Be Sleeping", "artist": "Grouper" },
+          { "name": "The Creator Has a Master Plan", "artist": "Pharoah Sanders" },
+          { "name": "Turiya and Ramakrishna", "artist": "Alice Coltrane" },
+          { "name": "An Ending (Ascent)", "artist": "Brian Eno" },
+          { "name": "Requiem for Dying Mothers, Part 1", "artist": "Stars of the Lid" },
+          { "name": "Hollywood", "artist": "Grouper" }
+        ],
+        "historicalArtists": [
+          { "name": "Stars of the Lid" },
+          { "name": "Nils Frahm" },
+          { "name": "Brian Eno" },
+          { "name": "Grouper" },
+          { "name": "Ólafur Arnalds" },
+          { "name": "William Basinski" },
+          { "name": "Radiohead" },
+          { "name": "Boards of Canada" },
+          { "name": "Sigur Rós" },
+          { "name": "Hiroshi Yoshimura" }
+        ]
+      }
+    },
+    {
+      "username": "eval-uk-rap-punk",
+      "listeningData": {
+        "weeklyPlayCount": 96,
+        "topArtists": [
+          { "name": "Little Simz", "playcount": 29 },
+          { "name": "Turnstile", "playcount": 18 },
+          { "name": "Kendrick Lamar", "playcount": 15 },
+          { "name": "Fontaines D.C.", "playcount": 11 },
+          { "name": "Loyle Carner", "playcount": 9 }
+        ],
+        "topAlbums": [
+          { "name": "Lotus", "artist": "Little Simz", "playcount": 22 },
+          { "name": "Never Enough", "artist": "Turnstile", "playcount": 18 },
+          { "name": "GNX", "artist": "Kendrick Lamar", "playcount": 12 },
+          { "name": "Romance", "artist": "Fontaines D.C.", "playcount": 11 },
+          { "name": "Hugo", "artist": "Loyle Carner", "playcount": 9 }
+        ],
+        "recentTracks": [
+          { "name": "Flood", "artist": "Little Simz" },
+          { "name": "Thief", "artist": "Little Simz" },
+          { "name": "Never Enough", "artist": "Turnstile" },
+          { "name": "Seein' Stars", "artist": "Turnstile" },
+          { "name": "Starburster", "artist": "Fontaines D.C." },
+          { "name": "squabble up", "artist": "Kendrick Lamar" },
+          { "name": "luther", "artist": "Kendrick Lamar" },
+          { "name": "Hate It Here", "artist": "Loyle Carner" },
+          { "name": "Introvert", "artist": "Little Simz" },
+          { "name": "Favourite", "artist": "Fontaines D.C." },
+          { "name": "Mystery", "artist": "Turnstile" }
+        ],
+        "historicalArtists": [
+          { "name": "Little Simz" },
+          { "name": "Kendrick Lamar" },
+          { "name": "IDLES" },
+          { "name": "Kano" },
+          { "name": "slowthai" },
+          { "name": "Denzel Curry" },
+          { "name": "Fontaines D.C." },
+          { "name": "Black Country, New Road" },
+          { "name": "JPEGMAFIA" }
+        ]
+      }
+    }
+  ],
+  "listenAi": [
+    "Where should I start with Brian Eno's ambient records?",
+    "Why do people call Loveless by My Bloody Valentine a landmark album?",
+    "I love Khruangbin. What should I listen to next that has more vocals?",
+    "What's the difference between dub and dubstep?"
+  ],
+  "randomFact": 4
+}

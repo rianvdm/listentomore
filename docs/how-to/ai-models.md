@@ -1,116 +1,117 @@
 # AI Models Configuration Guide
 
-This guide covers how to configure AI tasks, switch between providers, and use OpenAI models with web search.
+This guide covers how to configure AI tasks, switch between providers, and use web search with each.
 
 ## Overview
 
-ListenToMore uses **OpenAI** for most AI tasks and **Anthropic** for the weekly insights summary:
+ListenToMore runs eight of its nine AI tasks on **Anthropic Claude**. `randomFact` stays on **OpenAI**. Both clients are live: switching a task between providers is a config edit, with no code change.
 
-| Provider | Best For | Models |
-|----------|----------|--------|
-| **OpenAI** | Web search, reasoning, chat, generation | `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5-nano` |
-| **Anthropic** | Warm, voice-driven long-form writing | `claude-sonnet-5` |
+| Provider | Models | Used for |
+|----------|--------|----------|
+| **Anthropic** | `claude-opus-5-5`, `claude-sonnet-5-5` | Every task except `randomFact` |
+| **OpenAI** | `gpt-5.6-terra`, `gpt-5.6-luna` | `randomFact` (Luna); the switch-back path for the rest |
 
-All AI configuration lives in `packages/config/src/ai.ts`.
+All AI configuration lives in `packages/config/src/ai.ts`. The comment block above `AI_TASKS` records the measurements behind the current settings.
 
 ---
 
 ## Current Model Lineup
 
-GPT-5.6 ships as three fixed tiers (Sol / Terra / Luna) rather than one model with
-capability dials. Nothing here needs Sol.
+| Model | Provider | Pricing (per 1M tokens) | Role |
+|-------|----------|-------------------------|------|
+| `claude-opus-5-5` | Anthropic | $4.00 in / $20.00 out | Long-form and judgement tasks |
+| `claude-sonnet-5-5` | Anthropic | $2.00 in / $10.00 out | `listenAi`, the uncached chat the user waits on |
+| `gpt-5.6-terra` | OpenAI | $2.00 in / $12.00 out | Switch-back for cached tasks |
+| `gpt-5.6-luna` | OpenAI | $0.20 in / $1.20 out | `randomFact`; switch-back for cheap tasks |
 
-| Model | Best For | Reasoning Efforts | Pricing (per 1M tokens) |
-|-------|----------|-------------------|------------------------|
-| `gpt-5.6-terra` | Default for cached and reasoning-heavy tasks | `none`, `low`, `medium` (default), `high`, `xhigh`, `max` | $2.00 in / $12.00 out |
-| `gpt-5.6-luna` | Cheap tier — uncached, high-volume tasks | `none`, `low`, `medium` (default), `high`, `xhigh`, `max` | $0.20 in / $1.20 out |
-| `gpt-5-nano` | Legacy — still used by playlist cover prompts | `minimal`, `low`, `medium` (default), `high` | $0.05 in / $0.40 out |
-| `claude-sonnet-5` | Weekly insights summary | adaptive thinking (no effort set) | $3.00 in / $15.00 out |
+Claude web search costs $10 per 1,000 searches. Search results are also billed as input tokens.
 
-The Terra/Luna split here is about **caching, not capability**. Tasks that cache
-for months cost almost nothing regardless of tier, so they take the better model;
-uncached tasks pay per call, so they take the cheap one. Luna measured no less
-accurate than Terra on a small sample of artist-fact prompts, so treat it as a
-live option rather than a downgrade.
+### Current Assignments
 
-Both 5.6 tiers default to **medium** reasoning effort, so even a short generation
-spends ~75–100 reasoning tokens before it starts writing. Set `reasoning: 'none'`
-on a task to buy that latency back.
+| Task | Model | Effort | Why |
+|------|-------|--------|-----|
+| `artistSummary` | `claude-opus-5-5` | low | Long-form, cached 180 days |
+| `albumDetail` | `claude-opus-5-5` | low | Long-form with web search, cached 120 days |
+| `genreSummary` | `claude-opus-5-5` | low | Long-form, cached 180 days |
+| `albumRecommendations` | `claude-opus-5-5` | low | Web search plus judgement about what to recommend |
+| `userInsightsSummary` | `claude-opus-5-5` | low | Warm long-form writing that follows the few-shot examples |
+| `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
+| `artistSentence` | `claude-opus-5-5` | low | Short output with web search, cached 180 days. Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval rows (64-74 words against the 38-word cap) |
+| `listenAi` | `claude-sonnet-5-5` | low | Chat; the user waits on it |
+| `randomFact` | `gpt-5.6-luna` | default | Uncached hourly cron. Sonnet 5.5 at low effort shipped visible self-corrections as the fact on 2 of 4 runs in the final eval round (461-521 characters against the 300-character limit); Luna was clean |
 
-### Choosing a Model
+The `artistSummary`, `albumDetail`, and `genreSummary` prompts carry word caps (180, 350, 350) so Claude's output matches the length GPT produced.
 
-| Use Case | Current Model | Why |
-|----------|---------------|-----|
-| Web-grounded summaries (artist, album, genre) | `gpt-5.6-terra` | Cached 120–180 days, so the better tier costs almost nothing |
-| Short descriptions (artist sentence) | `gpt-5.6-terra` | Same — heavily cached, web-grounded |
-| Album recommendations | `gpt-5.6-terra` | Web search plus judgement about what to recommend |
-| Complex AI chat (ListenAI) | `gpt-5.6-terra` | Reasoning + conversational quality, low latency |
-| User insights summary | `claude-sonnet-5` | Warmer voice, follows the few-shot exemplars closely |
-| User insights recommendations | `gpt-5.6-terra` | Multi-step analysis over listening history |
-| Random facts, simple generation | `gpt-5.6-luna` | Uncached, so every call is billed — the one task where the Terra rate would bite |
-| Playlist cover prompts | `gpt-5-nano` | High-throughput, minimal reasoning needed |
+To compare models or settings, run the eval script `apps/web/scripts/ai-eval.ts` (flags: `--label`, `--only`, `--rescore`).
 
 ---
 
 ## Task Configuration
 
-All task configs live in `packages/config/src/ai.ts` under `AI_TASKS`. To change a model, edit the `model` field:
+All task configs live in `packages/config/src/ai.ts` under `AI_TASKS`. To switch a task between providers, edit `provider` and `model` together:
 
 ```typescript
 export const AI_TASKS = {
   artistSummary: {
-    provider: 'openai',
-    model: 'gpt-5.6-luna',
-    maxTokens: 1500,
+    provider: 'openai',          // was 'anthropic'
+    model: 'gpt-5.6-terra',      // was 'claude-opus-5-5'
+    maxTokens: 2500,
     temperature: 1,
     cacheTtlDays: 180,
     webSearch: false,
+    reasoning: 'low',
   },
   // ...
 } as const satisfies Record<string, AITaskConfig>;
 ```
 
+Each API key is needed only by the tasks routed to its provider: `ANTHROPIC_API_KEY` for Anthropic tasks, `OPENAI_API_KEY` for OpenAI tasks. Today both must be set, because `randomFact` runs on OpenAI and every other task on Anthropic.
+
 ### Routing
 
-All `gpt-5.x` models route to the **Responses API** automatically. The `shouldUseResponsesApi()` method in `openai.ts` handles this — any model starting with `gpt-5` goes to the Responses API, which supports web search, reasoning, and verbosity controls.
+`AIService.getClientForTask()` picks the client from the task's `provider`. Each client maps the shared config fields to its own API:
 
-| Feature | `gpt-5.6-*` (Responses API) |
-|---------|----------------------------|
-| Web search | Via `web_search` tool |
-| Reasoning control | `reasoning.effort` param |
-| Verbosity control | `text.verbosity` param |
-| Temperature | Only when reasoning is `none` |
+| Config field | Anthropic (Messages API) | OpenAI (Responses API, `gpt-5.x`) |
+|--------------|--------------------------|-----------------------------------|
+| `webSearch` | Server-side `web_search_20250305` tool, `max_uses: 5` | `web_search` tool |
+| `reasoning` | `output_config.effort`; `none`, `minimal`, or unset map to `low` | `reasoning.effort` |
+| `temperature` | Never sent | Only sent when reasoning is `none` |
+| `verbosity` | Ignored | `text.verbosity` |
+| `maxTokens` | `max_tokens` (includes thinking) | `max_output_tokens` (includes reasoning) |
+
+Anthropic client behavior worth knowing:
+
+- `stop_reason: max_tokens` and `refusal` both mark the response uncacheable.
+- A `pause_turn` stop is resumed once automatically. Usage covers both requests; a second `pause_turn` marks the response uncacheable.
+- When a response contains search results, only text after the last result is kept, so narration such as "I'll search for..." never reaches the page or the cache.
+- Requests with web search use the 60-second timeout tier.
+- `max_uses: 5` allows album recommendations to verify the seed album plus three picks (four searches). The newer `web_search_20260209` tool was tried first; its model-written filter scripts crashed while still consuming searches, which produced empty summaries.
+
+OpenAI client behavior: any model starting with `gpt-5` goes to the Responses API (`shouldUseResponsesApi()` in `openai.ts`).
 
 ### Web Search
 
-Set `webSearch: true` in the task config to give the model access to the `web_search` tool. The model decides whether to search based on the query. Prompts for web-grounded tasks include the instruction "Always search the web for the latest information" to encourage searching for potentially recent/unknown content.
+Set `webSearch: true` in the task config to give the model a search tool. The model decides whether to search based on the query. Prompts for web-grounded tasks include the instruction "Always search the web for the latest information" to encourage searching for potentially recent or unknown content.
 
-**Note:** No citations are extracted or displayed. Web search results are incorporated directly into the model's response text.
+**Note:** No citations are extracted or displayed. Search results are incorporated directly into the model's response text.
 
 ### Reasoning Effort
 
-Controls how many reasoning tokens the model generates:
+Controls how many reasoning (GPT) or thinking (Claude) tokens the model spends before writing. These tokens are invisible and count against `maxTokens`.
 
-| Setting | Use Case | Notes |
-|---------|----------|-------|
-| `none` | No reasoning, temperature works | Fastest — set this explicitly if latency matters |
-| `low` | Light reasoning | Fast |
-| `medium` | Standard reasoning | **Default for gpt-5.6-terra / gpt-5.6-luna** |
-| `high` | Complex multi-step planning | Slow |
-| `xhigh` | Deeper reasoning | Slower |
-| `max` | Maximum reasoning depth | Slowest, gpt-5.6 only |
+| Setting | Notes |
+|---------|-------|
+| `none` | OpenAI: no reasoning, temperature works. Claude: treated as `low` |
+| `minimal` | OpenAI `gpt-5` / `gpt-5-mini` only. Claude: treated as `low` |
+| `low` | Light reasoning, fast. Used by most tasks |
+| `medium` | Default on Opus 5.5 and the GPT-5.6 tiers. Used by `userInsightsRecommendations` |
+| `high`, `xhigh`, `max` | Deeper and slower. Claude receives all three unchanged; on OpenAI, `max` exists on GPT-5.6 only |
 
-**Important:** `temperature`, `top_p`, and `logprobs` only work when reasoning effort is `none`.
+Set `reasoning` explicitly on every task. On OpenAI, an unset value falls to the model default (`medium` on GPT-5.6), which is slower and spends more tokens. The Anthropic client maps an unset value to `low`.
 
 ### Verbosity
 
-Controls output length:
-
-| Setting | Use Case |
-|---------|----------|
-| `low` | Concise answers |
-| `medium` | Balanced detail (default) |
-| `high` | Thorough explanations |
+OpenAI only. Controls output length: `low` (concise), `medium` (default), `high` (thorough). Claude ignores it, so length on Claude is controlled in the prompt.
 
 ---
 
@@ -125,14 +126,14 @@ export const AI_TASKS = {
   // ...existing tasks
 
   myNewTask: {
-    provider: 'openai',
-    model: 'gpt-5.6-terra',
-    maxTokens: 1000,
+    provider: 'anthropic',
+    model: 'claude-opus-5-5',
+    maxTokens: 2500,
     temperature: 1,
     cacheTtlDays: 30,
     webSearch: true,       // optional
     reasoning: 'low',      // optional
-    verbosity: 'medium',   // optional
+    verbosity: 'low',      // optional, OpenAI only
   },
 } as const satisfies Record<string, AITaskConfig>;
 ```
@@ -274,9 +275,11 @@ app.get('/my-new-task', async (c) => {
 
 ## Environment Variables
 
-Required in `apps/web/wrangler.toml` (secrets):
+Required secrets on both the web Worker (`apps/web/wrangler.toml`) and the Discord bot Worker (`apps/discord-bot/wrangler.toml`):
 
 | Variable | Purpose |
 |----------|--------|
-| `OPENAI_API_KEY` | GPT models, web search |
-| `INTERNAL_API_SECRET` | Signing internal API tokens |
+| `ANTHROPIC_API_KEY` | Claude models, Claude web search |
+| `OPENAI_API_KEY` | GPT models (`randomFact`, and any task switched back to OpenAI) |
+
+The web Worker also needs `INTERNAL_API_SECRET` for signing internal API tokens.

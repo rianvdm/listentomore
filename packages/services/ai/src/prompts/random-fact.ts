@@ -2,7 +2,7 @@
 // Uses CRON job to generate hourly and stores 10 rotating facts in KV
 
 import { AI_TASKS } from '@listentomore/config';
-import type { OpenAIClient } from '../openai';
+import type { ChatClient } from '../types';
 
 export interface RandomFactResult {
   fact: string;
@@ -67,7 +67,7 @@ function randomChoice<T>(arr: T[]): T {
  * Called by CRON job every hour
  */
 export async function generateAndStoreFact(
-  client: OpenAIClient,
+  client: ChatClient,
   kv: KVNamespace
 ): Promise<RandomFactResult> {
   const config = AI_TASKS.randomFact;
@@ -149,7 +149,7 @@ export async function getRandomCachedFact(
  * Now just returns a cached fact (fast) instead of generating on-demand
  */
 export async function generateRandomFact(
-  client: OpenAIClient,
+  client: ChatClient,
   kv: KVNamespace
 ): Promise<RandomFactResult> {
   // Try to get a cached fact first (fast path)

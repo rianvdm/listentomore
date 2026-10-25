@@ -422,7 +422,7 @@ If all facts in the pool are excluded, the newest fact is returned with a `warni
 
 ### Ask (Chat)
 
-Chat with the music AI assistant. Powered by OpenAI GPT-4.
+Chat with the music AI assistant. Powered by Claude.
 
 ```
 POST /api/v1/ask

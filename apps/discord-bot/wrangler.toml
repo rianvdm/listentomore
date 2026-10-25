@@ -31,7 +31,8 @@ ENVIRONMENT = "production"
 # - SPOTIFY_CLIENT_ID
 # - SPOTIFY_CLIENT_SECRET
 # - LASTFM_API_KEY
-# - OPENAI_API_KEY
+# - OPENAI_API_KEY (randomFact, and any task switched back to OpenAI)
+# - ANTHROPIC_API_KEY (all other AI tasks; required, the bot needs it as well as the web Worker)
 # Apple MusicKit (for streaming links):
 # - APPLE_KEY_ID
 # - APPLE_TEAM_ID

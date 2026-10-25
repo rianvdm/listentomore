@@ -1,9 +1,10 @@
 // AIService integration tests
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
-import { getTaskConfig } from '@listentomore/config';
-import { createMockKV, setupFetchMock } from '../utils/mocks';
+import type { ReasoningEffort } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
+import { getTaskConfig, AI_TASKS, type AITask } from '@listentomore/config';
+import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
   let client: OpenAIClient;
@@ -337,45 +338,240 @@ describe('AnthropicClient.chatCompletion', () => {
     expect(body.system).toBe('You are a friend.');
     expect(body.messages).toEqual([{ role: 'user', content: 'My week...' }]);
     expect(body.max_tokens).toBe(1500);
-    expect(body.temperature).toBe(0.8);
+    expect(body.temperature).toBeUndefined();
   });
 
-  it('omits temperature for opus-tier models', async () => {
-    const mockFetch = setupFetchMock([
-      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-4-8', content: [{ type: 'text', text: 'x' }] } },
-    ]);
-    await new AnthropicClient('key').chatCompletion({
-      model: 'claude-opus-4-8',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 1500,
-      temperature: 0.8,
-    });
-    expect(lastBody(mockFetch).temperature).toBeUndefined();
-  });
-
-  it('omits temperature for claude-sonnet-5 but keeps it for claude-sonnet-4-6', async () => {
-    const mkFetch = (model: string) =>
-      setupFetchMock([
+  it('never sends temperature for any Claude model', async () => {
+    for (const model of ['claude-sonnet-4-6', 'claude-sonnet-5-5', 'claude-opus-5-5']) {
+      const mockFetch = setupFetchMock([
         { pattern: /api\.anthropic\.com/, response: { model, content: [{ type: 'text', text: 'x' }] } },
       ]);
+      await new AnthropicClient('key').chatCompletion({
+        model, messages: [{ role: 'user', content: 'hi' }], temperature: 0.8,
+      });
+      expect(lastBody(mockFetch).temperature).toBeUndefined();
+    }
+  });
 
-    let mockFetch = mkFetch('claude-sonnet-5');
-    await new AnthropicClient('key').chatCompletion({
-      model: 'claude-sonnet-5',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 1500,
-      temperature: 0.8,
-    });
-    expect(lastBody(mockFetch).temperature).toBeUndefined();
+  it('maps reasoning to output_config.effort, defaulting to low', async () => {
+    const cases: Array<[ReasoningEffort | undefined, string]> = [
+      [undefined, 'low'], ['none', 'low'], ['minimal', 'low'], ['low', 'low'],
+      ['medium', 'medium'], ['high', 'high'], ['xhigh', 'xhigh'], ['max', 'max'],
+    ];
+    for (const [reasoning, effort] of cases) {
+      const mockFetch = setupFetchMock([
+        { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+      ]);
+      await new AnthropicClient('key').chatCompletion({
+        model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], reasoning,
+      });
+      expect(lastBody(mockFetch).output_config).toEqual({ effort });
+    }
+  });
 
-    mockFetch = mkFetch('claude-sonnet-4-6');
+  it('ignores verbosity', async () => {
+    const mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+    ]);
     await new AnthropicClient('key').chatCompletion({
-      model: 'claude-sonnet-4-6',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 1500,
-      temperature: 0.8,
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], verbosity: 'low',
     });
-    expect(lastBody(mockFetch).temperature).toBe(0.8);
+    const body = lastBody(mockFetch);
+    expect(body.text).toBeUndefined();
+    expect(body.verbosity).toBeUndefined();
+  });
+
+  it('adds the web search tool only when webSearch is true', async () => {
+    let mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    // Basic search, not dynamic filtering: see WEB_SEARCH_TOOL in anthropic.ts.
+    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]);
+
+    mockFetch = setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
+    ]);
+    await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: false,
+    });
+    expect('tools' in lastBody(mockFetch)).toBe(false);
+  });
+
+  it('uses the 60s timeout preset for web search tasks', () => {
+    expect(timeoutPresetFor(true)).toBe('verySlow');
+    expect(timeoutPresetFor(false)).toBe('slow');
+    expect(timeoutPresetFor(undefined)).toBe('slow');
+  });
+
+  it('joins only text blocks, preserving a placeholder split across blocks', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-opus-5-5',
+        content: [
+          { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Radiohead' } },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [{ type: 'web_search_result', url: 'https://x', title: 't' }] },
+          { type: 'text', text: 'Formed in 1985, [[Radio', citations: [{ type: 'web_search_result_location', url: 'https://x' }] },
+          { type: 'text', text: 'head]] released {{OK Computer}}.' },
+        ],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 900, output_tokens: 120, server_tool_use: { web_search_requests: 1 } },
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('Formed in 1985, [[Radiohead]] released {{OK Computer}}.');
+    expect(res.metadata?.features?.webSearchUsed).toBe(true);
+    expect(res.metadata?.features?.webSearchRequests).toBe(1);
+  });
+
+  it('drops narration before the search and keeps only the answer', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5-5',
+        content: [
+          { type: 'text', text: "I'll search for Jordan Rakei." },
+          { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Jordan Rakei' } },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [{ type: 'web_search_result', url: 'https://x', title: 't' }] },
+          { type: 'text', text: 'Jordan Rakei is a soul singer.' },
+        ],
+        stop_reason: 'end_turn',
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('Jordan Rakei is a soul singer.');
+    const dropped = log.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('pre-search'));
+    expect(dropped).toEqual(['[Anthropic] Dropped 29 chars of pre-search text']);
+    log.mockRestore();
+  });
+
+  it('keeps only text after the last search result when several searches ran', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5-5',
+        content: [
+          { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'a' } },
+          { type: 'web_search_tool_result', tool_use_id: 's1', content: [] },
+          { type: 'text', text: 'Let me search once more.' },
+          { type: 'server_tool_use', id: 's2', name: 'web_search', input: { query: 'b' } },
+          { type: 'web_search_tool_result', tool_use_id: 's2', content: [] },
+          { type: 'text', text: 'The answer.' },
+        ],
+        stop_reason: 'end_turn',
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('The answer.');
+    log.mockRestore();
+  });
+
+  it('joins every text block when no search result is present', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: {
+        model: 'claude-sonnet-5-5',
+        content: [{ type: 'text', text: 'First half, ' }, { type: 'text', text: 'second half.' }],
+        stop_reason: 'end_turn',
+      },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('First half, second half.');
+  });
+
+  it('returns empty content when no text blocks are present', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: { model: 'claude-opus-5-5', content: [{ type: 'server_tool_use', id: 's', name: 'web_search', input: {} }], stop_reason: 'end_turn' },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('');
+    expect(isCacheableResponse(res.content, res.metadata, 'artistSummary', 'x')).toBe(false);
+  });
+
+  it('resumes a pause_turn exactly once with the assistant turn appended', async () => {
+    const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn',
+      content: [{ type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'q' } }],
+      usage: { input_tokens: 1000, output_tokens: 100, server_tool_use: { web_search_requests: 2 } } };
+    const done = { model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'final' }],
+      usage: { input_tokens: 3000, output_tokens: 200 } };
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(done) as Response);
+
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.content).toBe('final');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const first = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const second = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(second.messages).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: paused.content },
+    ]);
+    expect({ ...second, messages: undefined }).toEqual({ ...first, messages: undefined });
+    // Usage and search flags cover both requests, not just the resumed one.
+    expect(res.metadata?.usage).toEqual({ inputTokens: 4000, outputTokens: 300, totalTokens: 4300 });
+    expect(res.metadata?.features?.webSearchRequests).toBe(2);
+    expect(res.metadata?.features?.webSearchUsed).toBe(true);
+  });
+
+  it('does not loop on a second pause_turn', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn', content: [{ type: 'text', text: 'partial' }] };
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse(paused) as Response);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.content).toBe('partial');
+    expect(res.metadata?.truncated).toBe(true);
+    expect(isCacheableResponse(res.content, res.metadata, 'artistSentence', 'x')).toBe(false);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('pause_turn'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('marks a refusal as not cacheable', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setupFetchMock([{ pattern: /api\.anthropic\.com/,
+      response: { model: 'claude-opus-5-5', stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'general_harms' }, content: [] } }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(res.metadata?.truncated).toBe(true);
+    expect(isCacheableResponse(res.content, res.metadata, 'artistSummary', 'x')).toBe(false);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('refusal'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('reports webSearchUsed false when the tool was offered but not called', async () => {
+    setupFetchMock([{
+      pattern: /api\.anthropic\.com/,
+      response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'plain' }], usage: { input_tokens: 10, output_tokens: 5 } },
+    }]);
+    const res = await new AnthropicClient('key').chatCompletion({
+      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
+    });
+    expect(res.metadata?.features?.webSearchUsed).toBe(false);
+    expect(res.metadata?.features?.webSearchRequests).toBeNull();
   });
 
   it('maps the response to content + anthropic metadata', async () => {
@@ -410,14 +606,26 @@ describe('AIService.getClientForTask', () => {
     return new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
   }
 
-  it('returns the OpenAI client for an openai-provider task', () => {
+  it('returns the Anthropic client for an anthropic-provider task', () => {
     const ai = makeService();
-    expect(ai.getClientForTask('artistSummary')).toBe(ai.openai);
+    expect(ai.getClientForTask('artistSummary')).toBe(ai.anthropic);
+    expect(ai.getClientForTask('listenAi')).toBe(ai.anthropic);
   });
 
   it('exposes a constructed anthropic client', () => {
     const ai = makeService();
     expect(ai.anthropic).toBeInstanceOf(AnthropicClient);
+  });
+
+  it('routes random facts through getClientForTask', async () => {
+    const ai = makeService();
+    const spy = vi.spyOn(ai, 'getClientForTask');
+    setupFetchMock([
+      { pattern: /api\.openai\.com/, response: { model: 'm', output_text: 'Did you know...', output: [], usage: {} } },
+      { pattern: /api\.anthropic\.com/, response: { model: 'm', content: [{ type: 'text', text: 'Did you know...' }] } },
+    ]);
+    await ai.generateAndStoreRandomFact();
+    expect(spy).toHaveBeenCalledWith('randomFact');
   });
 });
 
@@ -567,10 +775,10 @@ describe('generateUserInsightsSummary — scrub pass', () => {
 });
 
 describe('userInsightsSummary provider flip', () => {
-  it('is configured for anthropic sonnet', () => {
+  it('is configured for anthropic opus', () => {
     const cfg = getTaskConfig('userInsightsSummary');
     expect(cfg.provider).toBe('anthropic');
-    expect(cfg.model).toBe('claude-sonnet-5');
+    expect(cfg.model).toBe('claude-opus-5-5');
   });
 
   it('routes the task to the anthropic client', () => {
@@ -813,6 +1021,30 @@ describe('truncated responses are not cached', () => {
 });
 
 describe('AI task token budgets', () => {
+  // randomFact stays on OpenAI after eval round 3, and
+  // userInsightsRecommendations runs at medium effort (eval round 2). See
+  // their notes in packages/config/src/ai.ts.
+  const OPENAI_TASKS: AITask[] = ['randomFact'];
+
+  it('every Claude task runs with explicit effort, low unless noted', () => {
+    const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsRecommendations'];
+    for (const task of Object.keys(AI_TASKS) as AITask[]) {
+      if (OPENAI_TASKS.includes(task)) continue;
+      expect(getTaskConfig(task).provider).toBe('anthropic');
+      expect(getTaskConfig(task).reasoning).toBe(
+        MEDIUM_EFFORT_TASKS.includes(task) ? 'medium' : 'low'
+      );
+    }
+  });
+
+  it('splits models as designed', () => {
+    expect(getTaskConfig('listenAi').model).toBe('claude-sonnet-5-5');
+    for (const t of ['artistSummary', 'artistSentence', 'albumDetail', 'genreSummary', 'albumRecommendations', 'userInsightsSummary', 'userInsightsRecommendations'] as const) {
+      expect(getTaskConfig(t).model).toBe('claude-opus-5-5');
+    }
+    expect(getTaskConfig('randomFact')).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' });
+  });
+
   // Reasoning effort must be explicit: the 5.6 tiers default to 'medium',
   // which is what produced the 2025-token reasoning outlier that truncated
   // albumDetail. See the maxTokens note in packages/config/src/ai.ts.
@@ -1063,15 +1295,22 @@ describe('withAgentTracing', () => {
   it('AIService wraps task clients only when tracing is provided', async () => {
     const { tracing, spans } = createFakeTracing();
     const untraced = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV() });
-    expect(untraced.getClientForTask('artistSentence')).toBe(untraced.openai);
+    expect(untraced.getClientForTask('artistSentence')).toBe(untraced.anthropic);
 
     const traced = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: createMockKV(), tracing });
     const client = traced.getClientForTask('artistSentence');
-    expect(client).not.toBe(traced.openai);
+    expect(client).not.toBe(traced.anthropic);
 
-    const spy = vi.spyOn(traced.openai, 'chatCompletion').mockResolvedValue({ content: 'ok' });
+    const spy = vi.spyOn(traced.anthropic, 'chatCompletion').mockResolvedValue({ content: 'ok' });
     await client.chatCompletion(options);
     expect(spy).toHaveBeenCalledWith(options);
     expect(spans.map((s) => s.name)).toEqual(['invoke_agent artistSentence', 'chat gpt-5.6-terra']);
+  });
+});
+
+describe('playlist cover removal', () => {
+  it('has no playlist cover task or image generation', () => {
+    expect('playlistCoverPrompt' in AI_TASKS).toBe(false);
+    expect((new OpenAIClient('k') as unknown as Record<string, unknown>).generateImage).toBeUndefined();
   });
 });
