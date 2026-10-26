@@ -1,31 +1,23 @@
-// Internal album API routes for progressive loading
+// ABOUTME: Internal album AI routes for progressive loading (summary and recommendations).
+// ABOUTME: Both take a Spotify album ID and resolve the names server-side, so free text never travels in the URL.
 
 import { Hono } from 'hono';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
+import { resolveSpotifyAlbum } from './spotify-lookup';
 
 const app = new Hono<InternalAppContext>();
 
 app.get('/album-summary', requireSessionAuth, async (c) => {
-  const artist = c.req.query('artist');
-  const album = c.req.query('album');
-  const releaseYearParam = c.req.query('releaseYear');
-
-  if (!artist || !album) {
-    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  const resolved = await resolveSpotifyAlbum(c);
+  if (!resolved.ok) {
+    return resolved.response;
   }
-
-  const releaseYear = releaseYearParam
-    ? parseInt(releaseYearParam, 10)
-    : undefined;
+  const { artist, name, releaseYear } = resolved.value;
 
   try {
     const ai = c.get('ai');
-    const result = await ai.getAlbumDetail(
-      artist,
-      album,
-      Number.isFinite(releaseYear) ? releaseYear : undefined
-    );
+    const result = await ai.getAlbumDetail(artist, name, releaseYear);
     return c.json({ data: result });
   } catch (error) {
     console.error('Internal album summary error:', error);
@@ -34,16 +26,15 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
 });
 
 app.get('/album-recommendations', requireSessionAuth, async (c) => {
-  const artist = c.req.query('artist');
-  const album = c.req.query('album');
-
-  if (!artist || !album) {
-    return c.json({ error: 'Missing artist or album parameter' }, 400);
+  const resolved = await resolveSpotifyAlbum(c);
+  if (!resolved.ok) {
+    return resolved.response;
   }
+  const { artist, name } = resolved.value;
 
   try {
     const ai = c.get('ai');
-    const result = await ai.getAlbumRecommendations(artist, album);
+    const result = await ai.getAlbumRecommendations(artist, name);
     return c.json({ data: result });
   } catch (error) {
     console.error('Internal album recommendations error:', error);

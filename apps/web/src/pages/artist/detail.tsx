@@ -240,7 +240,7 @@ export function ArtistDetailPage({
 
           // Fetch AI summary - only for authenticated users
           if (window.__IS_AUTHENTICATED__) {
-            internalFetch('/api/internal/artist-summary?name=' + encodeURIComponent(artistName), { cache: 'no-store' })
+            internalFetch('/api/internal/artist-summary?spotifyId=' + encodeURIComponent(artistId), { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();

@@ -39,7 +39,7 @@ For progressive-loading fetch calls that should only fire for authenticated user
 
 ```javascript
 if (window.__IS_AUTHENTICATED__) {
-  internalFetch('/api/internal/album-summary?...')
+  internalFetch('/api/internal/album-summary?spotifyId=' + encodeURIComponent(albumId))
     .then(...)
     .catch(...);
 }
@@ -60,6 +60,8 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
 ```
 
 `/api/internal/*` skips the eager session lookup that pages get, so `currentUser` and `isAuthenticated` are not on the internal routers' context type (`InternalAppContext`). `requireSessionAuth` loads the session itself; a handler that needs the viewer calls `await getCurrentUser(c)` from `middleware/session.ts`, which queries D1 at most once per request.
+
+The album and artist AI routes take `?spotifyId=` and resolve names server-side via `api/internal/spotify-lookup.ts` (normally a KV cache hit, since the page already fetched the entity). Do not put artist or album names in these URLs: the zone WAF's managed rules read titles such as `I'm Like a Virgin...` (quote followed by `LIKE`) as SQL injection and challenge the request, which a background fetch can never pass.
 
 ## Currently Gated
 

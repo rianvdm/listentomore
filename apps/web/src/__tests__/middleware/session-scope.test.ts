@@ -193,7 +193,7 @@ describe('session loading scope', () => {
     });
 
     it('rejects an anonymous request to an AI route', async () => {
-      const res = await request('/api/internal/album-summary?artist=a&album=b', { internal: true });
+      const res = await request('/api/internal/album-summary?spotifyId=6MxGJsAzHR2ekEmelJ7Poy', { internal: true });
 
       expect(res.status).toBe(401);
       expect(await res.json()).toEqual({ error: 'Authentication required' });
@@ -214,7 +214,7 @@ describe('session loading scope', () => {
 
       // Past the auth guard: the handler rejects the missing parameters
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: 'Missing artist or album parameter' });
+      expect(await res.json()).toEqual({ error: 'Missing spotifyId parameter' });
       expect(getSessionByToken).toHaveBeenCalledTimes(1);
     });
   });

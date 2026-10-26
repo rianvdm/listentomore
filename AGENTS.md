@@ -132,6 +132,7 @@ try {
 - Wrap pages in `<Layout title="..." currentUser={currentUser} internalToken={internalToken}>`
 - Progressive loading for slow data (AI, streaming links) via `dangerouslySetInnerHTML` with vanilla JS
 - Use `internalFetch()` (not `fetch()`) for `/api/internal/*` calls client-side
+- Pass Spotify IDs, not artist/album names, to the AI routes (`album-summary`, `album-recommendations`, `artist-summary`); names in query strings can trip the zone WAF (see `docs/feature-gating.md`)
 
 ### Route Handlers
 
