@@ -1,10 +1,13 @@
-// Spotify service - consolidated API client for Spotify
+// ABOUTME: Spotify service - consolidated API client for Spotify.
+// ABOUTME: Wires auth, rate limiting, and deferred cache writes into the album/artist/search clients.
 
 import { SpotifyAuth } from './auth';
 import { SpotifySearch } from './search';
 import { SpotifyAlbums } from './albums';
 import { SpotifyArtists } from './artists';
 import { SpotifyRateLimiter } from './rate-limit';
+import { createDefer } from './defer';
+import type { WaitUntil } from './defer';
 
 export { SpotifyAuth } from './auth';
 export type { SpotifyAuthConfig, SpotifyTokenData } from './auth';
@@ -27,6 +30,9 @@ export type { ArtistDetails } from './artists';
 export { SpotifyRateLimiter } from './rate-limit';
 export type { RateLimitState } from './rate-limit';
 
+export { createDefer } from './defer';
+export type { Defer, WaitUntil } from './defer';
+
 // Convenience class that combines all Spotify functionality
 export class SpotifyService {
   public readonly auth: SpotifyAuth;
@@ -41,23 +47,30 @@ export class SpotifyService {
     clientId: string;
     clientSecret: string;
     cache: KVNamespace;
+    /**
+     * The request's ctx.waitUntil. Cache writes are never awaited on the response path;
+     * passing this keeps them alive after the response is sent or the client disconnects.
+     */
+    waitUntil?: WaitUntil;
   }) {
     this.clientIdPrefix = config.clientId.substring(0, 8);
+    const defer = createDefer(config.waitUntil);
 
-    // Create shared rate limiter for all Spotify API calls
-    this.rateLimiter = new SpotifyRateLimiter(config.cache);
+    // Shared rate limiter for all calls made with this app's credentials
+    this.rateLimiter = new SpotifyRateLimiter(config.clientId);
 
     this.auth = new SpotifyAuth(
       {
         clientId: config.clientId,
         clientSecret: config.clientSecret,
       },
-      config.cache
+      config.cache,
+      defer
     );
 
-    this.search = new SpotifySearch(this.auth, config.cache, this.rateLimiter);
-    this.albums = new SpotifyAlbums(this.auth, config.cache, this.rateLimiter);
-    this.artists = new SpotifyArtists(this.auth, config.cache, this.rateLimiter);
+    this.search = new SpotifySearch(this.auth, config.cache, this.rateLimiter, defer);
+    this.albums = new SpotifyAlbums(this.auth, config.cache, this.rateLimiter, defer);
+    this.artists = new SpotifyArtists(this.auth, config.cache, this.rateLimiter, defer);
   }
 
   // Convenience methods

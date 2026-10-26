@@ -26,6 +26,7 @@ import { internalAuthMiddleware } from './middleware/internal-auth';
 import { sessionMiddleware } from './middleware/session';
 import { crawlerLoggingMiddleware } from './middleware/crawler-logging';
 import { generateInternalToken } from './utils/internal-token';
+import { getWaitUntil } from './utils/wait-until';
 import { Layout } from './components/layout';
 import { NotFoundPage } from './components/ui';
 import { handleAlbumSearch } from './pages/album/search';
@@ -102,11 +103,14 @@ app.use('*', async (c, next) => {
   // Initialize database first (needed by auth middleware)
   c.set('db', new Database(c.env.DB));
 
+  const waitUntil = getWaitUntil(c);
+
   // Primary Spotify service (album/artist pages, search)
   const spotify = new SpotifyService({
     clientId: c.env.SPOTIFY_CLIENT_ID,
     clientSecret: c.env.SPOTIFY_CLIENT_SECRET,
     cache: c.env.CACHE,
+    waitUntil,
   });
   c.set('spotify', spotify);
 
@@ -117,6 +121,7 @@ app.use('*', async (c, next) => {
       clientId: c.env.SPOTIFY_STREAMING_CLIENT_ID!,
       clientSecret: c.env.SPOTIFY_STREAMING_CLIENT_SECRET!,
       cache: c.env.CACHE,
+      waitUntil,
     })
     : spotify;
   c.set('spotifyStreaming', spotifyStreaming);
@@ -146,6 +151,7 @@ app.use('*', async (c, next) => {
         c.env.CACHE,
         getMusicBrainzLimiter(c.env.MUSICBRAINZ_RATE_LIMITER)
       ),
+      waitUntil,
     })
   );
 
@@ -170,7 +176,8 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Apply session middleware to validate user sessions (after db is initialized)
+// Apply session middleware to validate user sessions (after db is initialized).
+// /api/internal/* skips the eager lookup and loads it on demand; see middleware/session.ts.
 app.use('*', sessionMiddleware);
 
 // Apply auth middleware to API routes (validates API key if present)

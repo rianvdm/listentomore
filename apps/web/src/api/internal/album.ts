@@ -1,10 +1,10 @@
 // Internal album API routes for progressive loading
 
 import { Hono } from 'hono';
-import type { Bindings, Variables } from '../../types';
+import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<InternalAppContext>();
 
 app.get('/album-summary', requireSessionAuth, async (c) => {
   const artist = c.req.query('artist');

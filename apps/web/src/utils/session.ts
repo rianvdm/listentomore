@@ -2,6 +2,8 @@
 
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { createServiceDefer } from '@listentomore/shared';
+import type { WaitUntil } from '@listentomore/shared';
 import type { Database, User } from '@listentomore/db';
 
 const SESSION_COOKIE = 'ltm_session';
@@ -49,11 +51,15 @@ export async function createSession(
 }
 
 /**
- * Validate the session cookie and return the user if valid
+ * Validate the session cookie and return the user if valid.
+ *
+ * @param waitUntil - Keeps the last_active_at UPDATE alive past the response.
+ *   Optional: without it the UPDATE still runs unawaited and failures are logged.
  */
 export async function validateSession(
   c: Context,
-  db: Database
+  db: Database,
+  waitUntil?: WaitUntil
 ): Promise<User | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
@@ -73,8 +79,11 @@ export async function validateSession(
     return null;
   }
 
-  // Update last_active_at (fire and forget)
-  db.updateSessionActivity(session.id);
+  // Update last_active_at off the response path; a failed UPDATE never fails the request
+  createServiceDefer('[Session]', waitUntil)(
+    db.updateSessionActivity(session.id),
+    'session activity update'
+  );
 
   return db.getUser(session.user_id);
 }

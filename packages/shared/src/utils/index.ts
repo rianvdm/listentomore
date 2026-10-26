@@ -5,3 +5,4 @@ export * from './errors';
 export * from './http';
 export * from './fetch';
 export * from './spotify-id';
+export * from './defer';

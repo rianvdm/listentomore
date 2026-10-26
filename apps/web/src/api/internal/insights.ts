@@ -7,21 +7,22 @@ import type { User } from '@listentomore/db';
 import type { AIService } from '@listentomore/ai';
 import { USER_INSIGHTS_PROMPT_VERSION } from '@listentomore/ai';
 import type { SpotifyService } from '@listentomore/spotify';
-import type { Bindings, Variables } from '../../types';
+import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
+import { getCurrentUser } from '../../middleware/session';
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<InternalAppContext>();
 
 // Minimum plays threshold for generating insights
 const MIN_PLAYS_THRESHOLD = 5;
 
 // Helper to get user with privacy check - insights only visible to owner for private profiles
 async function getUserWithInsightsAccess(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  c: Context<InternalAppContext>,
   username: string
 ): Promise<{ user: User; lastfm: LastfmService; isOwner: boolean } | { error: string; status: number }> {
   const db = c.get('db');
-  const currentUser = c.get('currentUser');
+  const currentUser = await getCurrentUser(c);
 
   // Look up by lastfm_username first (canonical), then fall back to username
   let user = await db.getUserByLastfmUsername(username);
@@ -51,7 +52,7 @@ async function getUserWithInsightsAccess(
 
 // Check and enforce refresh rate limit
 async function checkRefreshRateLimit(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  c: Context<InternalAppContext>,
   username: string
 ): Promise<{ allowed: boolean; cooldownSeconds?: number }> {
   const cacheKey = `insights-refresh:${username.toLowerCase()}`;
@@ -74,7 +75,7 @@ async function checkRefreshRateLimit(
 
 // Set refresh timestamp
 async function setRefreshTimestamp(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  c: Context<InternalAppContext>,
   username: string
 ): Promise<void> {
   const cacheKey = `insights-refresh:${username.toLowerCase()}`;

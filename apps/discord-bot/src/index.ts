@@ -50,12 +50,16 @@ interface Services {
 }
 
 // Initialize services
-function createServices(env: Env): Services {
+function createServices(env: Env, ctx: ExecutionContext): Services {
+  // Deferred cache writes outlive the interaction response via the invocation's waitUntil
+  const waitUntil = ctx.waitUntil.bind(ctx);
+
   return {
     spotify: new SpotifyService({
       clientId: env.SPOTIFY_CLIENT_ID,
       clientSecret: env.SPOTIFY_CLIENT_SECRET,
       cache: env.CACHE,
+      waitUntil,
     }),
     // Last.fm service factory - needs username per request
     lastfm: (username: string) =>
@@ -70,6 +74,7 @@ function createServices(env: Env): Services {
         teamId: env.APPLE_TEAM_ID,
         privateKey: env.APPLE_PRIVATE_KEY,
       },
+      waitUntil,
     }),
     ai: new AIService({
       openaiApiKey: env.OPENAI_API_KEY,
@@ -126,7 +131,7 @@ export default {
       // Handle slash commands
       if (interaction.type === InteractionType.APPLICATION_COMMAND) {
         const { name } = interaction.data;
-        const services = createServices(env);
+        const services = createServices(env, ctx);
 
         switch (name) {
           case 'listento': {

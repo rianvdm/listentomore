@@ -2,10 +2,10 @@
 
 import { Hono } from 'hono';
 import { RegionUnsupportedError } from '@listentomore/ai';
-import type { Bindings, Variables } from '../../types';
+import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<InternalAppContext>();
 
 app.get('/artist-summary', requireSessionAuth, async (c) => {
   const name = c.req.query('name');

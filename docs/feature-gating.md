@@ -59,6 +59,8 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
 });
 ```
 
+`/api/internal/*` skips the eager session lookup that pages get, so `currentUser` and `isAuthenticated` are not on the internal routers' context type (`InternalAppContext`). `requireSessionAuth` loads the session itself; a handler that needs the viewer calls `await getCurrentUser(c)` from `middleware/session.ts`, which queries D1 at most once per request.
+
 ## Currently Gated
 
 ### Gated (AI-powered, costly)

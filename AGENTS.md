@@ -182,7 +182,7 @@ Mount in the directory's `index.ts` via `app.route('/path', myRoutes)`.
 - **`maxTokens` in `packages/config/src/ai.ts` is a budget for reasoning + prose, not prose.** Reasoning tokens are invisible and highly variable -- 294 to 2025 measured on one unchanged prompt -- so a cap sized for the visible answer truncates. Reasoning (GPT) or thinking (Claude) tokens count against the cap. Set `reasoning` explicitly on every task (Opus 5.5 and the GPT-5.6 tiers default to `medium`) and leave 3-4x headroom. Read the comment block above `AI_TASKS` before changing either
 - **Never cache an AI response without `isCacheableResponse()`** (`packages/services/ai/src/cacheable.ts`). Truncation arrives as a 200 OK with `status: "incomplete"`, and these TTLs run 1-180 days, so one bad response becomes a bad page for months
 - Services accessed via Hono context: `c.get('spotify')`, `c.get('lastfm')`, `c.get('ai')`, `c.get('db')`
-- User auth state: `c.get('currentUser')`, `c.get('isAuthenticated')`
+- User auth state: `c.get('currentUser')`, `c.get('isAuthenticated')` on pages and public API routes. `/api/internal/*` skips the eager session lookup; use `await getCurrentUser(c)` (`middleware/session.ts`) or `requireSessionAuth` there
 - Check `profile_visibility` before exposing any user profile data
 - Pass `internalToken` to Layout for pages that use internal APIs
 - Do not expose secrets or session tokens to the browser

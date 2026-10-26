@@ -1,9 +1,9 @@
 // Internal search API routes for progressive loading
 
 import { Hono } from 'hono';
-import type { Bindings, Variables } from '../../types';
+import type { InternalAppContext } from '../../types';
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<InternalAppContext>();
 
 app.get('/search', async (c) => {
   const query = c.req.query('q');
