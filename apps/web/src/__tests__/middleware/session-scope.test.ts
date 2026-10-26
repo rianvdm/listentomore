@@ -247,34 +247,17 @@ describe('session loading scope', () => {
   });
 
   describe('background D1 writes', () => {
-    it('hands the session activity UPDATE and the API usage INSERT to waitUntil', async () => {
+    it('hands the session activity UPDATE to waitUntil and skips the usage log on internal routes', async () => {
       const ctx = createExecutionCtx();
 
       const res = await request('/api/internal/album-summary', { signedIn: true, internal: true, ctx });
 
       expect(res.status).toBe(400);
       expect(updateSessionActivity).toHaveBeenCalledWith(ACTIVE_SESSION.id);
-      expect(logApiUsage).toHaveBeenCalledTimes(1);
-      expect(ctx.waitUntil).toHaveBeenCalledTimes(2);
-      for (const [promise] of ctx.waitUntil.mock.calls) {
-        expect(promise).toBeInstanceOf(Promise);
-      }
+      expect(logApiUsage).not.toHaveBeenCalled();
+      expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
+      expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
     });
 
-    it('does not fail the request when the API usage INSERT rejects', async () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      logApiUsage.mockRejectedValue(new Error('D1_ERROR: database is locked'));
-      const ctx = createExecutionCtx();
-
-      const res = await request('/api/internal/user-listens', { internal: true, ctx });
-      await Promise.all(ctx.waitUntil.mock.calls.map(([promise]) => promise));
-
-      expect(res.status).toBe(200);
-      expect(errorSpy).toHaveBeenCalledWith(
-        '[API] Deferred API usage log failed:',
-        'D1_ERROR: database is locked',
-        expect.any(Error)
-      );
-    });
   });
 });
