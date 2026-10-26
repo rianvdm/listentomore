@@ -133,9 +133,8 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
         (function() {
           var albumId = ${JSON.stringify(album.id)};
           var spotifyUrl = ${JSON.stringify(album.spotifyUrl)};
-          var artistName = ${JSON.stringify(album.artist)};
-          var albumName = ${JSON.stringify(album.name)};
-          var releaseYear = ${JSON.stringify(album.releaseYear || '')};
+          // AI routes take the Spotify ID, not names: titles in a query string can trip the zone WAF.
+          var aiQuery = '?spotifyId=' + encodeURIComponent(albumId);
 
           // Fetch streaming links
           internalFetch('/api/internal/streaming-links?spotifyId=' + encodeURIComponent(albumId) + '&type=album', { cache: 'no-store' })
@@ -157,7 +156,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
           // AI features - only fetch for authenticated users
           if (window.__IS_AUTHENTICATED__) {
             // Fetch AI summary
-            internalFetch('/api/internal/album-summary?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName) + (releaseYear ? '&releaseYear=' + encodeURIComponent(releaseYear) : ''), { cache: 'no-store' })
+            internalFetch('/api/internal/album-summary' + aiQuery, { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
@@ -174,7 +173,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
               });
 
             // Fetch album recommendations
-            internalFetch('/api/internal/album-recommendations?artist=' + encodeURIComponent(artistName) + '&album=' + encodeURIComponent(albumName), { cache: 'no-store' })
+            internalFetch('/api/internal/album-recommendations' + aiQuery, { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();

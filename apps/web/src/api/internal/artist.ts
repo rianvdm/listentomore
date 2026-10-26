@@ -4,19 +4,20 @@ import { Hono } from 'hono';
 import { RegionUnsupportedError } from '@listentomore/ai';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
+import { resolveSpotifyArtist } from './spotify-lookup';
 
 const app = new Hono<InternalAppContext>();
 
+// Takes a Spotify artist ID and resolves the name server-side; see spotify-lookup.ts.
 app.get('/artist-summary', requireSessionAuth, async (c) => {
-  const name = c.req.query('name');
-
-  if (!name) {
-    return c.json({ error: 'Missing name parameter' }, 400);
+  const resolved = await resolveSpotifyArtist(c);
+  if (!resolved.ok) {
+    return resolved.response;
   }
 
   try {
     const ai = c.get('ai');
-    const result = await ai.getArtistSummary(name);
+    const result = await ai.getArtistSummary(resolved.value.name);
     return c.json({ data: result });
   } catch (error) {
     console.error('Internal artist summary error:', error);
