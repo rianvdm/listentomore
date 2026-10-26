@@ -2,9 +2,9 @@
 
 import { Hono } from 'hono';
 import { StreamingLinksService } from '@listentomore/streaming-links';
-import type { Bindings, Variables } from '../../types';
+import type { InternalAppContext } from '../../types';
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<InternalAppContext>();
 
 // Streaming links endpoint using our own providers (Apple Music + YouTube)
 app.get('/streaming-links', async (c) => {

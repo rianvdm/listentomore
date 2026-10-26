@@ -49,12 +49,21 @@ export type Variables = {
   // Auth context (API keys)
   apiKey: ParsedApiKey | null;
   authTier: 'public' | 'standard' | 'premium';
-  // User session context
+  // User session context. Set eagerly for pages and public API routes only;
+  // /api/internal/* routes use getCurrentUser() from middleware/session.ts.
   currentUser: User | null;
   isAuthenticated: boolean;
+  // Memoized session lookup behind getCurrentUser(); do not read directly
+  sessionLookup?: Promise<User | null>;
   // Internal API token (for progressive loading)
   internalToken: string;
 };
 
 // Combined app context type for Hono
 export type AppContext = { Bindings: Bindings; Variables: Variables };
+
+// Context for /api/internal/* routers. currentUser and isAuthenticated are left out
+// because those routes skip the eager session lookup; reading them would silently
+// treat every user as anonymous. Call getCurrentUser(c) instead.
+export type InternalVariables = Omit<Variables, 'currentUser' | 'isAuthenticated'>;
+export type InternalAppContext = { Bindings: Bindings; Variables: InternalVariables };

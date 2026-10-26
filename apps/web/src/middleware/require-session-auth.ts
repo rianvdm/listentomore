@@ -1,14 +1,15 @@
 // ABOUTME: Session-based auth guard for internal API routes.
-// ABOUTME: Returns 401 JSON for unauthenticated requests to AI-powered endpoints.
+// ABOUTME: Loads the session on demand and returns 401 JSON for unauthenticated requests to AI-powered endpoints.
 
 import { createMiddleware } from 'hono/factory';
-import type { Bindings, Variables } from '../types';
+import { getCurrentUser } from './session';
+import type { InternalAppContext } from '../types';
 
-export const requireSessionAuth = createMiddleware<{
-  Bindings: Bindings;
-  Variables: Variables;
-}>(async (c, next) => {
-  if (c.get('isAuthenticated')) {
+// Calls getCurrentUser() rather than reading isAuthenticated: /api/internal/*
+// skips the eager session lookup, so the flag is never set on these routes.
+export const requireSessionAuth = createMiddleware<InternalAppContext>(async (c, next) => {
+  const user = await getCurrentUser(c);
+  if (user) {
     await next();
     return;
   }

@@ -6,7 +6,6 @@ import type { Context } from 'hono';
 import { SITE_CONFIG, CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { Database } from '@listentomore/db';
 import { SpotifyService } from '@listentomore/spotify';
-import type { WaitUntil } from '@listentomore/spotify';
 import { LastfmService } from '@listentomore/lastfm';
 import { StreamingLinksService } from '@listentomore/streaming-links';
 import { MusicBrainzService } from '@listentomore/musicbrainz';
@@ -27,6 +26,7 @@ import { internalAuthMiddleware } from './middleware/internal-auth';
 import { sessionMiddleware } from './middleware/session';
 import { crawlerLoggingMiddleware } from './middleware/crawler-logging';
 import { generateInternalToken } from './utils/internal-token';
+import { getWaitUntil } from './utils/wait-until';
 import { Layout } from './components/layout';
 import { NotFoundPage } from './components/ui';
 import { handleAlbumSearch } from './pages/album/search';
@@ -73,19 +73,6 @@ function escapeHtml(str: string): string {
 function getTracing(c: Context<{ Bindings: Bindings; Variables: Variables }>): Tracing | undefined {
   try {
     return (c.executionCtx as { tracing?: Tracing }).tracing;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The request's waitUntil, for work that must outlive the response (deferred cache writes).
- * Same guard as getTracing: Hono's executionCtx getter throws outside a fetch event.
- */
-function getWaitUntil(c: Context<{ Bindings: Bindings; Variables: Variables }>): WaitUntil | undefined {
-  try {
-    const ctx = c.executionCtx;
-    return ctx.waitUntil.bind(ctx);
   } catch {
     return undefined;
   }
@@ -189,7 +176,8 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Apply session middleware to validate user sessions (after db is initialized)
+// Apply session middleware to validate user sessions (after db is initialized).
+// /api/internal/* skips the eager lookup and loads it on demand; see middleware/session.ts.
 app.use('*', sessionMiddleware);
 
 // Apply auth middleware to API routes (validates API key if present)

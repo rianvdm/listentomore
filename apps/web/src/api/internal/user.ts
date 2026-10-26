@@ -4,17 +4,17 @@ import { Hono, Context } from 'hono';
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { LastfmService } from '@listentomore/lastfm';
 import type { User } from '@listentomore/db';
-import type { Bindings, Variables } from '../../types';
+import { getCurrentUser } from '../../middleware/session';
+import type { InternalAppContext } from '../../types';
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<InternalAppContext>();
 
 // Helper to get user and check privacy
 async function getUserWithPrivacyCheck(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  c: Context<InternalAppContext>,
   username: string
 ): Promise<{ user: User; lastfm: LastfmService } | { error: string; status: number }> {
   const db = c.get('db');
-  const currentUser = c.get('currentUser');
 
   // Look up by lastfm_username first (canonical), then fall back to username
   let user = await db.getUserByLastfmUsername(username);
@@ -26,8 +26,10 @@ async function getUserWithPrivacyCheck(
     return { error: 'User not found', status: 404 };
   }
 
-  // Check privacy - if private and not the owner, deny access
+  // Check privacy - if private and not the owner, deny access.
+  // Only private profiles need the viewer, so public ones skip the session lookup.
   if (user.profile_visibility === 'private') {
+    const currentUser = await getCurrentUser(c);
     if (!currentUser || currentUser.id !== user.id) {
       return { error: 'This profile is private', status: 403 };
     }
@@ -43,7 +45,7 @@ async function getUserWithPrivacyCheck(
 }
 
 // Legacy helper for backwards compatibility
-async function getUserLastfm(c: Context<{ Bindings: Bindings; Variables: Variables }>, username: string) {
+async function getUserLastfm(c: Context<InternalAppContext>, username: string) {
   const result = await getUserWithPrivacyCheck(c, username);
   if ('error' in result) {
     return null;

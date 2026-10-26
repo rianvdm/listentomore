@@ -2,7 +2,9 @@
 // Provides tiered access control with different rate limits per tier
 
 import { Context, MiddlewareHandler } from 'hono';
+import { createServiceDefer } from '@listentomore/shared';
 import { ParsedApiKey, ApiKeyScope } from '@listentomore/db';
+import { getWaitUntil } from '../utils/wait-until';
 
 /**
  * Authentication middleware
@@ -145,10 +147,11 @@ export function userRateLimitMiddleware(): MiddlewareHandler {
         expirationTtl: Math.ceil(windowMs / 1000) + 1,
       });
 
-      // Track usage in database (fire and forget)
+      // Track usage in database off the response path
       if (apiKey) {
-        db.incrementApiKeyUsage(apiKey.id).catch((err: unknown) =>
-          console.error('Failed to increment API key usage:', err)
+        createServiceDefer('[API]', getWaitUntil(c))(
+          db.incrementApiKeyUsage(apiKey.id),
+          'API key usage increment'
         );
       }
     } catch (error) {
@@ -186,15 +189,19 @@ export function apiLoggingMiddleware(): MiddlewareHandler {
     const apiKey = c.get('apiKey');
     const db = c.get('db');
 
-    // Log usage asynchronously (don't block response)
-    db.logApiUsage({
-      apiKeyId: apiKey?.id,
-      endpoint: c.req.path,
-      method: c.req.method,
-      statusCode: c.res.status,
-      ipAddress: getClientIP(c),
-      userAgent: c.req.header('User-Agent'),
-      responseTimeMs: responseTime,
-    }).catch((err: unknown) => console.error('Failed to log API usage:', err));
+    // Log usage without blocking the response. waitUntil keeps the INSERT alive
+    // after the response is sent; without it the runtime can drop the write.
+    createServiceDefer('[API]', getWaitUntil(c))(
+      db.logApiUsage({
+        apiKeyId: apiKey?.id,
+        endpoint: c.req.path,
+        method: c.req.method,
+        statusCode: c.res.status,
+        ipAddress: getClientIP(c),
+        userAgent: c.req.header('User-Agent'),
+        responseTimeMs: responseTime,
+      }),
+      'API usage log'
+    );
   };
 }
