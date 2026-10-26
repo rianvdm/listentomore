@@ -148,7 +148,7 @@ describe('StreamingLinksService', () => {
 
       expect(result.cached).toBe(false);
       expect(kv.put).toHaveBeenCalledWith(
-        'streaming-links:album:4LH4d3cOWNNsVw41Gqt2kv',
+        'streaming-links:v2:album:4LH4d3cOWNNsVw41Gqt2kv',
         expect.any(String),
         { expirationTtl: 30 * 24 * 60 * 60 }
       );
@@ -162,7 +162,7 @@ describe('StreamingLinksService', () => {
       await createService(waitUntil).getTrackLinks(trackMetadata());
 
       expect(kv.put).toHaveBeenCalledWith(
-        'streaming-links:track:2nMeu6UenVvwUktBCpLMK9',
+        'streaming-links:v2:track:2nMeu6UenVvwUktBCpLMK9',
         expect.any(String),
         expect.any(Object)
       );
@@ -203,7 +203,7 @@ describe('StreamingLinksService', () => {
 
       expect(result.songlink).toBe('https://song.link/https://open.spotify.com/album/4LH4d3cOWNNsVw41Gqt2kv');
       expect(consoleError).toHaveBeenCalledWith(
-        '[StreamingLinks] Deferred cache write streaming-links:album:4LH4d3cOWNNsVw41Gqt2kv failed:',
+        '[StreamingLinks] Deferred cache write streaming-links:v2:album:4LH4d3cOWNNsVw41Gqt2kv failed:',
         'KV PUT failed: 429',
         expect.any(Error)
       );
@@ -218,7 +218,7 @@ describe('StreamingLinksService', () => {
 
       expect(result.cached).toBe(false);
       expect(consoleError).toHaveBeenCalledWith(
-        '[StreamingLinks] Deferred cache write streaming-links:track:2nMeu6UenVvwUktBCpLMK9 failed:',
+        '[StreamingLinks] Deferred cache write streaming-links:v2:track:2nMeu6UenVvwUktBCpLMK9 failed:',
         'KV PUT failed: 429',
         expect.any(Error)
       );
