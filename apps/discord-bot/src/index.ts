@@ -51,12 +51,15 @@ interface Services {
 
 // Initialize services
 function createServices(env: Env, ctx: ExecutionContext): Services {
+  // Deferred cache writes outlive the interaction response via the invocation's waitUntil
+  const waitUntil = ctx.waitUntil.bind(ctx);
+
   return {
     spotify: new SpotifyService({
       clientId: env.SPOTIFY_CLIENT_ID,
       clientSecret: env.SPOTIFY_CLIENT_SECRET,
       cache: env.CACHE,
-      waitUntil: ctx.waitUntil.bind(ctx),
+      waitUntil,
     }),
     // Last.fm service factory - needs username per request
     lastfm: (username: string) =>
@@ -71,6 +74,7 @@ function createServices(env: Env, ctx: ExecutionContext): Services {
         teamId: env.APPLE_TEAM_ID,
         privateKey: env.APPLE_PRIVATE_KEY,
       },
+      waitUntil,
     }),
     ai: new AIService({
       openaiApiKey: env.OPENAI_API_KEY,

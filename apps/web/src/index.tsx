@@ -164,6 +164,7 @@ app.use('*', async (c, next) => {
         c.env.CACHE,
         getMusicBrainzLimiter(c.env.MUSICBRAINZ_RATE_LIMITER)
       ),
+      waitUntil,
     })
   );
 

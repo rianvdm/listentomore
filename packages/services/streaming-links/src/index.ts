@@ -1,8 +1,10 @@
-// Streaming Links Service - self-hosted alternative to Songlink
-// Designed for extensibility: new providers can be added without changing consumers
+// ABOUTME: Streaming Links Service - self-hosted alternative to Songlink.
+// ABOUTME: Matches Spotify albums/tracks to Apple Music by UPC/ISRC, caching results with deferred KV writes.
 
 import { CACHE_CONFIG } from '@listentomore/config';
 import type { MusicBrainzService } from '@listentomore/musicbrainz';
+import { createServiceDefer } from '@listentomore/shared';
+import type { Defer, WaitUntil } from '@listentomore/shared';
 import { AppleMusicProvider, type AppleMusicConfig } from './providers/apple-music';
 import { YouTubeProvider } from './providers/youtube';
 import { extractYear } from './matching';
@@ -97,6 +99,7 @@ export class StreamingLinksService {
   // YouTube provider kept for potential future use but not currently called in getTrackLinks/getAlbumLinks
   private youtubeProvider: YouTubeProvider;
   private musicbrainz: MusicBrainzService | null;
+  private defer: Defer;
 
   constructor(
     private cache: KVNamespace,
@@ -104,11 +107,17 @@ export class StreamingLinksService {
       youtubeApiKey?: string;
       appleMusic?: AppleMusicConfig;
       musicbrainz?: MusicBrainzService;
+      /**
+       * The request's ctx.waitUntil. Cache writes are never awaited on the response path;
+       * passing this keeps them alive after the response is sent or the client disconnects.
+       */
+      waitUntil?: WaitUntil;
     } = {}
   ) {
     this.appleMusic = new AppleMusicProvider(config.appleMusic);
     this.youtubeProvider = new YouTubeProvider(config.youtubeApiKey);
     this.musicbrainz = config.musicbrainz ?? null;
+    this.defer = createServiceDefer('[StreamingLinks]', config.waitUntil);
   }
 
   /**
@@ -126,11 +135,14 @@ export class StreamingLinksService {
   }
 
   /**
-   * Enrich album metadata with UPC from MusicBrainz when not available from Spotify.
+   * Fallback: look up the album UPC in MusicBrainz only when Spotify returned none.
+   * MusicBrainz is rate limited (1 req/1.1 s) and its UPC can belong to a different
+   * edition, so it must never replace a UPC that Spotify supplied.
    */
   private async enrichAlbumMetadata(metadata: AlbumMetadata): Promise<AlbumMetadata> {
     if (metadata.upc || !this.musicbrainz) return metadata;
 
+    console.log(`[StreamingLinks] No Spotify UPC for album ${metadata.id}; trying MusicBrainz`);
     const upc = await this.musicbrainz.getAlbumUpc(
       metadata.artists[0],
       metadata.name
@@ -146,11 +158,12 @@ export class StreamingLinksService {
   }
 
   /**
-   * Enrich track metadata with ISRC from MusicBrainz when not available from Spotify.
+   * Fallback: look up the track ISRC in MusicBrainz only when Spotify returned none.
    */
   private async enrichTrackMetadata(metadata: TrackMetadata): Promise<TrackMetadata> {
     if (metadata.isrc || !this.musicbrainz) return metadata;
 
+    console.log(`[StreamingLinks] No Spotify ISRC for track ${metadata.id}; trying MusicBrainz`);
     const isrc = await this.musicbrainz.getTrackIsrc(
       metadata.artists[0],
       metadata.name
@@ -178,7 +191,7 @@ export class StreamingLinksService {
       return { ...cached, cached: true };
     }
 
-    // Enrich with MusicBrainz ISRC if needed (Spotify may no longer provide it)
+    // MusicBrainz fallback, only when Spotify returned no ISRC
     const enrichedMetadata = await this.enrichTrackMetadata(metadata);
 
     console.log(`[StreamingLinks] Fetching links for track: ${enrichedMetadata.name} by ${enrichedMetadata.artists.join(', ')}`);
@@ -198,10 +211,13 @@ export class StreamingLinksService {
       cached: false,
     };
 
-    // Cache the result
-    await this.cache.put(cacheKey, JSON.stringify(result), {
-      expirationTtl: this.getCacheTtl(),
-    });
+    // Cache the result without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(result), {
+        expirationTtl: this.getCacheTtl(),
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return result;
   }
@@ -219,7 +235,7 @@ export class StreamingLinksService {
       return { ...cached, cached: true };
     }
 
-    // Enrich with MusicBrainz UPC if needed (Spotify may no longer provide it)
+    // MusicBrainz fallback, only when Spotify returned no UPC
     const enrichedMetadata = await this.enrichAlbumMetadata(metadata);
 
     console.log(`[StreamingLinks] Fetching links for album: ${enrichedMetadata.name} by ${enrichedMetadata.artists.join(', ')}`);
@@ -239,10 +255,13 @@ export class StreamingLinksService {
       cached: false,
     };
 
-    // Cache the result
-    await this.cache.put(cacheKey, JSON.stringify(result), {
-      expirationTtl: this.getCacheTtl(),
-    });
+    // Cache the result without blocking the response on the KV write
+    this.defer(
+      this.cache.put(cacheKey, JSON.stringify(result), {
+        expirationTtl: this.getCacheTtl(),
+      }),
+      `cache write ${cacheKey}`
+    );
 
     return result;
   }
@@ -250,16 +269,15 @@ export class StreamingLinksService {
   /**
    * Convert a Spotify track response to TrackMetadata
    *
-   * Note: ISRC is intentionally zeroed out to force MusicBrainz enrichment.
-   * Spotify is removing external_ids from Development Mode API responses
-   * on March 9, 2026. We're cutting over early to validate the MusicBrainz
-   * pipeline in production. To revert, restore: isrc: track.external_ids?.isrc || '',
+   * Spotify still returns external_ids.isrc for this app. The ISRC is passed through
+   * so Apple Music can match on it directly; getTrackLinks falls back to MusicBrainz
+   * only when it is missing.
    */
   static trackMetadataFromSpotify(track: SpotifyTrackForMetadata): TrackMetadata {
     return {
       type: 'track',
       id: track.id,
-      isrc: '', // Forced MusicBrainz enrichment - see comment above
+      isrc: track.external_ids?.isrc || '',
       name: track.name,
       artists: track.artists.map((a) => a.name),
       album: track.album?.name || '',
@@ -271,16 +289,15 @@ export class StreamingLinksService {
   /**
    * Convert a Spotify album response to AlbumMetadata
    *
-   * Note: UPC is intentionally zeroed out to force MusicBrainz enrichment.
-   * Spotify is removing external_ids from Development Mode API responses
-   * on March 9, 2026. We're cutting over early to validate the MusicBrainz
-   * pipeline in production. To revert, restore: upc: album.external_ids?.upc,
+   * Spotify still returns external_ids.upc for this app. The UPC is passed through
+   * so Apple Music can match on it directly; getAlbumLinks falls back to MusicBrainz
+   * only when it is missing.
    */
   static albumMetadataFromSpotify(album: SpotifyAlbumForMetadata): AlbumMetadata {
     return {
       type: 'album',
       id: album.id,
-      upc: undefined, // Forced MusicBrainz enrichment - see comment above
+      upc: album.external_ids?.upc,
       name: album.name,
       artists: album.artists.map((a) => a.name),
       totalTracks: album.total_tracks,
