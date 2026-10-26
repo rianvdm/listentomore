@@ -179,8 +179,16 @@ function getClientIP(c: Context): string {
  * API usage logging middleware
  * Logs all API requests for analytics
  */
+// Progressive-loading calls from our own pages. They are fully visible in Workers
+// Observability and would add up to ~49 D1 rows per home view, so they are not logged.
+const UNLOGGED_PATH_PREFIX = '/api/internal/';
+
 export function apiLoggingMiddleware(): MiddlewareHandler {
   return async (c, next) => {
+    if (c.req.path.startsWith(UNLOGGED_PATH_PREFIX)) {
+      return next();
+    }
+
     const startTime = Date.now();
 
     await next();

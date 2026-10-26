@@ -202,6 +202,7 @@ const COUNT_QUERIES = {
 };
 
 // D1 side of metric 6. Bounds are filled in from the 7d window (created_at is UTC 'YYYY-MM-DD HH:MM:SS').
+// Since 2026-10-26 /api/internal/* is not logged at all, so coverage is only meaningful for /api/v1/*.
 const D1_API_USAGE_SQL = (fromSql, toSql) => 'SELECT date(created_at) AS d, COUNT(*) AS n, '
   + "SUM(CASE WHEN endpoint LIKE '/api/internal/%' THEN 1 ELSE 0 END) AS internal "
   + `FROM api_usage_log WHERE created_at >= '${fromSql}' AND created_at < '${toSql}' GROUP BY d ORDER BY d`;
