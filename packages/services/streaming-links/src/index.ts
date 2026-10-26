@@ -94,6 +94,14 @@ export interface SpotifyLookupService {
   getTrack?(id: string): Promise<SpotifyTrackForMetadata | null>;
 }
 
+// Bump this when cached links must be rebuilt. v2 (2026-10-26): links come from the Spotify
+// UPC/ISRC instead of MusicBrainz, whose UPCs produced wrong-album Apple Music links.
+const CACHE_KEY_VERSION = 'v2';
+
+function cacheKeyFor(type: 'track' | 'album', spotifyId: string): string {
+  return `streaming-links:${CACHE_KEY_VERSION}:${type}:${spotifyId}`;
+}
+
 export class StreamingLinksService {
   private appleMusic: AppleMusicProvider;
   // YouTube provider kept for potential future use but not currently called in getTrackLinks/getAlbumLinks
@@ -182,7 +190,7 @@ export class StreamingLinksService {
    * Get streaming links for a track
    */
   async getTrackLinks(metadata: TrackMetadata): Promise<StreamingLinksResult> {
-    const cacheKey = `streaming-links:track:${metadata.id}`;
+    const cacheKey = cacheKeyFor('track', metadata.id);
 
     // Check cache
     const cached = await this.cache.get<StreamingLinksResult>(cacheKey, 'json');
@@ -226,7 +234,7 @@ export class StreamingLinksService {
    * Get streaming links for an album
    */
   async getAlbumLinks(metadata: AlbumMetadata): Promise<StreamingLinksResult> {
-    const cacheKey = `streaming-links:album:${metadata.id}`;
+    const cacheKey = cacheKeyFor('album', metadata.id);
 
     // Check cache
     const cached = await this.cache.get<StreamingLinksResult>(cacheKey, 'json');
@@ -626,7 +634,7 @@ export class StreamingLinksService {
    * Clear cache for a specific item
    */
   async clearCache(spotifyId: string, type: 'track' | 'album'): Promise<void> {
-    const cacheKey = `streaming-links:${type}:${spotifyId}`;
+    const cacheKey = cacheKeyFor(type, spotifyId);
     await this.cache.delete(cacheKey);
     console.log(`[StreamingLinks] Cache cleared for ${type} ${spotifyId}`);
   }
