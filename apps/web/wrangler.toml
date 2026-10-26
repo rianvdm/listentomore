@@ -37,7 +37,7 @@ enabled = true
 [[kv_namespaces]]
 binding = "CACHE"
 id = "a6011a8b5bac4be9a472ff86f8d5fd91"
-preview_id = "d6703c6a7283467eb7a452a6cb34fa87"
+preview_id = "a452b93616014f53add052d73bde01f7"
 
 # D1 Database
 [[d1_databases]]
