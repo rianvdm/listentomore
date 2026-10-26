@@ -4,9 +4,11 @@
 // Usage (Node 22, from apps/web, cf CLI logged in):
 //   node scripts/perf-metrics.mjs --label before --to 1793020158564
 //   node scripts/perf-metrics.mjs --label after --to now --out ../../perf/after.json
+//   node scripts/perf-metrics.mjs --label early-after --from 1793022335000 --to now
 //
 // Flags:
 //   --to <epoch-ms|now>  End of every window (default now). Windows are 24h and 7d ending here.
+//   --from <epoch-ms>    Replace both windows with [from, to], e.g. for an early read since a deploy.
 //   --label <name>       Free-form label, usually before or after (default adhoc).
 //   --out <file>         Output JSON path (default ./<label>-<to>.json).
 //   --skip-d1            Skip the read-only api_usage_log SELECT (metric 6, D1 side).
@@ -209,10 +211,11 @@ const D1_API_USAGE_SQL = (fromSql, toSql) => 'SELECT date(created_at) AS d, COUN
 // ---------- CLI plumbing ----------
 
 function parseArgs(argv) {
-  const args = { to: 'now', label: 'adhoc', out: null, skipD1: false };
+  const args = { to: 'now', from: null, label: 'adhoc', out: null, skipD1: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--to') args.to = argv[++i];
+    else if (a === '--from') args.from = Number(argv[++i]);
     else if (a === '--label') args.label = argv[++i];
     else if (a === '--out') args.out = argv[++i];
     else if (a === '--skip-d1') args.skipD1 = true;
@@ -220,6 +223,9 @@ function parseArgs(argv) {
   }
   args.to = args.to === 'now' ? Date.now() : Number(args.to);
   if (!Number.isFinite(args.to)) throw new Error('--to must be epoch milliseconds or now');
+  if (args.from !== null && !(Number.isFinite(args.from) && args.from < args.to)) {
+    throw new Error('--from must be epoch milliseconds earlier than --to');
+  }
   return args;
 }
 
@@ -656,11 +662,13 @@ const iso = (ms) => new Date(ms).toISOString();
 
 function markdown(r) {
   const L = [];
+  const w1 = r.windowLabels?.['24h'] ?? '24h';
+  const w7 = r.windowLabels?.['7d'] ?? '7d';
   L.push(`# perf-metrics ${r.label} (to ${r.to} = ${iso(r.to)})`, '');
-  L.push(`Windows: 24h ${iso(r.windows['24h'].from)} to ${iso(r.windows['24h'].to)}; 7d ${iso(r.windows['7d'].from)} to ${iso(r.windows['7d'].to)}.`);
-  L.push(`Root-span script versions (24h): ${Object.entries(r.versions24h).map(([k, v]) => `${k.slice(0, 8)} ${v}`).join(', ')}`, '');
+  L.push(`Windows: ${w1} ${iso(r.windows['24h'].from)} to ${iso(r.windows['24h'].to)}; ${w7} ${iso(r.windows['7d'].from)} to ${iso(r.windows['7d'].to)}.`);
+  L.push(`Root-span script versions (${w1}): ${Object.entries(r.versions24h).map(([k, v]) => `${k.slice(0, 8)} ${v}`).join(', ')}`, '');
 
-  L.push('## 1. Route latency, 24h (ms; miss = trace has a fetch to the miss hosts)', '');
+  L.push(`## 1. Route latency, ${w1} (ms; miss = trace has a fetch to the miss hosts)`, '');
   L.push('| Route | n | miss % | wall p50 | wall p95 | TTFB p50 | TTFB p95 | miss n | miss wall p50/p95 | miss TTFB p50/p95 | hit n | hit wall p50/p95 | hit TTFB p50/p95 |');
   L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const x of r.metrics.routes) {
@@ -668,7 +676,7 @@ function markdown(r) {
   }
 
   const s = r.metrics.streamingLinks;
-  L.push('', '## 2. Streaming links, 7d', '');
+  L.push('', `## 2. Streaming links, ${w7}`, '');
   L.push('| Measure | Value |', '|---|---|');
   L.push(`| Invocations (root spans) | ${s.invocations} |`);
   L.push(`| Misses (any Spotify/MusicBrainz/Apple fetch) | ${s.misses.n} (${fmt(s.misses.missRatePct)}%) |`);
@@ -683,33 +691,33 @@ function markdown(r) {
   L.push(`| Log rows: \`[MusicBrainz] 503\` / \`Release lookup failed\` / rate-limit waits | ${s.musicbrainz.logMusicbrainz503} / ${s.musicbrainz.logReleaseLookupFailed} / ${s.musicbrainz.logRateLimitWaits} |`);
   L.push(`| Issue occurrences, MusicBrainz 503 | ${s.musicbrainz.issueOccurrences7d} |`);
 
-  L.push('', '## 3. Session cost proxy, 24h', '');
+  L.push('', `## 3. Session cost proxy, ${w1}`, '');
   L.push('| Class | invocations | any D1 % | session SELECT % | D1 before first byte % | abandoned D1 % (spans) | D1 spans per D1 invocation p50 (mean) | D1 span p50/p95 ms |');
   L.push('|---|---|---|---|---|---|---|---|');
   for (const [k, v] of Object.entries(r.metrics.session)) {
     L.push(`| ${k} | ${v.invocations} | ${fmt(v.withAnyD1Pct)} | ${fmt(v.withSessionSelectPct)} | ${fmt(v.withD1BeforeFirstBytePct)} | ${fmt(v.withAbandonedD1Pct)} (${v.abandonedD1Spans}) | ${fmt(v.d1SpansPerD1Invocation.p50)} (${fmt(v.d1SpansPerD1Invocation.mean)}) | ${fmt(v.d1SpanDurationMs.p50)}/${fmt(v.d1SpanDurationMs.p95)} |`);
   }
 
-  L.push('', '## 4. KV on fetch invocations, 24h', '');
+  L.push('', `## 4. KV on fetch invocations, ${w1}`, '');
   L.push('| Op | Key bucket | n | abandoned | p50 ms | p95 ms | started before first byte % |', '|---|---|---|---|---|---|---|');
   for (const g of r.metrics.kv.groups) L.push(`| ${g.op} | \`${g.bucket}\` | ${g.n} | ${g.abandoned} | ${fmt(g.p50)} | ${fmt(g.p95)} | ${fmt(g.beforeFirstBytePct)} |`);
-  L.push('', `Log rows 24h: \`KV PUT failed\` ${r.metrics.kv.logKvPutFailed24h}; \`Deferred\`+\`failed\` ${r.metrics.kv.logDeferredFailed24h}.`);
+  L.push('', `Log rows ${w1}: \`KV PUT failed\` ${r.metrics.kv.logKvPutFailed24h}; \`Deferred\`+\`failed\` ${r.metrics.kv.logDeferredFailed24h}.`);
 
   const o = r.metrics.outcomes;
-  L.push('', '## 5. Outcomes, 7d (fetch invocations)', '');
+  L.push('', `## 5. Outcomes, ${w7} (fetch invocations)`, '');
   L.push('| Scope | total | by outcome | canceled % |', '|---|---|---|---|');
   L.push(`| all fetch | ${o.all.total} | ${JSON.stringify(o.all.byOutcome)} | ${fmt(o.all.canceledPct)} |`);
   L.push(`| streaming-links | ${o.streamingLinks.total} | ${JSON.stringify(o.streamingLinks.byOutcome)} | ${fmt(o.streamingLinks.canceledPct)} |`);
 
   const d = r.metrics.d1Logging;
-  L.push('', '## 6. api_usage_log vs /api/* invocations, 7d (UTC days, clipped to window)', '');
+  L.push('', `## 6. api_usage_log vs /api/* invocations, ${w7} (UTC days, clipped to window)`, '');
   L.push('| Day | /api/* invocations | /api/internal/* | D1 rows | D1 internal rows | D1 coverage % |', '|---|---|---|---|---|---|');
   for (const x of d.daily) L.push(`| ${x.day} | ${x.obsApiInvocations} | ${x.obsInternalInvocations} | ${fmt(x.d1Rows)} | ${fmt(x.d1InternalRows)} | ${fmt(x.d1CoveragePct)} |`);
   L.push(`| total | ${d.totals.obsApiInvocations} | ${d.totals.obsInternalInvocations} | ${fmt(d.totals.d1Rows)} | ${fmt(d.totals.d1InternalRows)} | ${fmt(d.totals.d1CoveragePct)} |`);
   if (d.d1Error) L.push('', `D1 query failed: ${d.d1Error.split('\n').slice(-3).join(' ')}`);
 
-  L.push('', '## 7. Top Issues, 7d', '');
-  L.push('| Occurrences 7d | Lifetime count at run | Type | Title |', '|---|---|---|---|');
+  L.push('', `## 7. Top Issues, ${w7}`, '');
+  L.push(`| Occurrences ${w7} | Lifetime count at run | Type | Title |`, '|---|---|---|---|');
   for (const i of r.metrics.issues) L.push(`| ${i.occurrences7d} | ${fmt(i.lifetimeCountAtRun)} | ${fmt(i.type)} | ${fmt(i.title ?? i.fingerprint).replace(/\|/g, '\\|')} |`);
   return L.join('\n');
 }
@@ -719,8 +727,13 @@ function markdown(r) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const T = args.to;
-  const windows = { '24h': { from: T - DAY, to: T }, '7d': { from: T - 7 * DAY, to: T } };
-  log(`perf-metrics label=${args.label} to=${T} (${iso(T)})`);
+  // --from collapses both windows to one span; the labels keep the markdown honest about it.
+  const windows = args.from === null
+    ? { '24h': { from: T - DAY, to: T }, '7d': { from: T - 7 * DAY, to: T } }
+    : { '24h': { from: args.from, to: T }, '7d': { from: args.from, to: T } };
+  const spanLabel = `${Math.round((T - windows['24h'].from) / HOUR * 10) / 10}h`;
+  const windowLabels = args.from === null ? { '24h': '24h', '7d': '7d' } : { '24h': spanLabel, '7d': spanLabel };
+  log(`perf-metrics label=${args.label} from=${windows['24h'].from} (${iso(windows['24h'].from)}) to=${T} (${iso(T)})`);
 
   const pulls = {};
   for (const [name, def] of Object.entries(EVENT_QUERIES)) pulls[name] = await pullEvents(name, def, windows[def.window]);
@@ -737,6 +750,7 @@ async function main() {
     generatedAt: iso(Date.now()),
     service: SERVICE,
     windows,
+    windowLabels,
     versions24h: countBy(traces, (t) => t.version),
     metrics: {
       routes: metricRoutes(traces),
