@@ -233,8 +233,11 @@ function parseArgs(argv) {
 const CF_CWD = mkdtempSync(join(tmpdir(), 'perf-metrics-'));
 const log = (...m) => console.error(...m);
 
+const MAX_ATTEMPTS = 4;
+const RETRY_BACKOFF_MS = 1500;
+
 async function runCf(args) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const { stdout } = await execFileAsync('cf', args, {
         cwd: CF_CWD,
@@ -245,11 +248,20 @@ async function runCf(args) {
     } catch (error) {
       const err = `${error.stderr || ''}${error.message || ''}`;
       // Auth failures are not retried or routed around: stop and surface them.
-      if (/\b(401|403)\b|unauthori|authenticat|not logged in|cf auth login/i.test(err)) {
+      if (/\b401\b|unauthori|not logged in|cf auth login/i.test(err)) {
         throw new Error(`cf auth failure, run cf auth login:\n${err.slice(-2000)}`);
       }
-      if (/Status code: 400/.test(err) || attempt === 3) throw new Error(`cf ${args.slice(0, 3).join(' ')} failed:\n${err.slice(-3000)}`);
+      // The telemetry API returns an occasional transient 403 under load (seen 2026-10-27, the same
+      // query succeeded on retry). Back off and retry; a 403 that survives every attempt is treated
+      // as a permissions problem and surfaced, never worked around.
+      const forbidden = /\b403\b/.test(err);
+      if (attempt === MAX_ATTEMPTS) {
+        const hint = forbidden ? ' (403 on every attempt: check cf auth whoami and the token permissions)' : '';
+        throw new Error(`cf ${args.slice(0, 3).join(' ')} failed${hint}:\n${err.slice(-3000)}`);
+      }
+      if (/Status code: 400/.test(err)) throw new Error(`cf ${args.slice(0, 3).join(' ')} failed:\n${err.slice(-3000)}`);
       log(`  retry ${attempt}: ${err.slice(-200).trim()}`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS * attempt));
     }
   }
   throw new Error('unreachable');
