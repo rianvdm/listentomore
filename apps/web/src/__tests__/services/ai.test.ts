@@ -297,6 +297,59 @@ describe('generateArtistSentence', () => {
     expect(result).toEqual(cachedResult);
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
+
+  // Production output for "Sultan + Shepard" (2026-10-31): Opus 5.5 at low
+  // effort revised its draft in the visible reply. 73 words against a 38-word cap.
+  const SELF_CORRECTED =
+    'They are a Canadian electronic duo, formerly known as Dirty South collaborators, blending progressive house, melodic house and deep house. Similar artists include Lane 8, Yotto and Ben Böhmer. Wait, I need to fix that, since "Dirty South collaborators" isn\'t accurate. They are a Canadian electronic duo producing progressive house, melodic house and deep house, known for emotive releases on their Insomniac-affiliated label Hommage. Similar artists include Lane 8, Yotto and Ben Böhmer.';
+  const CLEAN =
+    'They are a Canadian electronic duo producing progressive house, melodic house and deep house. Similar artists include Lane 8, Yotto and Ben Böhmer.';
+
+  function sequencedClient(...replies: string[]) {
+    let call = 0;
+    return {
+      chatCompletion: vi.fn(async () => ({ content: replies[Math.min(call++, replies.length - 1)] })),
+    } as unknown as AnthropicClient;
+  }
+
+  it('regenerates once when the reply runs over the word limit, and caches the retry', async () => {
+    const client = sequencedClient(SELF_CORRECTED, CLEAN);
+
+    const result = await generateArtistSentence('Sultan + Shepard', client, cache);
+
+    expect(client.chatCompletion).toHaveBeenCalledTimes(2);
+    expect(result.sentence).toBe(CLEAN);
+    expect(mockKV.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns but does not cache when the retry also runs over the word limit', async () => {
+    const client = sequencedClient(SELF_CORRECTED, SELF_CORRECTED);
+
+    const result = await generateArtistSentence('Sultan + Shepard', client, cache);
+
+    expect(client.chatCompletion).toHaveBeenCalledTimes(2);
+    expect(result.sentence).toBe(SELF_CORRECTED);
+    expect(mockKV.put).not.toHaveBeenCalled();
+  });
+
+  it('makes a single call when the reply is within the word limit', async () => {
+    const client = sequencedClient(CLEAN);
+
+    await generateArtistSentence('Sultan + Shepard', client, cache);
+
+    expect(client.chatCompletion).toHaveBeenCalledTimes(1);
+    expect(mockKV.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the model its whole reply is published as-is', async () => {
+    const client = sequencedClient(CLEAN);
+
+    await generateArtistSentence('Sultan + Shepard', client, cache);
+
+    const { messages } = (client.chatCompletion as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const userPrompt = messages.find((m: { role: string }) => m.role === 'user').content;
+    expect(userPrompt).toContain('published as-is');
+  });
 });
 
 describe('AIRateLimiter — provider-aware limits', () => {
