@@ -20,7 +20,7 @@ export const ABOUT_FEATURES: readonly AboutFeature[] = [
     title: 'Albums and artists',
     description: 'A summary, similar music, and links to Spotify, Apple Music and other services.',
     href: '/album/6dVIqQ8qmQ5GBnJ9shOYGE',
-    alt: 'The Listen To More page for OK Computer by Radiohead, with cover art, genres and streaming links',
+    alt: 'The Listen To More page for OK Computer by Radiohead, with cover art, release year and streaming links',
   },
   {
     slug: 'genre',
@@ -34,7 +34,7 @@ export const ABOUT_FEATURES: readonly AboutFeature[] = [
     title: 'Your listening',
     description: 'Last.fm stats, plus weekly insights and recommendations based on what you played.',
     href: '/stats',
-    alt: 'Top artists and albums on a Listen To More profile, pulled from Last.fm',
+    alt: 'Top artists on a Listen To More profile, pulled from Last.fm',
   },
   {
     slug: 'profile',

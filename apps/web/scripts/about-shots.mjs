@@ -20,6 +20,8 @@ import { fileURLToPath } from 'node:url';
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:8787';
 const CHROME_PATH =
   process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const COMMAND_TIMEOUT_MS = 30000;
+const NAV_HEIGHT_PX = 60; // sticky nav; keeps scrolled-to headings visible
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 5000);
 const OUT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/images/about');
 
@@ -48,8 +50,10 @@ function freePort() {
   });
 }
 
-async function waitForJson(url, attempts = 50) {
+async function waitForJson(url, getFatalError = () => undefined, attempts = 50) {
   for (let i = 0; i < attempts; i++) {
+    const fatal = getFatalError();
+    if (fatal) throw fatal;
     try {
       const res = await fetch(url);
       if (res.ok) return await res.json();
@@ -67,6 +71,7 @@ class Cdp {
     this.nextId = 1;
     this.pending = new Map();
     this.listeners = [];
+    ws.addEventListener('close', () => this.rejectAll(new Error('Chrome closed the DevTools connection')));
     ws.addEventListener('message', (event) => {
       const msg = JSON.parse(event.data);
       if (msg.id && this.pending.has(msg.id)) {
@@ -80,11 +85,29 @@ class Cdp {
     });
   }
 
-  send(method, params = {}, sessionId) {
+  rejectAll(error) {
+    for (const { reject } of this.pending.values()) reject(error);
+    this.pending.clear();
+  }
+
+  send(method, params = {}, sessionId, timeoutMs = COMMAND_TIMEOUT_MS) {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params, sessionId }));
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Timed out after ${timeoutMs}ms waiting for ${method}`));
+      }, timeoutMs);
+      this.pending.set(id, {
+        resolve: (value) => { clearTimeout(timer); resolve(value); },
+        reject: (error) => { clearTimeout(timer); reject(error); },
+      });
+      try {
+        this.ws.send(JSON.stringify({ id, method, params, sessionId }));
+      } catch (error) {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(error);
+      }
     });
   }
 
@@ -114,9 +137,17 @@ async function capture(cdp, sessionId, shot) {
   cdp.listeners.push(onResponse);
 
   const loaded = cdp.waitFor('Page.loadEventFired');
-  await cdp.send('Page.navigate', { url }, sessionId);
+  loaded.catch(() => {}); // the await below surfaces it; avoids an unhandled rejection if navigation fails first
+  const nav = await cdp.send('Page.navigate', { url }, sessionId);
+  if (nav.errorText) throw new Error(`${shot.slug}: ${url} failed to load: ${nav.errorText}`);
   await loaded;
   cdp.listeners = cdp.listeners.filter((l) => l !== onResponse);
+  // Hide the release banner so evergreen screenshots don't carry a dated announcement.
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: "document.head.insertAdjacentHTML('beforeend', '<style>.banner{display:none !important}</style>')" },
+    sessionId,
+  );
   await sleep(SETTLE_MS);
 
   const { result } = await cdp.send(
@@ -130,7 +161,7 @@ async function capture(cdp, sessionId, shot) {
   }
 
   if (shot.scrollToHeading) {
-    const expr = `(() => { const el = [...document.querySelectorAll('h2')].find((h) => h.textContent.includes(${JSON.stringify(shot.scrollToHeading)})); if (!el) return false; window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 24); return true; })()`;
+    const expr = `(() => { const el = [...document.querySelectorAll('h2')].find((h) => h.textContent.includes(${JSON.stringify(shot.scrollToHeading)})); if (!el) return false; window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - ${NAV_HEIGHT_PX + 24}); return true; })()`;
     const { result: found } = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true }, sessionId);
     if (!found.value) throw new Error(`${shot.slug}: heading ${shot.scrollToHeading} not found on ${url}`);
     await sleep(1000);
@@ -158,9 +189,13 @@ async function main() {
     ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profileDir}`, '--no-first-run', 'about:blank'],
     { stdio: 'ignore' },
   );
+  let spawnError;
+  chrome.once('error', (err) => {
+    spawnError = new Error(`Could not start Chrome at ${CHROME_PATH}: ${err.message}`);
+  });
 
   try {
-    const { webSocketDebuggerUrl } = await waitForJson(`http://127.0.0.1:${port}/json/version`);
+    const { webSocketDebuggerUrl } = await waitForJson(`http://127.0.0.1:${port}/json/version`, () => spawnError);
     const ws = new WebSocket(webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve, { once: true });
@@ -184,11 +219,18 @@ async function main() {
     }
     ws.close();
   } finally {
-    const exited = new Promise((resolve) => chrome.once('exit', resolve));
+    // Chrome may have exited already (bad path, crash); an exit listener added now would never fire.
+    const alreadyGone = chrome.exitCode !== null || chrome.signalCode !== null || spawnError;
+    const exited = alreadyGone ? Promise.resolve() : new Promise((resolve) => chrome.once('exit', resolve));
     chrome.kill();
     await exited;
     // Chrome's helper processes can still hold files briefly after the main process exits.
-    rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    try {
+      rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    } catch (err) {
+      // Don't let cleanup trouble mask the real failure.
+      console.warn(`Could not remove ${profileDir}: ${err.message}`);
+    }
   }
 }
 
