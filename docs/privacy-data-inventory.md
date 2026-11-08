@@ -4,7 +4,7 @@ Last verified against the code on 2026-11-08 (branch `about-page-refresh`). Ever
 
 "Unconfirmed" means I could not establish the fact from the repository. Unconfirmed items are kept out of the policy and the About page.
 
-This file records current behavior, including known gaps the policy leaves out until they are fixed: the artist play-count endpoint ([#51](https://github.com/rianvdm/listentomore/issues/51)) and session cleanup, API log retention, the unused session key and `/widget/recent` privacy ([#52](https://github.com/rianvdm/listentomore/issues/52)).
+This file records current behavior, including known gaps the policy leaves out until they are fixed: session cleanup, API log retention, the unused session key and `/widget/recent` privacy ([#52](https://github.com/rianvdm/listentomore/issues/52)).
 
 ## 1. User columns actually written
 
@@ -125,7 +125,7 @@ Not hidden:
 
 - The private-profile page still shows that the username exists (`PrivateProfile` receives the Last.fm username).
 - `GET /widget/recent?username=<name>` is public and fetches the latest track from Last.fm live for any username on a cache miss, with no check of `profile_visibility` (`apps/web/src/index.tsx:722-790`). Whether Last.fm itself withholds recent tracks for users who hide them is unconfirmed, so the policy does not claim it.
-- `GET /api/internal/artist-lastfm?name=<artist>&username=<name>` returns the play count Last.fm reports for that username and artist, with no session check and no check of `profile_visibility` (`apps/web/src/api/internal/artist.ts:29-44`). It needs only the internal token, which every page embeds as `window.__INTERNAL_TOKEN__` (`components/layout/Layout.tsx:97`). The artist page calls it with the signed-in viewer's username (`pages/artist/detail.tsx:130-133`), but the route accepts any username.
+- `GET /api/internal/artist-lastfm?name=<artist>` returns a play count only for the signed-in user, read from the session; a `username` query parameter is ignored (`apps/web/src/api/internal/artist.ts`, fixed in [#51](https://github.com/rianvdm/listentomore/issues/51)). Signed-out requests get artist data with no play count.
 - Last.fm's own privacy settings are separate and unaffected.
 - Default for new accounts is `public` (`pages/auth/lastfm.ts:138`).
 

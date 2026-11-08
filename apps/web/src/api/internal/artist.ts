@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { RegionUnsupportedError } from '@listentomore/ai';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
+import { getCurrentUser } from '../../middleware/session';
 import { resolveSpotifyArtist } from './spotify-lookup';
 
 const app = new Hono<InternalAppContext>();
@@ -25,10 +26,11 @@ app.get('/artist-summary', requireSessionAuth, async (c) => {
   }
 });
 
-// No requireSessionAuth — Last.fm data is public and does not consume AI quota
+// No requireSessionAuth — Last.fm artist data is public and does not consume AI quota.
+// The play count is only ever the signed-in user's own, taken from the session rather than
+// the query string, so a caller can't read another user's count.
 app.get('/artist-lastfm', async (c) => {
   const name = c.req.query('name');
-  const username = c.req.query('username');
 
   if (!name) {
     return c.json({ error: 'Missing name parameter' }, 400);
@@ -36,9 +38,10 @@ app.get('/artist-lastfm', async (c) => {
 
   try {
     const lastfm = c.get('lastfm');
+    const user = await getCurrentUser(c);
     // Fetch artist detail and top albums in parallel
     const [artistDetail, topAlbums] = await Promise.all([
-      lastfm.getArtistDetail(name, username || undefined),
+      lastfm.getArtistDetail(name, user?.lastfm_username || undefined),
       lastfm.getArtistTopAlbums(name, 3),
     ]);
     return c.json({

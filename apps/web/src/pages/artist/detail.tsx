@@ -126,11 +126,9 @@ export function ArtistDetailPage({
             return !excludedTags.some(function(excluded) { return lower.includes(excluded); });
           }
 
-          // Fetch Last.fm data (playcount, genres, and similar artists)
+          // Fetch Last.fm data (playcount, genres, and similar artists).
+          // The server reads the playcount user from the session cookie.
           var lastfmUrl = '/api/internal/artist-lastfm?name=' + encodeURIComponent(artistName);
-          if (lastfmUsername) {
-            lastfmUrl += '&username=' + encodeURIComponent(lastfmUsername);
-          }
           internalFetch(lastfmUrl, { cache: 'no-store' })
             .then(function(r) {
               if (!r.ok) throw new Error('HTTP ' + r.status);
