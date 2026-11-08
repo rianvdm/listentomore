@@ -95,12 +95,13 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         about visitors.
       </p>
       <p>
-        <strong>Spotify, MusicBrainz, Apple Music, YouTube and Songlink</strong> receive artist,
-        album and track names or IDs, so the site can find artwork, identifiers and links on other
-        services. They don't receive account details. Your browser loads album art and Last.fm
-        profile pictures directly from the servers of those services, and it loads one script (a
-        Markdown renderer) from the jsDelivr content network. Those hosts see your IP address the
-        way any server does when you load a file from it.
+        <strong>Spotify, MusicBrainz and Apple Music</strong> receive artist, album and track
+        names or IDs, so the site can find artwork, identifiers and links on other services. They
+        don't receive account details. The "more services" link on an album or track page goes to
+        Songlink, which only learns the Spotify ID if you click it. Your browser loads album art
+        and Last.fm profile pictures directly from the servers of those services, and it loads one
+        script (a Markdown renderer) from the jsDelivr content network. Those hosts see your IP
+        address the way any server does when you load a file from it.
       </p>
       <p>
         <strong>Cloudflare</strong> hosts the site and sees every request. I have Cloudflare's
@@ -152,7 +153,8 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
           lasts up to 7 days.
         </li>
         <li>
-          Cloudflare log entries that mention your username stay, because deleting your account doesn't remove existing logs.
+          Cloudflare log entries that mention your username aren't removed when you delete your
+          account.
         </li>
         <li>The Discord message I received when your account was created stays in Discord.</li>
         <li>The API log doesn't point to accounts, so deletion doesn't touch it.</li>

@@ -71,7 +71,9 @@ Providers and models come from `packages/config/src/ai.ts` (`AI_TASKS`).
 | **OpenAI** | Only the `randomFact` task (`gpt-5.6-luna`), which has no user input. It is wired up as a switch-back for other tasks but no task uses it for user data today | `config/src/ai.ts:168-180`; `apps/web/src/index.tsx:826-838` |
 | **Spotify** | Search text and album/artist ids for catalog lookups, using the site's app credentials (no user is signed in to Spotify; `spotify_connected` is never set) | `packages/services/spotify/src/search.ts:127`, `albums.ts:97`, `artists.ts:62,157,210`, token request `auth.ts:66` |
 | **MusicBrainz** | Artist plus album or track names, to look up UPCs and ISRCs | `packages/services/musicbrainz/src/release-lookup.ts:65,137`, `recording-lookup.ts:63,133` (via `fetch.ts:37`) |
-| **Apple Music API** and **YouTube Data API** (via `streaming-links`) and **Songlink/Odesli** | Album or track metadata and URLs, to find links on other services | `packages/services/streaming-links/src/providers/apple-music.ts:161`, `youtube.ts:61`; `packages/services/songlink/src/index.ts:64` |
+| **Apple Music API** | Album or track metadata, to find the Apple Music link | `packages/services/streaming-links/src/providers/apple-music.ts:161`; called from `streaming-links/src/index.ts:208,252,492,564` |
+| **YouTube** | **Nothing at runtime.** `YouTubeProvider` is constructed but never called; both result builders hardcode `youtube: null`. The key is only passed to the constructor | `streaming-links/src/index.ts:107,216,260`; `apps/web/src/index.tsx:141` |
+| **Songlink/Odesli** | The server only builds the string `https://song.link/<spotify url>`. Songlink sees the Spotify ID only when a visitor clicks "More services", from the visitor's own browser. `SonglinkService` (the `api.song.link` call at `songlink/src/index.ts:7,64`) is imported only by a test | `streaming-links/src/index.ts:211-212,255-256,597`; `apps/web/src/__tests__/services/songlink.test.ts` |
 | **Discord** | The owner's webhook gets username + profile URL on signup (section 1). The Discord bot is a separate Worker (section 8) | `pages/auth/lastfm.ts:145-182` |
 | **jsDelivr** (`cdn.jsdelivr.net`) | Every page loads the `marked` script from jsDelivr, so the visitor's browser sends jsDelivr its IP address and user agent | `components/layout/Layout.tsx:71` |
 | **Image hosts** | Album art and Last.fm avatars are URLs returned by Spotify and Last.fm, loaded by the visitor's browser from those services' servers; a fallback image loads from `file.elezea.com` | `pages/auth/lastfm.ts:124` (avatar URL stored); `packages/services/lastfm/src/top-artists.ts:8` |
@@ -153,8 +155,8 @@ The account page text says deletion "will permanently remove all your data" (`pa
 | KV is used only by the Spotify, streaming-links and AI services for catalog and AI-text caching (same cache keys as the site). The Last.fm service is created with no cache, so Last.fm listening data is never cached by the bot | `apps/discord-bot/src/index.ts:50-84` |
 | `/listenlast <lastfm username>` looks up the typed Last.fm user's most recent track and posts it publicly in the channel | `commands/listenlast.ts:28-48` |
 | `/ask <question>` sends the question to Anthropic and posts the answer and question publicly | `commands/ask.ts:26-48` |
-| `/listento`, `/listenurl`, `/whois`, `/whatis` take music names or URLs | `commands/*.ts` |
-| Error logging writes error objects, not interaction content | `commands/*.ts` (`console.error('Error in ...')`) |
+| `/listento`, `/listenurl`, `/whois`, `/whatis` take music names or URLs | `whois.ts:37`, `whatis.ts:40`, `listento.ts:76`, `listenurl.ts:68` |
+| Error logging writes error objects, not interaction content | `ask.ts:48`, `listento.ts:115`, `listenlast.ts:53`, `listenurl.ts:103`, `whois.ts:51`, `whatis.ts:80` |
 | Whether Discord user ids or interaction tokens appear in Workers logs: unconfirmed | n/a |
 
 ## 9. Analytics scripts

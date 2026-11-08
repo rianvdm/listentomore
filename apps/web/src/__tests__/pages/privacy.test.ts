@@ -6,7 +6,7 @@ import { PrivacyPage, PRIVACY_EFFECTIVE_DATE } from '../../pages/legal/privacy';
 
 describe('PrivacyPage', () => {
   const html = PrivacyPage({ currentUser: null }).toString();
-  // Plain text with entities decoded and whitespace collapsed, for phrase checks.
+  // HTML with the &#39; entity decoded and whitespace collapsed, for phrase checks.
   const text = html.replace(/&#39;/g, "'").replace(/\s+/g, ' ');
 
   it('drops the claim that no personal information is collected', () => {
@@ -28,11 +28,16 @@ describe('PrivacyPage', () => {
     expect(html).toContain('one-way hash');
   });
 
+  it('does not name YouTube as a recipient of catalog lookups', () => {
+    expect(text).not.toContain('YouTube');
+    expect(text).toContain('Songlink');
+  });
+
   it('explains deletion and links to the account page', () => {
     expect(html).toContain('href="/account"');
     expect(html).toContain('removes your account record and all your sessions');
     expect(html).toContain('Cached copies expire on their own schedule');
-    expect(text).toContain('deleting your account doesn\'t remove existing logs');
+    expect(text).toContain('aren\'t removed when you delete your account');
     expect(text).toContain('The API log doesn\'t point to accounts');
   });
 });
