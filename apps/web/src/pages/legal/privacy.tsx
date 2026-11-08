@@ -1,7 +1,10 @@
-// Privacy policy page
+// ABOUTME: Privacy policy page, written from docs/privacy-data-inventory.md.
+// ABOUTME: Update the inventory first, then this copy, whenever what the site stores changes.
 
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+
+export const PRIVACY_EFFECTIVE_DATE = 'November 8, 2026';
 
 interface PrivacyPageProps {
   currentUser?: User | null;
@@ -12,51 +15,183 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
     <Layout title="Privacy Policy" description="Privacy policy for Listen To More" currentUser={currentUser}>
       <h1>Privacy Policy</h1>
       <p>
-        <strong>Effective Date:</strong> September 16, 2024
+        <strong>Effective Date:</strong> {PRIVACY_EFFECTIVE_DATE}
       </p>
 
       <p>
-        At "Listen To More," we value your privacy. This Privacy Policy outlines how we handle your
-        information when you use our website and Discord bot.
+        Listen To More is a side project that I run myself. This page lists what the website and the
+        Discord bot store about you, who else receives data, and how to get it removed. You can
+        browse the site without an account. Everything about accounts below applies only if you sign
+        in with Last.fm.
       </p>
 
-      <h2>1. Information We Collect</h2>
+      <h2>1. What I store when you sign in</h2>
       <p>
-        We do not collect any personally identifiable information (PII). We only gather aggregated
-        analytics to monitor the performance of our services and to improve user experience.
+        You sign in on Last.fm's own page, so I never see your Last.fm password. When you approve
+        the sign-in, I save this in my database:
+      </p>
+      <ul>
+        <li>Your Last.fm username, and a lowercase copy that becomes your profile address.</li>
+        <li>
+          The Last.fm session key that Last.fm hands back when you sign in. I replace it each time
+          you sign in.
+        </li>
+        <li>A display name (it starts as your Last.fm username, and you can change it).</li>
+        <li>The link to your Last.fm profile picture, copied from Last.fm.</li>
+        <li>A short bio, if you write one on the account page.</li>
+        <li>Whether your profile is public or private.</li>
+        <li>When your account was created, when you last signed in, and how many times you have.</li>
+      </ul>
+      <p>
+        I don't ask for or store your email address. Your listening history stays at Last.fm. The
+        site fetches it when a page needs it and doesn't keep it in my database (see caching below
+        for the short-lived copies).
+      </p>
+      <p>
+        When a new account is created, I get a message in my own Discord server with the username
+        and profile link.
       </p>
 
-      <h2>2. Use of Information</h2>
+      <h2>2. Sessions, cookies, and logs</h2>
       <p>
-        The aggregated data we collect is used solely for understanding usage patterns and for
-        optimizing the website and Discord bot. This includes metrics like the number of
-        interactions, frequency of usage, and general performance data.
+        Signing in sets one cookie, <code>ltm_session</code>. It is marked Secure, HttpOnly and
+        SameSite=Lax, and it lasts 30 days. The cookie holds a random token. My database keeps only a
+        one-way hash of that token, along with the IP address and browser details (user agent) from
+        the request that signed you in, the time you were last active, and when the session expires.
+      </p>
+      <p>
+        Signing out deletes the session. If a session expires, I remove it the next time that
+        browser sends the cookie.
+      </p>
+      <p>
+        If you never sign in, the site itself sets no cookie, though Cloudflare sets its own (see
+        section 8). Your browser also stores two small things on your device only: your light or
+        dark theme choice, and whether you dismissed an announcement banner.
+      </p>
+      <p>
+        There is also a log of calls to the site's API, which needs an API key that I hand out
+        myself. Each entry has the path, status, timing, IP address and user agent of the caller.
+        These entries are not linked to accounts.
       </p>
 
-      <h2>3. Sharing of Information</h2>
+      <h2>3. Who else gets your data</h2>
       <p>
-        We do not share, sell, or disclose your information to third parties. Aggregated analytics
-        data may be used internally for service improvements but will never contain identifiable
-        information.
+        <strong>Last.fm</strong> handles sign-in. The site also asks Last.fm for listening data
+        using a Last.fm username, for example to build a profile page.
+      </p>
+      <p>
+        <strong>Anthropic</strong> writes the text about albums, artists and genres, and answers
+        questions typed into the Ask feature. For the insights page, the site sends Anthropic a
+        week of listening data: total plays, your top 5 artists and top 5 albums with play counts,
+        your 30 most recent tracks, and up to 20 of your top artists from the past six months. It
+        doesn't send your username, display name, bio, IP address or any other account detail.
+        Anthropic's own terms cover what it does with those requests. Insights for a public profile
+        are generated when any signed-in visitor opens the page. Insights for a private profile are
+        generated only when you open it.
+      </p>
+      <p>
+        <strong>OpenAI</strong> generates the short random music facts. It gets no information
+        about visitors.
+      </p>
+      <p>
+        <strong>Spotify, MusicBrainz and Apple Music</strong> receive artist, album and track
+        names or IDs, so the site can find artwork, identifiers and links on other services. They
+        don't receive account details. The "More services" link on an album page goes to
+        song.link. The site sends Songlink nothing; if you click the link, Songlink sees the album's
+        Spotify ID and your IP address, like any site you visit. Your browser loads album art
+        and Last.fm profile pictures directly from the servers of those services, and it loads one
+        script (a Markdown renderer) from the jsDelivr content network. Those hosts see your IP
+        address the way any server does when you load a file from it.
+      </p>
+      <p>
+        <strong>Cloudflare</strong> hosts the site and sees every request. I have Cloudflare's
+        logging and tracing turned on for the site. App messages in those logs can include usernames
+        (for example when someone signs in or deletes an account) and error details. Deleting
+        your account doesn't remove log entries that already exist.
+      </p>
+      <p>I don't sell data and I don't run ads.</p>
+
+      <h2>4. Caching</h2>
+      <p>
+        To keep pages fast, the site keeps temporary copies of some data in Cloudflare's key-value
+        store. Each copy expires on its own:
+      </p>
+      <ul>
+        <li>The most recent track for each public profile: refreshed every 5 minutes, kept for up to 7 days.</li>
+        <li>The home page feed of recent listens from public profiles: 7 minutes.</li>
+        <li>Top artists, top albums and loved tracks: 1 hour.</li>
+        <li>Artist recommendations on your profile: 6 hours.</li>
+        <li>The AI summary and album picks on your insights page: 1 day.</li>
+        <li>Your Last.fm profile details and your play count for an artist: 30 days.</li>
+      </ul>
+
+      <h2>5. Private profiles</h2>
+      <p>
+        New accounts start as public. You can switch to private on your account page. A private
+        profile hides your profile, likes and insights pages from everyone except you when you're
+        signed in. It also takes you out of the recent listens feed on the home page and stops the
+        5-minute refresh of your latest track. A copy of the feed that was already cached can still
+        show you for a few minutes, until it refreshes.
+      </p>
+      <p>
+        Anyone can still see that a profile with that username exists. When you're signed in,
+        artist pages show your own Last.fm play count for that artist. Your privacy settings at
+        Last.fm are separate from the ones on this site.
       </p>
 
-      <h2>4. Security</h2>
+      <h2>6. Deleting your account</h2>
       <p>
-        We take reasonable measures to protect the data we collect from unauthorized access,
-        alteration, or destruction. However, no method of transmission over the internet or
-        electronic storage is completely secure, and we cannot guarantee absolute security.
+        You can delete your account from the <a href="/account">account page</a>. It asks you to
+        type DELETE to confirm. That removes your account record and all your sessions.
+      </p>
+      <p>Some things outlast the deletion:</p>
+      <ul>
+        <li>
+          Cached copies expire on their own schedule, within 30 days at most.
+        </li>
+        <li>
+          Cloudflare log entries that mention your username aren't removed when you delete your
+          account.
+        </li>
+        <li>The Discord message I received when your account was created stays in Discord.</li>
+        <li>The API log doesn't point to accounts, so deletion doesn't touch it.</li>
+        <li>
+          Data that Last.fm, Anthropic or the other services in section 3 already hold is theirs to
+          manage. Deleting here also doesn't remove this site from your Last.fm connected
+          applications, which you can do in your Last.fm settings.
+        </li>
+      </ul>
+
+      <h2>7. The Discord bot</h2>
+      <p>
+        The bot has no database. It reads the artist, album, link, Last.fm username or question
+        that you type into a command, sends it to the services needed to answer (Last.fm, Anthropic,
+        Spotify and the others above), and posts the reply in the channel. Music lookups can be
+        cached in the same way as on the website. The bot doesn't save your commands or your Discord
+        account details. Cloudflare's logs apply to it as well.
       </p>
 
-      <h2>5. Changes to the Privacy Policy</h2>
+      <h2>8. Analytics</h2>
       <p>
-        We may update this policy periodically, and any changes will be reflected on our website. By
-        continuing to use the services, you agree to the terms of the updated privacy policy.
+        I don't add analytics scripts, advertising trackers or tracking pixels to the site. The only
+        cookie this site sets is the sign-in cookie described above. Cloudflare, which sits in front
+        of the site, sets its own bot-detection cookie (<code>__cf_bm</code>) for every visitor, plus{' '}
+        <code>cf_clearance</code> if you pass a security check.{' '}
+        <a href="https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/">
+          Cloudflare's cookie page
+        </a>{' '}
+        explains both. When I want to know how much traffic the site gets or where it errors, I look
+        at Cloudflare's own dashboards and logs.
       </p>
 
-      <h2>6. Contact Us</h2>
+      <h2>9. Changes to this policy</h2>
       <p>
-        If you have any questions about these terms or the privacy policy, feel free to{' '}
-        <a href="https://elezea.com/contact">contact me</a>.
+        If what the site stores changes, I'll update this page and the effective date at the top.
+      </p>
+
+      <h2>10. Contact</h2>
+      <p>
+        Questions, or an account that you can't delete from the account page? <a href="https://elezea.com/contact/">Contact me</a>.
       </p>
     </Layout>
   );
