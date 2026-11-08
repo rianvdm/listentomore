@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import type { Database, Session, User } from '@listentomore/db';
+import { SpotifyNotFoundError } from '@listentomore/spotify';
 import { albumInternalRoutes } from '../../api/internal/album';
 import { artistInternalRoutes } from '../../api/internal/artist';
 import { handleAlbumDetail } from '../../pages/album/detail';
@@ -117,7 +118,7 @@ describe('internal AI routes resolve Spotify IDs server-side', () => {
     });
 
     it('returns 404 when Spotify does not know the album', async () => {
-      services.spotify.getAlbum.mockRejectedValue(new Error(`Album not found: ${ALBUM_ID}`));
+      services.spotify.getAlbum.mockRejectedValue(new SpotifyNotFoundError('album', ALBUM_ID));
 
       const res = await app.request(`/api/internal/album-summary?spotifyId=${ALBUM_ID}`, SIGNED_IN);
 
@@ -177,7 +178,7 @@ describe('internal AI routes resolve Spotify IDs server-side', () => {
     });
 
     it('returns 404 when Spotify does not know the artist', async () => {
-      services.spotify.getArtist.mockRejectedValue(new Error(`Artist not found: ${ARTIST_ID}`));
+      services.spotify.getArtist.mockRejectedValue(new SpotifyNotFoundError('artist', ARTIST_ID));
 
       const res = await app.request(`/api/internal/artist-summary?spotifyId=${ARTIST_ID}`, SIGNED_IN);
 

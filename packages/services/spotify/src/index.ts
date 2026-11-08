@@ -10,6 +10,7 @@ import { createDefer } from './defer';
 import type { WaitUntil } from './defer';
 
 export { SpotifyAuth } from './auth';
+export { SpotifyNotFoundError } from './errors';
 export type { SpotifyAuthConfig, SpotifyTokenData } from './auth';
 
 export { SpotifySearch } from './search';

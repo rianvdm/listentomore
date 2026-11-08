@@ -54,11 +54,14 @@ export class YouTubeProvider implements StreamingProvider {
       url.searchParams.set('type', 'video');
       url.searchParams.set('videoCategoryId', MUSIC_CATEGORY_ID);
       url.searchParams.set('maxResults', '10');
-      url.searchParams.set('key', this.apiKey);
 
       console.log(`[YouTube] Searching for track: "${query}"`);
 
-      const response = await fetchWithTimeout(url.toString(), { timeout: 'fast' });
+      // Key goes in a header: outbound fetch traces record the full URL, query string included.
+      const response = await fetchWithTimeout(url.toString(), {
+        timeout: 'fast',
+        headers: { 'X-Goog-Api-Key': this.apiKey },
+      });
 
       if (!response.ok) {
         const errorText = await response.text();

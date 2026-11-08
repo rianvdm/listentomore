@@ -2,7 +2,7 @@
 // ABOUTME: Covers caching, deferred cache writes, error mapping, and limiter windows/cooldowns.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SpotifyAlbums, SpotifyArtists, SpotifySearch, SpotifyRateLimiter, createDefer } from '@listentomore/spotify';
+import { SpotifyAlbums, SpotifyArtists, SpotifySearch, SpotifyRateLimiter, SpotifyNotFoundError, createDefer } from '@listentomore/spotify';
 import { createMockKV, setupFetchMock, createMockSpotifyAuth, createMockSpotifyRateLimiter } from '../utils/mocks';
 import { spotifyFixtures } from '../utils/fixtures';
 
@@ -70,7 +70,9 @@ describe('SpotifyAlbums', () => {
     it('throws error for non-existent album', async () => {
       setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/albums\//, response: { error: 'Not found' }, options: { status: 404, ok: false } }]);
 
-      await expect(albums.getAlbum('nonexistent')).rejects.toThrow('Album not found: nonexistent');
+      const request = albums.getAlbum('nonexistent');
+      await expect(request).rejects.toBeInstanceOf(SpotifyNotFoundError);
+      await expect(request).rejects.toThrow('Album not found: nonexistent');
     });
 
     it('throws error on API failure', async () => {
@@ -195,7 +197,9 @@ describe('SpotifyArtists', () => {
     it('throws error for non-existent artist', async () => {
       setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/artists\//, response: { error: 'Not found' }, options: { status: 404, ok: false } }]);
 
-      await expect(artists.getArtist('nonexistent')).rejects.toThrow('Artist not found: nonexistent');
+      const request = artists.getArtist('nonexistent');
+      await expect(request).rejects.toBeInstanceOf(SpotifyNotFoundError);
+      await expect(request).rejects.toThrow('Artist not found: nonexistent');
     });
 
     it('handles missing followers and popularity (Feb 2026 API changes)', async () => {

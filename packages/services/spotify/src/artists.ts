@@ -5,6 +5,7 @@ import { CACHE_CONFIG } from '@listentomore/config';
 import type { SpotifyAuth } from './auth';
 import type { SpotifyRateLimiter } from './rate-limit';
 import { createDefer } from './defer';
+import { SpotifyNotFoundError } from './errors';
 import type { Defer } from './defer';
 import { spotifyFetch } from './fetch';
 
@@ -69,7 +70,7 @@ export class SpotifyArtists {
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error(`Artist not found: ${artistId}`);
+        throw new SpotifyNotFoundError('artist', artistId);
       }
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After') || 'unknown';

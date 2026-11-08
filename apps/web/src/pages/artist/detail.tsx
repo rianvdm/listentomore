@@ -4,9 +4,10 @@
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { isSpotifyId } from '@listentomore/shared';
+import { SpotifyNotFoundError } from '@listentomore/spotify';
+import type { SpotifyService } from '@listentomore/spotify';
 import { Layout } from '../../components/layout';
 import { NotFoundPage, RateLimitedPage, SignInGate } from '../../components/ui';
-import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript } from '../../utils/client-scripts';
 
 interface ArtistData {
@@ -283,12 +284,6 @@ export async function handleArtistDetail(c: Context) {
   try {
     const artistData = await spotify.getArtist(spotifyId);
 
-    if (!artistData) {
-      return c.html(
-        <ArtistDetailPage artist={null} error="Artist not found" internalToken={internalToken} currentUser={currentUser} />
-      );
-    }
-
     const artist: ArtistData = {
       id: artistData.id,
       name: artistData.name,
@@ -299,6 +294,14 @@ export async function handleArtistDetail(c: Context) {
 
     return c.html(<ArtistDetailPage artist={artist} internalToken={internalToken} currentUser={currentUser} />);
   } catch (error) {
+    // A well-formed ID Spotify doesn't know; 404 so crawlers don't index a soft 404.
+    if (error instanceof SpotifyNotFoundError) {
+      return c.html(
+        <ArtistDetailPage artist={null} error="Artist not found" internalToken={internalToken} currentUser={currentUser} />,
+        404
+      );
+    }
+
     console.error('Artist detail error:', error);
 
     // Check for rate limiting (429)

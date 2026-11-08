@@ -3,6 +3,7 @@
 
 import type { Context } from 'hono';
 import { isSpotifyId } from '@listentomore/shared';
+import { SpotifyNotFoundError } from '@listentomore/spotify';
 import type { InternalAppContext } from '../../types';
 
 /** Either the resolved value or the HTTP response to return instead. */
@@ -36,8 +37,7 @@ function readSpotifyId(c: Context<InternalAppContext>): LookupResult<string> {
  * Turns a Spotify "not found" failure into a 404 and anything else into a 502.
  */
 function lookupFailure(c: Context<InternalAppContext>, kind: 'album' | 'artist', error: unknown): Response {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/not found/i.test(message)) {
+  if (error instanceof SpotifyNotFoundError) {
     return c.json({ error: `Spotify ${kind} not found` }, 404);
   }
   console.error(`Internal ${kind} lookup error:`, error);

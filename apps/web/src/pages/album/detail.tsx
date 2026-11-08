@@ -4,9 +4,10 @@
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { isSpotifyId } from '@listentomore/shared';
+import { SpotifyNotFoundError } from '@listentomore/spotify';
+import type { SpotifyService } from '@listentomore/spotify';
 import { Layout } from '../../components/layout';
 import { NotFoundPage, RateLimitedPage, SignInGate } from '../../components/ui';
-import type { SpotifyService } from '@listentomore/spotify';
 import { enrichLinksScript } from '../../utils/client-scripts';
 
 interface AlbumData {
@@ -219,10 +220,6 @@ export async function handleAlbumDetail(c: Context) {
     // Fetch album data from Spotify (fast)
     const albumData = await spotify.getAlbum(spotifyId);
 
-    if (!albumData) {
-      return c.html(<AlbumDetailPage album={null} error="Album not found" internalToken={internalToken} currentUser={currentUser} />);
-    }
-
     const album: AlbumData = {
       id: albumData.id,
       name: albumData.name,
@@ -236,6 +233,14 @@ export async function handleAlbumDetail(c: Context) {
 
     return c.html(<AlbumDetailPage album={album} internalToken={internalToken} currentUser={currentUser} />);
   } catch (error) {
+    // A well-formed ID Spotify doesn't know; 404 so crawlers don't index a soft 404.
+    if (error instanceof SpotifyNotFoundError) {
+      return c.html(
+        <AlbumDetailPage album={null} error="Album not found" internalToken={internalToken} currentUser={currentUser} />,
+        404
+      );
+    }
+
     console.error('Album detail error:', error);
 
     // Check for rate limiting (429)
