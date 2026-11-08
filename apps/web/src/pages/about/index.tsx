@@ -156,7 +156,7 @@ export function AboutPage({ currentUser }: AboutPageProps) {
             Your Last.fm username and a link to your Last.fm profile picture, plus the display name
             and bio you can edit on your account page.
           </li>
-          <li>The session key Last.fm hands back when you sign in. Nothing on the site uses it today.</li>
+          <li>The session key Last.fm hands back when you sign in.</li>
           <li>The IP address and browser details (user agent) of each sign-in.</li>
           <li>
             Your session token, but only as a one-way hash. The token itself sits in a cookie that

@@ -39,9 +39,9 @@ describe('PrivacyPage', () => {
     expect(html).toContain('cf_clearance');
   });
 
-  it('lists the artist play count among what a private profile does not hide', () => {
-    expect(text).toContain('A few things stay visible');
-    expect(text).toContain('play count Last.fm reports for any username');
+  it('says artist pages show only your own play count, when signed in', () => {
+    expect(text).toContain('When you\'re signed in, artist pages show your own Last.fm play count');
+    expect(text).not.toContain('any username');
   });
 
   it('explains deletion and links to the account page', () => {

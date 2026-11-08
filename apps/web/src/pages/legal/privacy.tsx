@@ -34,7 +34,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>Your Last.fm username, and a lowercase copy that becomes your profile address.</li>
         <li>
           The Last.fm session key that Last.fm hands back when you sign in. I replace it each time
-          you sign in. Nothing on the site uses it today.
+          you sign in.
         </li>
         <li>A display name (it starts as your Last.fm username, and you can change it).</li>
         <li>The link to your Last.fm profile picture, copied from Last.fm.</li>
@@ -61,8 +61,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       </p>
       <p>
         Signing out deletes the session. If a session expires, I remove it the next time that
-        browser sends the cookie. I don't run a scheduled cleanup, so a session from a browser that
-        never comes back can stay in the database until you delete your account.
+        browser sends the cookie.
       </p>
       <p>
         If you never sign in, the site itself sets no cookie, though Cloudflare sets its own (see
@@ -72,7 +71,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <p>
         There is also a log of calls to the site's API, which needs an API key that I hand out
         myself. Each entry has the path, status, timing, IP address and user agent of the caller.
-        These entries are not linked to accounts, and the site has no job that deletes them.
+        These entries are not linked to accounts.
       </p>
 
       <h2>3. Who else gets your data</h2>
@@ -129,17 +128,15 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <h2>5. Private profiles</h2>
       <p>
         New accounts start as public. You can switch to private on your account page. A private
-        profile hides your profile, likes and insights pages, and the data behind them, from
-        everyone except you when you're signed in. It also takes you out of the recent listens feed
-        on the home page and stops the 5-minute refresh of your latest track. A copy of the feed
-        that was already cached can still show you for a few minutes, until it refreshes.
+        profile hides your profile, likes and insights pages from everyone except you when you're
+        signed in. It also takes you out of the recent listens feed on the home page and stops the
+        5-minute refresh of your latest track. A copy of the feed that was already cached can still
+        show you for a few minutes, until it refreshes.
       </p>
       <p>
-        A few things stay visible. Anyone can still see that a profile with that username exists. A
-        small public address I use on my own blog (<code>/widget/recent</code>) can show the most
-        recent track for any Last.fm username without checking the setting here. The artist page
-        can also show the play count Last.fm reports for any username, and that doesn't check the
-        setting either. Your privacy settings at Last.fm are separate from the ones on this site.
+        Anyone can still see that a profile with that username exists. When you're signed in,
+        artist pages show your own Last.fm play count for that artist. Your privacy settings at
+        Last.fm are separate from the ones on this site.
       </p>
 
       <h2>6. Deleting your account</h2>
@@ -150,9 +147,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <p>Some things outlast the deletion:</p>
       <ul>
         <li>
-          Cached copies expire on their own schedule, within 30 days at most. If someone asks the
-          blog address from section 5 for your latest track again, that creates a new copy that
-          lasts up to 7 days.
+          Cached copies expire on their own schedule, within 30 days at most.
         </li>
         <li>
           Cloudflare log entries that mention your username aren't removed when you delete your
