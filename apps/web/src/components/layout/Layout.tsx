@@ -14,7 +14,10 @@ interface LayoutProps {
   title?: string;
   description?: string;
   image?: string;
+  /** Absolute canonical URL (no query string). Also used for og:url. */
   url?: string;
+  /** Keep this page out of search indexes while still following its links. */
+  noindex?: boolean;
   internalToken?: string;
   currentUser?: User | null;
 }
@@ -22,7 +25,7 @@ interface LayoutProps {
 // Default fallback image for social sharing
 const DEFAULT_OG_IMAGE = 'https://file.elezea.com/listentomore-og.png';
 
-export function Layout({ children, title, description, image, url, internalToken, currentUser }: LayoutProps) {
+export function Layout({ children, title, description, image, url, noindex, internalToken, currentUser }: LayoutProps) {
   const pageTitle = title ? `${title} | ${SITE_CONFIG.name}` : SITE_CONFIG.name;
   const pageDescription = description || SITE_CONFIG.description;
   const ogImage = image || DEFAULT_OG_IMAGE;
@@ -34,6 +37,8 @@ export function Layout({ children, title, description, image, url, internalToken
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{pageTitle}</title>
         <meta name="description" content={pageDescription} />
+        {url && <link rel="canonical" href={url} />}
+        {noindex && <meta name="robots" content="noindex, follow" />}
 
         {/* Open Graph */}
         <meta property="og:title" content={pageTitle} />

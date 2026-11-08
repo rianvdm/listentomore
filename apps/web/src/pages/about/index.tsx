@@ -4,6 +4,7 @@
 import type { Child } from 'hono/jsx';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SITE_CONFIG } from '@listentomore/config';
 
 export interface AboutFeature {
   slug: 'album' | 'genre' | 'listening' | 'profile' | 'discord' | 'mcp';
@@ -111,6 +112,7 @@ export function AboutPage({ currentUser }: AboutPageProps) {
     <Layout
       title="About"
       description="What you can do on Listen To More, what signing in with Last.fm stores, and how the site is built on Cloudflare Workers."
+      url={`${SITE_CONFIG.url}/about`}
       currentUser={currentUser}
     >
       <h1>About Listen To More</h1>

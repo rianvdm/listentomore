@@ -2,6 +2,7 @@
 
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SITE_CONFIG } from '@listentomore/config';
 
 interface ToolsPageProps {
   currentUser?: User | null;
@@ -9,7 +10,7 @@ interface ToolsPageProps {
 
 export function ToolsPage({ currentUser }: ToolsPageProps) {
   return (
-    <Layout title="Tools" description="Tools and integrations for Listen To More" currentUser={currentUser}>
+    <Layout title="Tools" description="Tools and integrations for Listen To More" url={`${SITE_CONFIG.url}/tools`} currentUser={currentUser}>
       <h1>Tools & Integrations</h1>
 
       {/* Discord Bot */}

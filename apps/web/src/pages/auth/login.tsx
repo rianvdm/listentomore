@@ -19,6 +19,7 @@ function LoginPage({ error, next, currentUser }: LoginPageProps) {
     <Layout
       title="Sign In"
       description="Sign in to ListenToMore with your Last.fm account"
+      noindex
       currentUser={currentUser}
     >
       <div class="text-center" style={{ maxWidth: '400px', margin: '4rem auto', padding: '0 1rem' }}>

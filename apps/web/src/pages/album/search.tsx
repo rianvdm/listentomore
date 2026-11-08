@@ -14,7 +14,7 @@ interface AlbumSearchProps {
 
 export function AlbumSearchPage({ query, internalToken, currentUser }: AlbumSearchProps) {
   return (
-    <Layout title="Search Albums" description="Search for albums on Spotify" internalToken={internalToken} currentUser={currentUser}>
+    <Layout title="Search Albums" description="Search for albums on Spotify" noindex internalToken={internalToken} currentUser={currentUser}>
       <h1>💿 Search Albums</h1>
 
       {/* Search Form */}

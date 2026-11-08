@@ -39,6 +39,7 @@ import { handleUserStats } from './pages/user/stats';
 import { handleUserLikes } from './pages/user/likes';
 import { handleUserInsights } from './pages/user/insights';
 import { handleStatsLookup } from './pages/stats/entry';
+import { ROBOTS_TXT } from './robots';
 import { handleLogin } from './pages/auth/login';
 import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
 import { handleAccount, handleAccountProfile, handleAccountPrivacy, handleAccountDelete } from './pages/account';
@@ -217,43 +218,9 @@ app.get('/health', (c) => {
   });
 });
 
-// robots.txt - throttle crawlers to prevent Spotify API rate limits
+// robots.txt - content and rationale live in robots.ts
 app.get('/robots.txt', (c) => {
-  const robotsTxt = `# ListenToMore robots.txt
-User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /api/internal/
-
-# Crawl delay to prevent overwhelming external APIs
-Crawl-delay: 10
-
-# Specific bot configurations
-User-agent: Googlebot
-Crawl-delay: 5
-
-User-agent: Bingbot
-Crawl-delay: 5
-
-User-agent: GPTBot
-Disallow: /
-
-User-agent: ChatGPT-User
-Disallow: /
-
-User-agent: CCBot
-Disallow: /
-
-User-agent: anthropic-ai
-Disallow: /
-
-User-agent: Claude-Web
-Disallow: /
-
-# Sitemap
-Sitemap: https://listentomore.com/sitemap.xml
-`;
-  return c.text(robotsTxt, 200, {
+  return c.text(ROBOTS_TXT, 200, {
     'Content-Type': 'text/plain',
     'Cache-Control': 'public, max-age=86400',
   });

@@ -14,7 +14,7 @@ interface ArtistSearchProps {
 
 export function ArtistSearchPage({ query, internalToken, currentUser }: ArtistSearchProps) {
   return (
-    <Layout title="Search Artists" description="Search for artists on Spotify" internalToken={internalToken} currentUser={currentUser}>
+    <Layout title="Search Artists" description="Search for artists on Spotify" noindex internalToken={internalToken} currentUser={currentUser}>
       <h1>🎤 Search Artists</h1>
 
       {/* Search Form */}

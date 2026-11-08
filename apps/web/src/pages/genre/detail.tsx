@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { SignInGate } from '../../components/ui';
-import { slugToDisplayName } from '../../data/genres';
+import { isCuratedGenre, slugToDisplayName } from '../../data/genres';
 import { enrichLinksScript } from '../../utils/client-scripts';
 
 interface GenreDetailProps {
@@ -21,6 +21,7 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
       title={displayName}
       description={`Learn about the history, musical elements, and seminal albums of ${displayName} music`}
       url={`https://listentomore.com/genre/${slug}`}
+      noindex={!isCuratedGenre(slug)}
       internalToken={internalToken}
       currentUser={currentUser}
     >

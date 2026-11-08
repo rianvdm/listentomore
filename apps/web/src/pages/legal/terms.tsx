@@ -2,6 +2,7 @@
 
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SITE_CONFIG } from '@listentomore/config';
 
 interface TermsPageProps {
   currentUser?: User | null;
@@ -9,7 +10,7 @@ interface TermsPageProps {
 
 export function TermsPage({ currentUser }: TermsPageProps) {
   return (
-    <Layout title="Terms of Service" description="Terms of Service for Listen To More" currentUser={currentUser}>
+    <Layout title="Terms of Service" description="Terms of Service for Listen To More" url={`${SITE_CONFIG.url}/terms`} currentUser={currentUser}>
       <h1>Terms of Service</h1>
       <p>
         <strong>Effective Date:</strong> September 16, 2024

@@ -2,6 +2,7 @@
 
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SITE_CONFIG } from '@listentomore/config';
 
 interface DiscordPageProps {
   currentUser?: User | null;
@@ -9,7 +10,7 @@ interface DiscordPageProps {
 
 export function DiscordPage({ currentUser }: DiscordPageProps) {
   return (
-    <Layout title="Discord Bot" description="Add the Listen To More Discord bot to your server" currentUser={currentUser}>
+    <Layout title="Discord Bot" description="Add the Listen To More Discord bot to your server" url={`${SITE_CONFIG.url}/discord`} currentUser={currentUser}>
       <h1>Discord Bot</h1>
 
       <p>
