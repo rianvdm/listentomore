@@ -36,6 +36,8 @@ export type Bindings = {
   ENVIRONMENT?: string;
   ADMIN_SECRET?: string;
   DISCORD_WEBHOOK_URL?: string;
+  // Feature flag: 'true' shows already-cached AI summaries to logged-out visitors
+  PUBLIC_CACHED_SUMMARIES?: string;
 };
 
 // Context variables (set by middleware)

@@ -1,5 +1,6 @@
 // UI component exports
 
+export { AiSummaryLabel } from './AiSummaryLabel';
 export { Button } from './Button';
 export { ErrorPage, RateLimitedPage } from './ErrorPage';
 export { FilterDropdown } from './FilterDropdown';
