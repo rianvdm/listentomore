@@ -1,8 +1,8 @@
 // ABOUTME: Tests for server-side rendering of cached AI summaries for logged-out visitors.
-// ABOUTME: Covers Markdown output, cached link HTML, sanitising, refusal cases and the strict feature flag.
+// ABOUTME: Covers Markdown output, cached link HTML, sanitising, refusal cases, failed reads and the strict feature flag.
 
-import { describe, it, expect } from 'vitest';
-import { publicSummariesEnabled, renderPublicSummary } from '../../utils/public-summaries';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { loadPublicSummary, publicSummariesEnabled, renderPublicSummary } from '../../utils/public-summaries';
 
 describe('renderPublicSummary', () => {
   it('renders Markdown to HTML', () => {
@@ -133,5 +133,33 @@ describe('publicSummariesEnabled', () => {
     expect(publicSummariesEnabled({ PUBLIC_CACHED_SUMMARIES: 'TRUE' })).toBe(false);
     expect(publicSummariesEnabled({})).toBe(false);
     expect(publicSummariesEnabled(undefined)).toBe(false);
+  });
+});
+
+describe('loadPublicSummary', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders the cached Markdown it reads', async () => {
+    expect(await loadPublicSummary(async () => 'Some **bold** text', 'album')).toContain('<strong>bold</strong>');
+  });
+
+  it('returns null on a cache miss or a fallback reply', async () => {
+    expect(await loadPublicSummary(async () => null, 'album')).toBeNull();
+    expect(await loadPublicSummary(async () => 'Not enough information available.', 'album')).toBeNull();
+  });
+
+  it('logs and returns null when the read rejects or throws', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await loadPublicSummary(() => Promise.reject(new Error('KV down')), 'album')).toBeNull();
+    expect(
+      await loadPublicSummary(() => {
+        throw new Error('not a promise');
+      }, 'album')
+    ).toBeNull();
+    expect(consoleError).toHaveBeenCalledTimes(2);
+    expect(consoleError).toHaveBeenCalledWith('Public album summary read failed:', 'KV down', expect.any(Error));
   });
 });

@@ -98,3 +98,21 @@ export function renderPublicSummary(markdown: string | null): string | null {
   if (trimmed === '' || FALLBACK_RESPONSE_PATTERN.test(trimmed)) return null;
   return publicMarked.parse(markdown, { async: false });
 }
+
+/**
+ * Reads one cached summary and renders it with renderPublicSummary. A failed read is logged and
+ * treated as a miss, so a KV outage leaves the page as it renders with the flag off.
+ * Takes a function rather than a promise so a synchronous throw is caught too.
+ */
+export async function loadPublicSummary(
+  read: () => Promise<string | null>,
+  context: string
+): Promise<string | null> {
+  try {
+    return renderPublicSummary(await read());
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Public ${context} summary read failed:`, errorMessage, error);
+    return null;
+  }
+}
