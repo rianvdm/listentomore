@@ -1,14 +1,23 @@
-// Artist detail page component
-// Loads basic data immediately, then progressively loads AI summary and Last.fm data
+// ABOUTME: Artist detail page: Spotify data renders immediately, Last.fm data and the AI summary load progressively.
+// ABOUTME: With PUBLIC_CACHED_SUMMARIES on, a cached AI summary is server-rendered for every visitor.
 
 import type { Context } from 'hono';
+import type { AIService } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import { isSpotifyId } from '@listentomore/shared';
 import { SpotifyNotFoundError } from '@listentomore/spotify';
 import type { SpotifyService } from '@listentomore/spotify';
 import { Layout } from '../../components/layout';
-import { NotFoundPage, RateLimitedPage, SignInGate } from '../../components/ui';
+import {
+  AI_SUMMARY_LABEL_HTML,
+  AiSummaryLabel,
+  NotFoundPage,
+  RateLimitedPage,
+  SignInCTA,
+  SignInGate,
+} from '../../components/ui';
 import { enrichLinksScript } from '../../utils/client-scripts';
+import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
 
 interface ArtistData {
   id: string;
@@ -23,6 +32,27 @@ interface ArtistDetailProps {
   error?: string;
   internalToken?: string;
   currentUser?: User | null;
+  // Sanitised HTML from the cached AI summary; null when the flag is off, the cache misses, or the reply is a fallback.
+  summaryHtml?: string | null;
+}
+
+// Server-rendered cached summary when present, otherwise the placeholder the client script replaces.
+function ArtistSummarySection({ html }: { html?: string | null }) {
+  return (
+    <div id="ai-summary" class="ai-summary">
+      {html ? (
+        <>
+          <p style={{ marginTop: '1.5em', marginBottom: '0.2em' }}>
+            <strong>Overview:</strong>
+          </p>
+          <AiSummaryLabel />
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </>
+      ) : (
+        <p class="text-muted">Loading AI summary...</p>
+      )}
+    </div>
+  );
 }
 
 export function ArtistDetailPage({
@@ -30,6 +60,7 @@ export function ArtistDetailPage({
   error,
   internalToken,
   currentUser,
+  summaryHtml,
 }: ArtistDetailProps) {
   if (error || !artist) {
     return (
@@ -48,6 +79,8 @@ export function ArtistDetailPage({
   }
 
   const artistImage = artist.image || 'https://file.elezea.com/noun-no-image.png';
+  const currentPath = `/artist/${artist.id}`;
+  const summaryRendered = Boolean(summaryHtml);
 
   return (
     <Layout
@@ -98,18 +131,25 @@ export function ArtistDetailPage({
           {/* Similar Artists - loaded via JS */}
           <div id="similar-artists"></div>
 
-          {/* AI Overview - gated behind login */}
-          <SignInGate currentUser={currentUser ?? null} currentPath={`/artist/${artist.id}`}>
-            <div id="ai-summary" class="ai-summary">
-              <p class="text-muted">Loading AI summary...</p>
-            </div>
-          </SignInGate>
+          {/* AI Overview: cached content is public; generating it needs a login */}
+          {!currentUser && summaryRendered ? (
+            <>
+              <ArtistSummarySection html={summaryHtml} />
+              <SignInCTA currentPath={currentPath} variant="personal" />
+            </>
+          ) : (
+            <SignInGate currentUser={currentUser ?? null} currentPath={currentPath}>
+              <ArtistSummarySection html={summaryHtml} />
+            </SignInGate>
+          )}
         </section>
       </main>
 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
+
+        window.__AI_SUMMARY_RENDERED__ = ${summaryRendered};
 
         (function() {
           var artistName = ${JSON.stringify(artist.name)};
@@ -237,8 +277,14 @@ export function ArtistDetailPage({
               document.getElementById('genre-section').innerHTML = '<strong>Genre:</strong> Unknown';
             });
 
-          // Fetch AI summary - only for authenticated users
-          if (window.__IS_AUTHENTICATED__) {
+          // Server-rendered summary still needs its search links enriched
+          if (window.__AI_SUMMARY_RENDERED__) {
+            enrichLinks('ai-summary');
+          }
+
+          // Fetch AI summary - only for authenticated users, and only when the server didn't render it
+          if (window.__IS_AUTHENTICATED__ && !window.__AI_SUMMARY_RENDERED__) {
+            var aiSummaryLabel = ${JSON.stringify(AI_SUMMARY_LABEL_HTML)};
             internalFetch('/api/internal/artist-summary?spotifyId=' + encodeURIComponent(artistId), { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -249,6 +295,7 @@ export function ArtistDetailPage({
                 var summary = data.data;
                 var text = summary.text || summary.summary || '';
                 var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
+                html += aiSummaryLabel;
                 html += '<div>' + marked.parse(text) + '</div>';
 
                 document.getElementById('ai-summary').innerHTML = html;
@@ -267,7 +314,8 @@ export function ArtistDetailPage({
   );
 }
 
-// Route handler - fetches Spotify artist data, albums loaded via JS from Last.fm
+// Route handler: Spotify data, plus the cached AI summary when public summaries are on (never a model call).
+// Albums and similar artists load via JS from Last.fm.
 export async function handleArtistDetail(c: Context) {
   const spotifyId = c.req.param('id');
 
@@ -290,7 +338,21 @@ export async function handleArtistDetail(c: Context) {
       spotifyUrl: artistData.url,
     };
 
-    return c.html(<ArtistDetailPage artist={artist} internalToken={internalToken} currentUser={currentUser} />);
+    // Same name resolveSpotifyArtist passes to the generator, so the read hits the key it wrote.
+    let summaryHtml: string | null = null;
+    if (publicSummariesEnabled(c.env)) {
+      const ai = c.get('ai') as AIService;
+      summaryHtml = await loadPublicSummary(() => ai.getCachedArtistSummary(artistData.name), 'artist');
+    }
+
+    return c.html(
+      <ArtistDetailPage
+        artist={artist}
+        internalToken={internalToken}
+        currentUser={currentUser}
+        summaryHtml={summaryHtml}
+      />
+    );
   } catch (error) {
     // A well-formed ID Spotify doesn't know; 404 so crawlers don't index a soft 404.
     if (error instanceof SpotifyNotFoundError) {
