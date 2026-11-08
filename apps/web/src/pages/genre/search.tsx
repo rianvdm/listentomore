@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SITE_CONFIG } from '@listentomore/config';
 import { POPULAR_GENRES, slugToDisplayName, getRandomGenre, displayNameToSlug } from '../../data/genres';
 
 interface GenreSearchProps {
@@ -14,7 +15,7 @@ export function GenreSearchPage({ currentUser }: GenreSearchProps) {
   const randomGenre = getRandomGenre();
 
   return (
-    <Layout title="Browse Genres" description="Explore music genres and learn about their history" currentUser={currentUser}>
+    <Layout title="Browse Genres" description="Explore music genres and learn about their history" url={`${SITE_CONFIG.url}/genre`} currentUser={currentUser}>
       <header>
         <h1>Browse Genres</h1>
       </header>

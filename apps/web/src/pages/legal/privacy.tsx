@@ -3,6 +3,7 @@
 
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
+import { SITE_CONFIG } from '@listentomore/config';
 
 export const PRIVACY_EFFECTIVE_DATE = 'November 8, 2026';
 
@@ -12,7 +13,7 @@ interface PrivacyPageProps {
 
 export function PrivacyPage({ currentUser }: PrivacyPageProps) {
   return (
-    <Layout title="Privacy Policy" description="Privacy policy for Listen To More" currentUser={currentUser}>
+    <Layout title="Privacy Policy" description="Privacy policy for Listen To More" url={`${SITE_CONFIG.url}/privacy`} currentUser={currentUser}>
       <h1>Privacy Policy</h1>
       <p>
         <strong>Effective Date:</strong> {PRIVACY_EFFECTIVE_DATE}

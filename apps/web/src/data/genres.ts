@@ -122,6 +122,12 @@ export const POPULAR_GENRES = [
 
 export type GenreSlug = (typeof GENRES)[number];
 
+// True for slugs in the curated GENRES list. Album pages link to whatever genre
+// names Spotify returns, so other slugs still render but are kept out of indexes.
+export function isCuratedGenre(slug: string): slug is GenreSlug {
+  return (GENRES as readonly string[]).includes(slug);
+}
+
 // Convert slug to display name (e.g., "indie-rock" -> "Indie Rock")
 export function slugToDisplayName(slug: string): string {
   return slug
