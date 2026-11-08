@@ -1,21 +1,47 @@
-// Genre detail page component
-// Shows genre info with AI-generated summary, progressively loaded
+// ABOUTME: Genre detail page: the AI-written genre summary loads progressively for signed-in users.
+// ABOUTME: With PUBLIC_CACHED_SUMMARIES on, a cached summary is server-rendered for every visitor.
 
 import type { Context } from 'hono';
+import type { AIService } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
-import { SignInGate } from '../../components/ui';
+import { AI_SUMMARY_LABEL_HTML, AiSummaryLabel, SignInCTA, SignInGate } from '../../components/ui';
 import { isCuratedGenre, slugToDisplayName } from '../../data/genres';
 import { enrichLinksScript } from '../../utils/client-scripts';
+import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
 
 interface GenreDetailProps {
   displayName: string;
   slug: string;
   internalToken?: string;
   currentUser?: User | null;
+  // Sanitised HTML from the cached AI summary; null when the flag is off, the cache misses, or the reply is a fallback.
+  summaryHtml?: string | null;
 }
 
-export function GenreDetailPage({ displayName, slug, internalToken, currentUser }: GenreDetailProps) {
+// Server-rendered cached summary when present, otherwise the placeholder the client script replaces.
+function GenreSummarySection({ html }: { html?: string | null }) {
+  return (
+    <section class="ai-summary" id="genre-summary">
+      {html ? (
+        <>
+          <AiSummaryLabel />
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </>
+      ) : (
+        <div class="loading-container">
+          <span class="spinner">↻</span>
+          <span class="loading-text">Generating summary...</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function GenreDetailPage({ displayName, slug, internalToken, currentUser, summaryHtml }: GenreDetailProps) {
+  const currentPath = `/genre/${slug}`;
+  const summaryRendered = Boolean(summaryHtml);
+
   return (
     <Layout
       title={displayName}
@@ -30,15 +56,17 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
       </header>
 
       <main>
-        {/* AI Summary - loaded via JS (gated) */}
-        <SignInGate currentUser={currentUser ?? null} currentPath={`/genre/${slug}`}>
-          <section class="ai-summary" id="genre-summary">
-            <div class="loading-container">
-              <span class="spinner">↻</span>
-              <span class="loading-text">Generating summary...</span>
-            </div>
-          </section>
-        </SignInGate>
+        {/* AI Summary: cached content is public; generating it needs a login */}
+        {!currentUser && summaryRendered ? (
+          <>
+            <GenreSummarySection html={summaryHtml} />
+            <SignInCTA currentPath={currentPath} variant="personal" />
+          </>
+        ) : (
+          <SignInGate currentUser={currentUser ?? null} currentPath={currentPath}>
+            <GenreSummarySection html={summaryHtml} />
+          </SignInGate>
+        )}
 
         {/* Back Link */}
         <section class="text-center" style={{ marginTop: '2em' }}>
@@ -52,10 +80,19 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
 
+        window.__AI_SUMMARY_RENDERED__ = ${summaryRendered};
+
         (function() {
           if (!window.__IS_AUTHENTICATED__) return;
 
+          // Server-rendered summary only needs its search links enriched
+          if (window.__AI_SUMMARY_RENDERED__) {
+            enrichLinks('genre-summary');
+            return;
+          }
+
           var genreName = ${JSON.stringify(displayName)};
+          var aiSummaryLabel = ${JSON.stringify(AI_SUMMARY_LABEL_HTML)};
 
           // Fetch genre summary
           internalFetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName), { cache: 'no-store' })
@@ -68,7 +105,7 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
               var summary = data.data;
               var content = summary.content || summary.text || '';
 
-              var html = marked.parse(content);
+              var html = aiSummaryLabel + marked.parse(content);
 
               document.getElementById('genre-summary').innerHTML = html;
 
@@ -86,14 +123,27 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser 
   );
 }
 
-// Route handler - fast initial render, AI summary loaded via JS
+// Route handler: the cached AI summary when public summaries are on (never a model call); otherwise loaded via JS
 export async function handleGenreDetail(c: Context) {
   const slug = c.req.param('slug');
   const displayName = slugToDisplayName(slug);
   const internalToken = c.get('internalToken') as string;
-  const currentUser = c.get('currentUser');
+  const currentUser = c.get('currentUser') as User | null;
+
+  // The client sends the display name to the generator, so that is the key it wrote.
+  let summaryHtml: string | null = null;
+  if (publicSummariesEnabled(c.env)) {
+    const ai = c.get('ai') as AIService;
+    summaryHtml = await loadPublicSummary(() => ai.getCachedGenreSummary(displayName), 'genre');
+  }
 
   return c.html(
-    <GenreDetailPage displayName={displayName} slug={slug} internalToken={internalToken} currentUser={currentUser} />
+    <GenreDetailPage
+      displayName={displayName}
+      slug={slug}
+      internalToken={internalToken}
+      currentUser={currentUser}
+      summaryHtml={summaryHtml}
+    />
   );
 }
