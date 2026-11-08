@@ -7,22 +7,23 @@ export interface CacheOptions {
   ttlSeconds?: number;
 }
 
+/**
+ * Build the KV key for an AI task. Params are lowercased and trimmed, so
+ * "OK Computer " and "ok computer" share one entry.
+ */
+export function aiCacheKey(task: AITask, ...params: string[]): string {
+  const normalizedParams = params.map((p) => p.toLowerCase().trim());
+  return `ai:${task}:${normalizedParams.join(':')}`;
+}
+
 export class AICache {
   constructor(private kv: KVNamespace) {}
-
-  /**
-   * Generate a cache key for an AI task
-   */
-  private makeKey(task: AITask, ...params: string[]): string {
-    const normalizedParams = params.map((p) => p.toLowerCase().trim());
-    return `ai:${task}:${normalizedParams.join(':')}`;
-  }
 
   /**
    * Get a cached response
    */
   async get<T>(task: AITask, ...params: string[]): Promise<T | null> {
-    const key = this.makeKey(task, ...params);
+    const key = aiCacheKey(task, ...params);
     const cached = await this.kv.get(key, 'json');
     if (cached) {
       console.log(`[AICache] Hit for ${key}`);
@@ -39,7 +40,7 @@ export class AICache {
     value: T,
     options?: CacheOptions
   ): Promise<void> {
-    const key = this.makeKey(task, ...params);
+    const key = aiCacheKey(task, ...params);
     const ttl = options?.ttlSeconds ?? getCacheTtlSeconds(task);
 
     // Don't cache if TTL is 0 (e.g., randomFact)
@@ -56,7 +57,7 @@ export class AICache {
    * Delete a cached response
    */
   async delete(task: AITask, ...params: string[]): Promise<void> {
-    const key = this.makeKey(task, ...params);
+    const key = aiCacheKey(task, ...params);
     await this.kv.delete(key);
     console.log(`[AICache] Deleted ${key}`);
   }

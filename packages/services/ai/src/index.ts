@@ -7,6 +7,10 @@ import { AICache } from './cache';
 import { AIRateLimiter } from './rate-limit';
 import { withAgentTracing } from './tracing';
 import type { ChatClient } from './types';
+import type { AlbumDetailResult } from './prompts/album-detail';
+import type { AlbumRecommendationsResult } from './prompts/album-recommendations';
+import type { ArtistSummaryResult } from './prompts/artist-summary';
+import type { GenreSummaryResult } from './prompts/genre-summary';
 
 // Re-export common types from types.ts
 export type {
@@ -30,7 +34,7 @@ export type {
   ResponsesResult,
 } from './openai';
 
-export { AICache } from './cache';
+export { AICache, aiCacheKey } from './cache';
 export type { CacheOptions } from './cache';
 
 export { isCacheableResponse } from './cacheable';
@@ -116,6 +120,54 @@ export class AIService {
     const { provider } = getTaskConfig(task);
     const client = provider === 'anthropic' ? this.anthropic : this.openai;
     return this.tracing ? withAgentTracing(client, task, this.tracing) : client;
+  }
+
+  // Read-only cache lookups: never call a model, return null on a miss or KV error
+
+  /**
+   * Cached album detail Markdown, or null
+   */
+  async getCachedAlbumDetail(artist: string, album: string): Promise<string | null> {
+    const cached = await this.readCache<AlbumDetailResult>('albumDetail', artist, album);
+    return cached?.content ?? null;
+  }
+
+  /**
+   * Cached album recommendations Markdown, or null
+   */
+  async getCachedAlbumRecommendations(artist: string, album: string): Promise<string | null> {
+    const cached = await this.readCache<AlbumRecommendationsResult>(
+      'albumRecommendations',
+      artist,
+      album
+    );
+    return cached?.content ?? null;
+  }
+
+  /**
+   * Cached artist summary Markdown, or null
+   */
+  async getCachedArtistSummary(name: string): Promise<string | null> {
+    const cached = await this.readCache<ArtistSummaryResult>('artistSummary', name);
+    return cached?.summary ?? null;
+  }
+
+  /**
+   * Cached genre summary Markdown, or null
+   */
+  async getCachedGenreSummary(name: string): Promise<string | null> {
+    const cached = await this.readCache<GenreSummaryResult>('genreSummary', name);
+    return cached?.content ?? null;
+  }
+
+  private async readCache<T>(task: AITask, ...params: string[]): Promise<T | null> {
+    try {
+      return await this.cache.get<T>(task, ...params);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[AIService] Cached ${task} read failed:`, errorMessage, error);
+      return null;
+    }
   }
 
   // Convenience methods that use the appropriate client based on config
