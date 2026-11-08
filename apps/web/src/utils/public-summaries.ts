@@ -73,6 +73,10 @@ const publicMarked = new Marked({
     link({ href, tokens }: Tokens.Link): string | false {
       return isSafeLinkUrl(href) ? false : this.parser.parseInline(tokens);
     },
+    // Summaries never legitimately contain images, and an external one would load for every visitor.
+    image({ text }: Tokens.Image): string {
+      return escapeHtml(text);
+    },
   },
 });
 
@@ -83,8 +87,8 @@ export function publicSummariesEnabled(env: { PUBLIC_CACHED_SUMMARIES?: string }
 
 /**
  * Renders a cached Markdown summary to HTML for anonymous visitors.
- * Raw HTML is escaped except for site-relative placeholder album links, and Markdown links
- * keep their href only for http(s), mailto and site-relative URLs.
+ * Raw HTML is escaped except for site-relative placeholder album links, Markdown links
+ * keep their href only for http(s), mailto and site-relative URLs, and images render as alt text.
  * Returns null when there is nothing worth publishing. Cached values come from KV JSON without a
  * runtime type check, so non-string input is refused too.
  */

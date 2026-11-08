@@ -81,6 +81,19 @@ describe('renderPublicSummary', () => {
       expect(html).toContain('x');
     });
 
+    it('renders an image as its alt text only', () => {
+      const html = renderPublicSummary('![logo](https://example.com/x.png)');
+      expect(html).not.toContain('<img');
+      expect(html).not.toContain('example.com');
+      expect(html).toContain('logo');
+    });
+
+    it('escapes HTML in image alt text', () => {
+      const html = renderPublicSummary('![<b>x</b>](/x.png)');
+      expect(html).not.toContain('<b>');
+      expect(html).not.toContain('<img');
+    });
+
     it('keeps mailto links', () => {
       expect(renderPublicSummary('[mail](mailto:a@example.com)')).toContain('<a href="mailto:a@example.com">mail</a>');
     });
