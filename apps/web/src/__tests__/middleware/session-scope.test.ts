@@ -226,7 +226,8 @@ describe('session loading scope', () => {
       expect(res.status).toBe(200);
       expect(getSessionByToken).toHaveBeenCalledTimes(1);
       expect(getUser).toHaveBeenCalledTimes(1);
-      expect(await res.text()).toContain('/account');
+      // The nav's user menu only renders for a signed-in user; /about itself links to /account.
+      expect(await res.text()).toContain('id="user-menu-toggle"');
     });
 
     it('renders an anonymous page without signed-in state', async () => {
@@ -234,7 +235,7 @@ describe('session loading scope', () => {
 
       expect(res.status).toBe(200);
       expect(getSessionByToken).not.toHaveBeenCalled();
-      expect(await res.text()).not.toContain('/account');
+      expect(await res.text()).not.toContain('id="user-menu-toggle"');
     });
 
     it('still loads the session for public API routes', async () => {
