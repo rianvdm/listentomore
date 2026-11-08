@@ -28,5 +28,5 @@ export const BANNER_CONFIG = {
     url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.6.0',
     text: 'Release notes',
   },
-  expiresAt: '2026-11-11',
+  expiresAt: '2026-11-15',
 } as const;
