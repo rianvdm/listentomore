@@ -38,6 +38,7 @@ export { AICache, aiCacheKey } from './cache';
 export type { CacheOptions } from './cache';
 
 export { isCacheableResponse } from './cacheable';
+export { FALLBACK_RESPONSE_PATTERN } from './fallback';
 
 export { AIRateLimiter } from './rate-limit';
 export type { AIRateLimitState, AIProvider } from './rate-limit';
