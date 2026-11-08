@@ -22,11 +22,11 @@ export const DEFAULT_USER_ID = 'default';
 // Set expiresAt (YYYY-MM-DD) to auto-hide the banner after that date.
 export const BANNER_CONFIG = {
   enabled: true,
-  id: '2026-04-07-v1.5.0',
-  message: 'v1.5.0: AI features now require a free Last.fm sign-in. Core music discovery stays fully public.',
+  id: '2026-11-08-v1.6.0',
+  message: 'v1.6.0: Claude now writes the summaries and insights, and pages load faster.',
   link: {
-    url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.5.0',
+    url: 'https://github.com/rianvdm/listentomore/releases/tag/v1.6.0',
     text: 'Release notes',
   },
-  expiresAt: '2026-04-10',
+  expiresAt: '2026-11-11',
 } as const;
