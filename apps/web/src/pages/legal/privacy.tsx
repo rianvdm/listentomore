@@ -105,8 +105,8 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <p>
         <strong>Cloudflare</strong> hosts the site and sees every request. I have Cloudflare's
         logging and tracing turned on for the site. App messages in those logs can include usernames
-        (for example when someone signs in or deletes an account) and error details. Cloudflare
-        decides how long they are kept.
+        (for example when someone signs in or deletes an account) and error details. Deleting
+        your account doesn't remove log entries that already exist.
       </p>
       <p>I don't sell data and I don't run ads.</p>
 
@@ -128,8 +128,9 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <p>
         New accounts start as public. You can switch to private on your account page. A private
         profile hides your profile, likes and insights pages, and the data behind them, from
-        everyone except you when you're signed in. It also keeps you out of the recent listens feed
-        on the home page and stops the 5-minute refresh of your latest track.
+        everyone except you when you're signed in. It also takes you out of the recent listens feed
+        on the home page and stops the 5-minute refresh of your latest track. A copy of the feed
+        that was already cached can still show you for a few minutes, until it refreshes.
       </p>
       <p>
         Two things stay visible. Anyone can still see that a profile with that username exists. And
@@ -151,7 +152,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
           lasts up to 7 days.
         </li>
         <li>
-          Cloudflare logs that mention your username stay until Cloudflare's retention ends.
+          Cloudflare log entries that mention your username stay, because deleting your account doesn't remove existing logs.
         </li>
         <li>The Discord message I received when your account was created stays in Discord.</li>
         <li>The API log doesn't point to accounts, so deletion doesn't touch it.</li>

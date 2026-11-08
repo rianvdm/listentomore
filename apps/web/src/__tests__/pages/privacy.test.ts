@@ -6,6 +6,8 @@ import { PrivacyPage, PRIVACY_EFFECTIVE_DATE } from '../../pages/legal/privacy';
 
 describe('PrivacyPage', () => {
   const html = PrivacyPage({ currentUser: null }).toString();
+  // Plain text with entities decoded and whitespace collapsed, for phrase checks.
+  const text = html.replace(/&#39;/g, "'").replace(/\s+/g, ' ');
 
   it('drops the claim that no personal information is collected', () => {
     expect(html).not.toContain('do not collect any personally identifiable information');
@@ -28,5 +30,9 @@ describe('PrivacyPage', () => {
 
   it('explains deletion and links to the account page', () => {
     expect(html).toContain('href="/account"');
+    expect(html).toContain('removes your account record and all your sessions');
+    expect(html).toContain('Cached copies expire on their own schedule');
+    expect(text).toContain('deleting your account doesn\'t remove existing logs');
+    expect(text).toContain('The API log doesn\'t point to accounts');
   });
 });
