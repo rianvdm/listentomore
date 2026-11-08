@@ -1,6 +1,6 @@
 # AGENTS.md - ListenToMore
 
-Reference for AI coding agents working in this repository. See CLAUDE.md for full project docs.
+Reference for AI coding agents working in this repository. `README.md` and `docs/` hold the longer project docs.
 
 ## Project Overview
 
@@ -187,3 +187,12 @@ Mount in the directory's `index.ts` via `app.route('/path', myRoutes)`.
 - Check `profile_visibility` before exposing any user profile data
 - Pass `internalToken` to Layout for pages that use internal APIs
 - Do not expose secrets or session tokens to the browser
+
+## Releases
+
+GitHub releases follow Rian's side-project release notes contract: `~/git/product-ai/05-personal/side-projects/release-notes-contract.md`. Read it before drafting. Publishing a release cross-posts it to elezea.com (`.github/workflows/elezea-release-post.yml`), and the endpoint rejects anything off-contract.
+
+- Name: `listentomore vX.Y.Z — <tagline>` (em dash).
+- Body: a 1-3 sentence opening paragraph, then only `## What's new`, `## Fixes`, `## Under the hood` (optional `## Breaking changes` first). No H3s, no issue numbers, written from the user's side.
+- Check every claim against the commits since the last tag, show Rian the final text, and wait for a go before `gh release create`.
+- After publishing, point `BANNER_CONFIG` in `packages/config/src/index.ts` at the new release (new `id`, link, `expiresAt` about a week out) and deploy.
