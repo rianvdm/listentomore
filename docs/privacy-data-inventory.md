@@ -4,6 +4,8 @@ Last verified against the code on 2026-11-08 (branch `about-page-refresh`). Ever
 
 "Unconfirmed" means I could not establish the fact from the repository. Unconfirmed items are kept out of the policy and the About page.
 
+This file records current behavior, including known gaps the policy leaves out until they are fixed: the artist play-count endpoint ([#51](https://github.com/rianvdm/listentomore/issues/51)) and session cleanup, API log retention, the unused session key and `/widget/recent` privacy ([#52](https://github.com/rianvdm/listentomore/issues/52)).
+
 ## 1. User columns actually written
 
 Table `users` (`packages/db/src/schema.ts:3`). Writers: `createUser` (`packages/db/src/index.ts:62`), `updateUser` (`packages/db/src/index.ts:94`), called from `apps/web/src/pages/auth/lastfm.ts` and `apps/web/src/pages/account/index.tsx`.
