@@ -156,8 +156,9 @@ function AccountPage({ user }: AccountPageProps) {
           </h2>
 
           <p class="text-muted" style={{ marginTop: '1rem' }}>
-            Deleting your account will permanently remove all your data from ListenToMore.
-            This action cannot be undone.
+            Deleting your account removes your account and all your sessions from ListenToMore.
+            Some things, like cached copies and logs, outlast it; the{' '}
+            <a href="/privacy">privacy policy</a> lists them. This action cannot be undone.
           </p>
 
           <button

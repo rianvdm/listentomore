@@ -14,14 +14,14 @@ Table `users` (`packages/db/src/schema.ts:3`). Writers: `createUser` (`packages/
 | `username` | Yes, lowercased Last.fm username | `pages/auth/lastfm.ts:108,133` |
 | `lastfm_username` | Yes, as Last.fm returns it | `pages/auth/lastfm.ts:99,134` |
 | `lastfm_session_key` | Yes, on sign-up and refreshed on every sign-in. Stored as received (not hashed or encrypted in code). **Never read anywhere in the repo** (grep for `lastfm_session_key` finds only the two writes), so nothing uses it today | `pages/auth/lastfm.ts:135,189` |
-| `display_name` | Yes, defaults to the Last.fm username; user can edit | `pages/auth/lastfm.ts:136,217`; `pages/account/index.tsx:238` |
+| `display_name` | Yes, defaults to the Last.fm username; user can edit | `pages/auth/lastfm.ts:136,217`; `pages/account/index.tsx:239` |
 | `avatar_url` | Yes, the largest image URL from Last.fm `user.getinfo` at sign-up (or at a later sign-in if it was empty) | `pages/auth/lastfm.ts:110-138,194-213` |
-| `bio` | Yes, free text the user types on the account page | `pages/account/index.tsx:239` |
-| `profile_visibility` | Yes, `public` at sign-up, user can switch to `private` | `pages/auth/lastfm.ts:138`; `pages/account/index.tsx:257` |
+| `bio` | Yes, free text the user types on the account page | `pages/account/index.tsx:240` |
+| `profile_visibility` | Yes, `public` at sign-up, user can switch to `private` | `pages/auth/lastfm.ts:138`; `pages/account/index.tsx:259` |
 | `last_login_at` | Yes, on returning sign-ins only (not set at creation) | `pages/auth/lastfm.ts:190` |
 | `login_count` | Yes, 1 at creation, incremented on each sign-in | `packages/db/src/index.ts:74`; `pages/auth/lastfm.ts:191` |
 | `created_at`, `updated_at` | Yes, database defaults and `updateUser` | `packages/db/src/index.ts:150`; migrations |
-| `email` | **Never set.** `updateUser` accepts it but no caller passes it, and no form collects it | `packages/db/src/index.ts:100`; grep of `updateUser(` callers: `pages/auth/lastfm.ts:220`, `pages/account/index.tsx:237,257` |
+| `email` | **Never set.** `updateUser` accepts it but no caller passes it, and no form collects it | `packages/db/src/index.ts:100`; grep of `updateUser(` callers: `pages/auth/lastfm.ts:220`, `pages/account/index.tsx:238,258` |
 | `discogs_username` | **Never set** (same evidence) | `packages/db/src/index.ts:112` |
 | `spotify_connected` | **Never set** (same evidence) | `packages/db/src/index.ts:116` |
 
@@ -45,6 +45,7 @@ New-signup notification: when `DISCORD_WEBHOOK_URL` is set, a new account (and a
 | An expired session row is deleted when that browser next presents the cookie | `utils/session.ts:76-80` |
 | `deleteExpiredSessions` exists but has **no caller** (no scheduled cleanup): expired rows for browsers that never return stay in D1 | `packages/db/src/index.ts:231`; `scheduled()` in `apps/web/src/index.tsx:813-957` does not call it |
 | Visitors who never sign in get no cookie from the app | grep for `setCookie`/`document.cookie` in `apps/web/src`: only `utils/session.ts:44` |
+| Cloudflare, in front of the Worker, sets its own bot-detection cookie `__cf_bm` on responses to every visitor (HttpOnly, Secure, SameSite=None, about 30 minutes), and `cf_clearance` after a visitor passes a security check (challenge). These come from the zone, not the app code | Seen on `curl -sI https://listentomore.com/about` on 2026-11-08; [Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/) |
 
 ## 3. API keys and `api_usage_log`
 
@@ -73,7 +74,7 @@ Providers and models come from `packages/config/src/ai.ts` (`AI_TASKS`).
 | **MusicBrainz** | Artist plus album or track names, to look up UPCs and ISRCs | `packages/services/musicbrainz/src/release-lookup.ts:65,137`, `recording-lookup.ts:63,133` (via `fetch.ts:37`) |
 | **Apple Music API** | Album or track metadata, to find the Apple Music link | `packages/services/streaming-links/src/providers/apple-music.ts:161`; called from `streaming-links/src/index.ts:208,252,492,564` |
 | **YouTube** | **Nothing at runtime.** `YouTubeProvider` is constructed but never called; both result builders hardcode `youtube: null`. The key is only passed to the constructor | `streaming-links/src/index.ts:107,216,260`; `apps/web/src/index.tsx:141` |
-| **Songlink/Odesli** | The server only builds the string `https://song.link/<spotify url>`. Songlink sees the Spotify ID only when a visitor clicks "More services", from the visitor's own browser. `SonglinkService` (the `api.song.link` call at `songlink/src/index.ts:7,64`) is imported only by a test | `streaming-links/src/index.ts:211-212,255-256,597`; `apps/web/src/__tests__/services/songlink.test.ts` |
+| **Songlink/Odesli** | The server only builds the string `https://song.link/<spotify url>` and sends Songlink nothing. When a visitor clicks "More services" (album pages only; there is no track page, `pages/album/detail.tsx:148`), Songlink sees the album's Spotify ID and the visitor's IP address, from the visitor's own browser. `SonglinkService` (the `api.song.link` call at `songlink/src/index.ts:7,64`) is imported only by a test | `streaming-links/src/index.ts:211-212,255-256,597`; `apps/web/src/__tests__/services/songlink.test.ts` |
 | **Discord** | The owner's webhook gets username + profile URL on signup (section 1). The Discord bot is a separate Worker (section 8) | `pages/auth/lastfm.ts:145-182` |
 | **jsDelivr** (`cdn.jsdelivr.net`) | Every page loads the `marked` script from jsDelivr, so the visitor's browser sends jsDelivr its IP address and user agent | `components/layout/Layout.tsx:71` |
 | **Image hosts** | Album art and Last.fm avatars are URLs returned by Spotify and Last.fm, loaded by the visitor's browser from those services' servers; a fallback image loads from `file.elezea.com` | `pages/auth/lastfm.ts:124` (avatar URL stored); `packages/services/lastfm/src/top-artists.ts:8` |
@@ -122,12 +123,13 @@ Not hidden:
 
 - The private-profile page still shows that the username exists (`PrivateProfile` receives the Last.fm username).
 - `GET /widget/recent?username=<name>` is public and fetches the latest track from Last.fm live for any username on a cache miss, with no check of `profile_visibility` (`apps/web/src/index.tsx:722-790`). Whether Last.fm itself withholds recent tracks for users who hide them is unconfirmed, so the policy does not claim it.
+- `GET /api/internal/artist-lastfm?name=<artist>&username=<name>` returns the play count Last.fm reports for that username and artist, with no session check and no check of `profile_visibility` (`apps/web/src/api/internal/artist.ts:29-44`). It needs only the internal token, which every page embeds as `window.__INTERNAL_TOKEN__` (`components/layout/Layout.tsx:97`). The artist page calls it with the signed-in viewer's username (`pages/artist/detail.tsx:130-133`), but the route accepts any username.
 - Last.fm's own privacy settings are separate and unaffected.
 - Default for new accounts is `public` (`pages/auth/lastfm.ts:138`).
 
 ## 7. Deleting an account
 
-Handler: `handleAccountDelete` (`pages/account/index.tsx:265-353`), `POST /account/delete`, requires the form value `confirmation=DELETE`. It calls `deleteUserSessions`, then `deleteUser` (`packages/db/src/index.ts:157,237`), then clears the cookie.
+Handler: `handleAccountDelete` (`pages/account/index.tsx:266-354`), `POST /account/delete`, requires the form value `confirmation=DELETE`. It calls `deleteUserSessions`, then `deleteUser` (`packages/db/src/index.ts:157,237`), then clears the cookie.
 
 Removed from D1:
 
@@ -140,12 +142,12 @@ Remains after deletion:
 
 - KV entries in section 5 until their TTL expires (at most 30 days). Cron stops refreshing the user's `widget:recent:` entry once the row is gone.
 - `api_usage_log` rows: not linked to users (section 3), and `ON DELETE SET NULL` on the key reference (`002_api_keys.sql:38`).
-- Workers logs: the handler logs `user_id`, `username`, `lastfm_username` at start, and sign-in logs the username and Last.fm name (`pages/account/index.tsx:294-322`; `pages/auth/lastfm.ts:141,222`). These stay until Cloudflare's log retention ends (period unconfirmed).
+- Workers logs: the handler logs `user_id`, `username`, `lastfm_username` at start, and sign-in logs the username and Last.fm name (`pages/account/index.tsx:295-323`; `pages/auth/lastfm.ts:141,222`). These stay until Cloudflare's log retention ends (period unconfirmed).
 - The Discord signup notification (section 1).
 - Anything Last.fm, Anthropic, Spotify or other providers keep on their side.
 - Deleting does not revoke the site's authorization on the user's Last.fm account (the site has no call to do so). The user can remove it in their Last.fm settings.
 
-The account page text says deletion "will permanently remove all your data" (`pages/account/index.tsx:158-161`), which is broader than the list above; the policy states the exceptions.
+The account page text says deletion removes the account and all sessions, and links to `/privacy` for what remains (`pages/account/index.tsx:158-162`).
 
 ## 8. Discord bot (`apps/discord-bot`)
 
@@ -162,7 +164,7 @@ The account page text says deletion "will permanently remove all your data" (`pa
 ## 9. Analytics scripts
 
 - No analytics, tag manager, pixel or tracking script is loaded anywhere in `apps/web/src` or `apps/web/public`. The only external `<script src>` is `marked` from jsDelivr (`components/layout/Layout.tsx:71`).
-- No cookie other than `ltm_session`.
+- The app sets no cookie other than `ltm_session`. Cloudflare's `__cf_bm` and `cf_clearance` come from the zone (section 2).
 - The old policy's "aggregated analytics" claim is not supported by the code. Usage figures come from Cloudflare's own dashboards and Workers Observability, which are infrastructure-level. Whether the Cloudflare zone has Web Analytics (a dashboard setting that injects a beacon at the edge) turned on is **unconfirmed**: nothing in the repo shows it, and I did not inspect the zone.
 - Social-crawler requests (LinkedInBot, Slackbot, Discordbot and similar) are logged with user agent, path, referer and `CF-Connecting-IP` to the Worker's console (`middleware/crawler-logging.ts:17-47`).
 
@@ -173,5 +175,6 @@ The account page text says deletion "will permanently remove all your data" (`pa
 | `localStorage.theme` | Light or dark choice, only after the user clicks the toggle | `Layout.tsx:79,176` |
 | `localStorage['banner-dismissed-<id>']` | Remembers a dismissed announcement banner | `Layout.tsx:140-152` |
 | Cookie `ltm_session` | Sign-in session, only for signed-in users | `utils/session.ts:44` |
+| Cookies `__cf_bm`, `cf_clearance` | Set by Cloudflare, not the app: bot detection on every visitor, and a passed security check | Section 2; [Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/) |
 
 Nothing else uses `localStorage`, `sessionStorage` or `document.cookie` in `apps/web/src`. Page loads embed `window.__INTERNAL_TOKEN__`, a 5-minute HMAC token with only issued-at and expiry times, no user or IP data (`utils/internal-token.ts:1-35`).

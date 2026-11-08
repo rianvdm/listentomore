@@ -65,9 +65,9 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         never comes back can stay in the database until you delete your account.
       </p>
       <p>
-        If you never sign in, the site itself sets no cookie. Your browser stores two small things on your
-        device only: your light or dark theme choice, and whether you dismissed an announcement
-        banner.
+        If you never sign in, the site itself sets no cookie, though Cloudflare sets its own (see
+        section 8). Your browser also stores two small things on your device only: your light or
+        dark theme choice, and whether you dismissed an announcement banner.
       </p>
       <p>
         There is also a log of calls to the site's API, which needs an API key that I hand out
@@ -97,8 +97,9 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <p>
         <strong>Spotify, MusicBrainz and Apple Music</strong> receive artist, album and track
         names or IDs, so the site can find artwork, identifiers and links on other services. They
-        don't receive account details. The "more services" link on an album or track page goes to
-        Songlink, which only learns the Spotify ID if you click it. Your browser loads album art
+        don't receive account details. The "More services" link on an album page goes to
+        song.link. The site sends Songlink nothing; if you click the link, Songlink sees the album's
+        Spotify ID and your IP address, like any site you visit. Your browser loads album art
         and Last.fm profile pictures directly from the servers of those services, and it loads one
         script (a Markdown renderer) from the jsDelivr content network. Those hosts see your IP
         address the way any server does when you load a file from it.
@@ -134,10 +135,11 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         that was already cached can still show you for a few minutes, until it refreshes.
       </p>
       <p>
-        Two things stay visible. Anyone can still see that a profile with that username exists. And
-        a small public address I use on my own blog (<code>/widget/recent</code>) can show the most
-        recent track for any Last.fm username without checking the setting here. Your privacy
-        settings at Last.fm are separate from the ones on this site.
+        A few things stay visible. Anyone can still see that a profile with that username exists. A
+        small public address I use on my own blog (<code>/widget/recent</code>) can show the most
+        recent track for any Last.fm username without checking the setting here. The artist page
+        can also show the play count Last.fm reports for any username, and that doesn't check the
+        setting either. Your privacy settings at Last.fm are separate from the ones on this site.
       </p>
 
       <h2>6. Deleting your account</h2>
@@ -177,8 +179,14 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <h2>8. Analytics</h2>
       <p>
         I don't add analytics scripts, advertising trackers or tracking pixels to the site. The only
-        cookie is the sign-in cookie described above. When I want to know how much traffic the site
-        gets or where it errors, I look at Cloudflare's own dashboards and logs.
+        cookie this site sets is the sign-in cookie described above. Cloudflare, which sits in front
+        of the site, sets its own bot-detection cookie (<code>__cf_bm</code>) for every visitor, plus{' '}
+        <code>cf_clearance</code> if you pass a security check.{' '}
+        <a href="https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/">
+          Cloudflare's cookie page
+        </a>{' '}
+        explains both. When I want to know how much traffic the site gets or where it errors, I look
+        at Cloudflare's own dashboards and logs.
       </p>
 
       <h2>9. Changes to this policy</h2>

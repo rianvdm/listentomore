@@ -33,6 +33,17 @@ describe('PrivacyPage', () => {
     expect(text).toContain('Songlink');
   });
 
+  it('names the cookies Cloudflare sets in front of the site', () => {
+    expect(text).toContain('The only cookie this site sets is the sign-in cookie');
+    expect(html).toContain('__cf_bm');
+    expect(html).toContain('cf_clearance');
+  });
+
+  it('lists the artist play count among what a private profile does not hide', () => {
+    expect(text).toContain('A few things stay visible');
+    expect(text).toContain('play count Last.fm reports for any username');
+  });
+
   it('explains deletion and links to the account page', () => {
     expect(html).toContain('href="/account"');
     expect(html).toContain('removes your account record and all your sessions');

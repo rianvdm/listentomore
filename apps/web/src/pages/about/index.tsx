@@ -20,7 +20,7 @@ export const ABOUT_FEATURES: readonly AboutFeature[] = [
     title: 'Albums and artists',
     description: 'A summary, similar music, and links to Spotify, Apple Music and other services.',
     href: '/album/6dVIqQ8qmQ5GBnJ9shOYGE',
-    alt: 'The Listen To More page for OK Computer by Radiohead, with cover art, release year and streaming links',
+    alt: 'The Listen To More page for OK Computer by Radiohead, with cover art, release year and streaming links, and a panel listing what signing in adds',
   },
   {
     slug: 'genre',
@@ -143,13 +143,13 @@ export function AboutPage({ currentUser }: AboutPageProps) {
       <section>
         <h2>Signing in</h2>
         <p>
-          Album and artist pages and streaming links work without an account. Sign in with Last.fm
-          to read the AI summaries of albums, artists and genres, and to get recommendations, your
-          stats and insights, and a profile page.
+          Album and artist pages and streaming links work without an account. Signing in with
+          Last.fm adds AI summaries of albums, artists and genres, recommendations, your stats and
+          weekly insights, and a profile page.
         </p>
         <p>
-          You sign in on Last.fm's own site, so I never see your password. Here's what this site
-          keeps about you:
+          You sign in on Last.fm's own site, so I never see your password. The short version of
+          what this site keeps:
         </p>
         <ul>
           <li>
@@ -210,11 +210,11 @@ export function AboutPage({ currentUser }: AboutPageProps) {
           Spotify doesn't have it. A <ExternalLink href="https://odesli.co/">Songlink</ExternalLink>{' '}
           page covers the other streaming services.{' '}
           <ExternalLink href="https://www.anthropic.com/claude">Claude</ExternalLink> writes the
-          summaries and recommendations.
+          summaries, the weekly insights and the album recommendations.
         </p>
         <p>
-          And yes, I <ExternalLink href="https://elezea.com/resume/">work at Cloudflare</ExternalLink>
-          , and I'd still build it this way if I didn't. The site's logs and traces go to{' '}
+          I <ExternalLink href="https://elezea.com/resume/">work at Cloudflare</ExternalLink>, and
+          the site's logs and traces go to{' '}
           <ExternalLink href="https://developers.cloudflare.com/workers/observability/">
             Workers Observability
           </ExternalLink>

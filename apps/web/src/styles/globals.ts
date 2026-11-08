@@ -1409,6 +1409,9 @@ blockquote {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .about-tile {
