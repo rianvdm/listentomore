@@ -35,6 +35,7 @@ function createServices() {
       getSessionByToken: vi.fn().mockResolvedValue(SESSION),
       getUser: vi.fn().mockResolvedValue(USER),
       updateSessionActivity: vi.fn().mockResolvedValue(undefined),
+      upsertEntityPage: vi.fn().mockResolvedValue(undefined),
     },
     spotify: {
       getAlbum: vi.fn().mockResolvedValue(album),

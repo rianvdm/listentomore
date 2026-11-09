@@ -107,6 +107,16 @@ export interface ApiUsageLog {
   created_at: string;
 }
 
+export type EntityPageType = 'album' | 'artist';
+
+// Maps a name-based AI summary cache key to the Spotify-ID page it was generated for
+export interface EntityPage {
+  cache_key: string;
+  type: EntityPageType;
+  path: string;
+  updated_at: string;
+}
+
 // Parsed API key with scopes as array
 export interface ParsedApiKey extends Omit<ApiKey, 'scopes'> {
   scopes: ApiKeyScope[];

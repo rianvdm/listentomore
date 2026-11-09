@@ -12,6 +12,8 @@ import type {
   ApiKeyTier,
   ApiKeyScope,
   ParsedApiKey,
+  EntityPage,
+  EntityPageType,
 } from './schema';
 import { parseApiKey, TIER_RATE_LIMITS } from './schema';
 
@@ -594,6 +596,33 @@ export class Database {
         data.responseTimeMs || null
       )
       .run();
+  }
+
+  // Entity page index
+
+  /**
+   * Record which page an album or artist summary cache key belongs to.
+   * Re-recording a key moves it to the latest path and refreshes updated_at.
+   */
+  async upsertEntityPage(page: { cacheKey: string; type: EntityPageType; path: string }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO entity_pages (cache_key, type, path)
+         VALUES (?, ?, ?)
+         ON CONFLICT(cache_key) DO UPDATE SET path = excluded.path, updated_at = datetime('now')`
+      )
+      .bind(page.cacheKey, page.type, page.path)
+      .run();
+  }
+
+  /**
+   * All recorded entity pages, for building the sitemap.
+   */
+  async getEntityPages(): Promise<EntityPage[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM entity_pages')
+      .all<EntityPage>();
+    return result.results;
   }
 
   /**
