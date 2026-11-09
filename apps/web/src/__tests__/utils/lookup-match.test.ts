@@ -22,6 +22,11 @@ describe('normalizeName', () => {
   it('drops a leading "The" even when the name is wrapped in punctuation', () => {
     expect(normalizeName('"The Cure"')).toBe(normalizeName('The Cure'));
   });
+
+  it('keeps combining marks that distinguish words in non-Latin scripts', () => {
+    expect(normalizeName('दिल')).not.toBe(normalizeName('दल'));
+    expect(normalizeName('ポップ')).not.toBe(normalizeName('ホッフ'));
+  });
 });
 
 describe('stripEdition', () => {
@@ -56,6 +61,10 @@ describe('pickAlbumMatch / pickArtistMatch', () => {
 
   it('rejects a lone result by a different artist', () => {
     expect(pickAlbumMatch([album('Ritual', 'Some Other Band', 'x')], 'Jon Hopkins', 'Ritual')).toBeNull();
+  });
+
+  it('rejects a non-Latin title that differs only by a combining mark', () => {
+    expect(pickAlbumMatch([album('दल', 'Artist X', 'x')], 'Artist X', 'दिल')).toBeNull();
   });
 
   it('rejects a title that only contains the requested title', () => {

@@ -81,18 +81,23 @@ function stripOneEdition(title: string): string | null {
 }
 
 /**
- * Folds a name to a comparison key: accents, case, curly quotes, `&`, a leading "The" and
- * punctuation are ignored. Letters and numbers in any script are kept.
+ * Folds a name to a comparison key: Latin accents, case, curly quotes, `&`, a leading "The"
+ * and punctuation are ignored. Letters, numbers and combining marks in other scripts are kept.
  */
 export function normalizeName(name: string): string {
   return name
     .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
+    // Only Latin combining diacritics, so 'Rós' folds to 'ros'; marks that are part of other
+    // scripts, such as Devanagari vowel signs or the kana handakuten, must survive.
+    .replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFC')
     .toLowerCase()
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/&/g, ' and ')
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    // Keeps \p{M} too: a Devanagari vowel sign such as U+093F is a mark, and dropping it
+    // would fold दिल into दल.
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim()
     // After punctuation removal, so '"The Cure"' and 'The Cure' both lose the article.
