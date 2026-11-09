@@ -242,6 +242,32 @@ describe('GET /sitemap.xml', () => {
     expect(consoleError).toHaveBeenCalled();
   });
 
+  it('does not let caches keep the static-only fallback', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const kv = { list: vi.fn().mockRejectedValue(new Error('KV down')) };
+    const db = { getEntityPages: vi.fn().mockResolvedValue([]) };
+
+    const res = await buildApp(db).request('/sitemap.xml', {}, { CACHE: kv, PUBLIC_CACHED_SUMMARIES: 'true' });
+
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('stops listing a prefix when KV returns no cursor, even if list_complete is false', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Without a cursor the next call would restart the listing; give up after a few calls so a regression fails fast.
+    const list = vi.fn(async ({ prefix }: { prefix: string }) => {
+      if (list.mock.calls.length > 10) throw new Error('listing never ended');
+      return { keys: prefix === 'ai:genreSummary:' ? [{ name: 'ai:genreSummary:shoegaze' }] : [], list_complete: false, cursor: '' };
+    });
+    const db = { getEntityPages: vi.fn().mockResolvedValue([]) };
+
+    const res = await buildApp(db).request('/sitemap.xml', {}, { CACHE: { list }, PUBLIC_CACHED_SUMMARIES: 'true' });
+
+    expect(locs(await res.text())).toEqual([...STATIC_LOCS, `${ORIGIN}/genre/shoegaze`]);
+    expect(list).toHaveBeenCalledTimes(3);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it('falls back to static pages when the entity page read fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const kv = createKv([{ name: 'ai:genreSummary:shoegaze' }]);

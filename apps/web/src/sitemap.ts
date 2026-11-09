@@ -104,24 +104,27 @@ export function buildSitemap({ origin, cachedKeys, entityPages }: SitemapInput):
 }
 
 // Lists every key under a prefix, following the cursor until KV reports the listing complete.
+// A page without a cursor also ends it, since listing again without one would start over.
 async function listAllKeys(kv: KVNamespace, prefix: string): Promise<CachedKey[]> {
   const keys: CachedKey[] = [];
   let cursor: string | undefined;
   for (;;) {
     const page = await kv.list({ prefix, cursor });
     keys.push(...page.keys.map(({ name, expiration }) => ({ name, expiration })));
-    if (page.list_complete) return keys;
+    if (page.list_complete || !page.cursor) return keys;
     cursor = page.cursor;
   }
 }
 
 /**
  * GET /sitemap.xml. With public summaries off, or when a KV or D1 read fails, it lists the
- * static pages only, so a storage outage never turns the sitemap into an error.
+ * static pages only, so a storage outage never turns the sitemap into an error. The failure
+ * fallback is sent with no-store, so caches don't keep the degraded list after the outage.
  */
 export async function handleSitemap(c: Context<AppContext>): Promise<Response> {
   let cachedKeys: CachedKey[] = [];
   let entityPages: EntityPage[] = [];
+  let readFailed = false;
 
   if (publicSummariesEnabled(c.env)) {
     try {
@@ -135,11 +138,12 @@ export async function handleSitemap(c: Context<AppContext>): Promise<Response> {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Sitemap read failed, listing static pages only:', errorMessage, error);
+      readFailed = true;
     }
   }
 
   return c.body(buildSitemap({ origin: SITE_CONFIG.url, cachedKeys, entityPages }), 200, {
     'Content-Type': 'application/xml',
-    'Cache-Control': 'public, max-age=3600',
+    'Cache-Control': readFailed ? 'no-store' : 'public, max-age=3600',
   });
 }
