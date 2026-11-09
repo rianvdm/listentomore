@@ -5,15 +5,23 @@ import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import type { Bindings, Variables } from '../../types';
+import { readRef } from '../../utils/referral';
+import type { Ref } from '../../utils/referral';
+import { isSafeRedirect } from './lastfm';
 
 interface LoginPageProps {
   error?: string;
   next?: string;
+  signupRef?: Ref | null;
   currentUser?: User | null;
 }
 
-function LoginPage({ error, next, currentUser }: LoginPageProps) {
-  const authUrl = next ? `/auth/lastfm?next=${encodeURIComponent(next)}` : '/auth/lastfm';
+function LoginPage({ error, next, signupRef, currentUser }: LoginPageProps) {
+  const authParams = new URLSearchParams();
+  if (next) authParams.set('next', next);
+  if (signupRef) authParams.set('ref', signupRef);
+  const authQuery = authParams.toString();
+  const authUrl = authQuery ? `/auth/lastfm?${authQuery}` : '/auth/lastfm';
 
   return (
     <Layout
@@ -90,7 +98,10 @@ export function handleLogin(c: Context<{ Bindings: Bindings; Variables: Variable
   }
 
   const error = c.req.query('error');
-  const next = c.req.query('next');
+  // Only forward a safe relative 'next' and a known 'ref' to the Last.fm auth start.
+  const nextRaw = c.req.query('next');
+  const next = nextRaw && isSafeRedirect(nextRaw) ? nextRaw : undefined;
+  const signupRef = readRef(c.req.queries('ref'));
 
-  return c.html(<LoginPage error={error} next={next} currentUser={null} />);
+  return c.html(<LoginPage error={error} next={next} signupRef={signupRef} currentUser={null} />);
 }
