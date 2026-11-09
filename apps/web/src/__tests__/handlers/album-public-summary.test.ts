@@ -23,6 +23,10 @@ const CACHED_RECOMMENDATIONS = 'Try <a href="/album?q=kid-a" data-artist="Radioh
 const LABEL_HTML = '<p class="ai-summary-label text-muted"><a href="/about#how-its-built">AI-written summary</a></p>';
 const UNLOCK_PROMPT = 'AI-powered album and artist summaries';
 const PERSONAL_PROMPT = 'Recommendations based on what you play';
+const LASTFM_HEADING = 'You already use Last.fm';
+const LASTFM_SUMMARY_BULLET = 'The AI summary and recommendations for this album';
+const DEFAULT_LOGIN_HREF = `href="/login?next=%2Falbum%2F${ALBUM_ID}"`;
+const REF_LOGIN_HREF = `href="/login?next=%2Falbum%2F${ALBUM_ID}&amp;ref=lastfm-mcp"`;
 
 describe('Album page public cached summaries', () => {
   let app: Hono<{ Variables: TestVariables }>;
@@ -36,8 +40,8 @@ describe('Album page public cached summaries', () => {
     getAlbumRecommendations: vi.fn(),
   };
 
-  function requestAlbum(env?: Record<string, string>) {
-    return app.request(`/album/${ALBUM_ID}`, undefined, env);
+  function requestAlbum(env?: Record<string, string>, query = '') {
+    return app.request(`/album/${ALBUM_ID}${query}`, undefined, env);
   }
 
   function expectNoModelCalls() {
@@ -197,6 +201,93 @@ describe('Album page public cached summaries', () => {
       `new RegExp(${JSON.stringify(FALLBACK_RESPONSE_PATTERN.source)}, ${JSON.stringify(FALLBACK_RESPONSE_PATTERN.flags)})`,
     );
     expect(html).not.toContain("includes('Not enough information available')");
+  });
+
+  describe('visitors from lastfm-mcp', () => {
+    const REF_QUERY = '?ref=lastfm-mcp';
+
+    it('shows the Last.fm prompt in the summary slot for ?ref=lastfm-mcp with no cached summary', async () => {
+      ai.getCachedAlbumDetail.mockResolvedValue(null);
+      ai.getCachedAlbumRecommendations.mockResolvedValue(null);
+
+      const html = await (await requestAlbum(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html).not.toContain(UNLOCK_PROMPT);
+      expect(html).not.toContain('Sign in to unlock more');
+      expect(html).not.toContain('id="ai-summary"');
+      expectNoModelCalls();
+    });
+
+    it('shows the summary and the Last.fm prompt for ?ref=lastfm-mcp with a cached summary', async () => {
+      const html = await (await requestAlbum(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain('<strong>a landmark</strong> of late-90s rock.');
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain('A public profile page');
+      expect(html).not.toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).not.toContain('Sign in with Last.fm for more');
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html.indexOf('Kid A')).toBeLessThan(html.indexOf(LASTFM_HEADING));
+      expectNoModelCalls();
+    });
+
+    it('shows the default prompt for an unknown ref', async () => {
+      ai.getCachedAlbumDetail.mockResolvedValue(null);
+      ai.getCachedAlbumRecommendations.mockResolvedValue(null);
+
+      const html = await (await requestAlbum(FLAG_ON, '?ref=evil')).text();
+
+      expect(html).toBe(await (await requestAlbum(FLAG_ON)).text());
+      expect(html).toContain('Sign in to unlock more');
+      expect(html).toContain(DEFAULT_LOGIN_HREF);
+      expect(html).not.toContain(LASTFM_HEADING);
+      expect(html).not.toMatch(/[?&;]ref=/);
+    });
+
+    it('shows the default prompt for a repeated ref', async () => {
+      ai.getCachedAlbumDetail.mockResolvedValue(null);
+      ai.getCachedAlbumRecommendations.mockResolvedValue(null);
+
+      const html = await (await requestAlbum(FLAG_ON, '?ref=lastfm-mcp&ref=evil')).text();
+
+      expect(html).toBe(await (await requestAlbum(FLAG_ON)).text());
+      expect(html).toContain('Sign in to unlock more');
+      expect(html).toContain(DEFAULT_LOGIN_HREF);
+      expect(html).not.toContain(LASTFM_HEADING);
+      expect(html).not.toMatch(/[?&;]ref=/);
+    });
+
+    it('shows no prompt to a signed-in visitor with ref', async () => {
+      currentUser = SIGNED_IN_USER;
+
+      const html = await (await requestAlbum(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain('late-90s rock');
+      expect(html).not.toContain(LASTFM_HEADING);
+      expect(html).not.toContain(UNLOCK_PROMPT);
+      expect(html).not.toContain(PERSONAL_PROMPT);
+      expect(html).not.toContain('/login?next=');
+    });
+
+    it('keeps ref out of the canonical URL', async () => {
+      const html = await (await requestAlbum(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain(`<link rel="canonical" href="https://listentomore.com/album/${ALBUM_ID}"/>`);
+    });
+
+    it('shows the Last.fm prompt with the flag off', async () => {
+      const html = await (await requestAlbum({}, REF_QUERY)).text();
+
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html).not.toContain('late-90s rock');
+      expect(html).not.toContain(UNLOCK_PROMPT);
+      expect(ai.getCachedAlbumDetail).not.toHaveBeenCalled();
+    });
   });
 
   describe('client-fetched content for a signed-in user on a cache miss', () => {

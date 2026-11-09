@@ -11,6 +11,8 @@ import { Layout } from '../../components/layout';
 import { AiSummaryLabel, NotFoundPage, RateLimitedPage, SignInCTA, SignInGate } from '../../components/ui';
 import { aiContentClientScript, enrichLinksScript } from '../../utils/client-scripts';
 import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
+import { readRef } from '../../utils/referral';
+import type { Ref } from '../../utils/referral';
 
 interface ArtistData {
   id: string;
@@ -29,6 +31,8 @@ interface ArtistDetailProps {
   summaryHtml?: string | null;
   // PUBLIC_CACHED_SUMMARIES is on; the client script labels a summary it fetches only then.
   publicSummaries?: boolean;
+  // Validated referrer from ?ref=; tailors the sign-in prompt and is carried into /login.
+  signInRef?: Ref | null;
 }
 
 // Server-rendered cached summary when present, otherwise the placeholder the client script replaces.
@@ -57,6 +61,7 @@ export function ArtistDetailPage({
   currentUser,
   summaryHtml,
   publicSummaries = false,
+  signInRef = null,
 }: ArtistDetailProps) {
   if (error || !artist) {
     return (
@@ -77,6 +82,8 @@ export function ArtistDetailPage({
   const artistImage = artist.image || 'https://file.elezea.com/noun-no-image.png';
   const currentPath = `/artist/${artist.id}`;
   const summaryRendered = Boolean(summaryHtml);
+  // Signed-out visitors from lastfm-mcp already use Last.fm, so their prompt says so and carries the ref.
+  const lastfmMcpRef = !currentUser && signInRef === 'lastfm-mcp' ? signInRef : undefined;
 
   return (
     <Layout
@@ -131,10 +138,26 @@ export function ArtistDetailPage({
           {!currentUser && summaryRendered ? (
             <>
               <ArtistSummarySection html={summaryHtml} />
-              <SignInCTA currentPath={currentPath} variant="personal" />
+              {lastfmMcpRef ? (
+                <SignInCTA
+                  currentPath={currentPath}
+                  variant="lastfm-mcp"
+                  entity="artist"
+                  summaryShown
+                  signInRef={lastfmMcpRef}
+                />
+              ) : (
+                <SignInCTA currentPath={currentPath} variant="personal" />
+              )}
             </>
           ) : (
-            <SignInGate currentUser={currentUser ?? null} currentPath={currentPath}>
+            <SignInGate
+              currentUser={currentUser ?? null}
+              currentPath={currentPath}
+              variant={lastfmMcpRef ? 'lastfm-mcp' : undefined}
+              entity="artist"
+              signInRef={lastfmMcpRef}
+            >
               <ArtistSummarySection html={summaryHtml} />
             </SignInGate>
           )}
@@ -327,6 +350,7 @@ export async function handleArtistDetail(c: Context) {
   const spotify = c.get('spotify') as SpotifyService;
   const internalToken = c.get('internalToken') as string;
   const currentUser = c.get('currentUser') as User | null;
+  const signInRef = readRef(c.req.queries('ref'));
 
   try {
     const artistData = await spotify.getArtist(spotifyId);
@@ -354,6 +378,7 @@ export async function handleArtistDetail(c: Context) {
         currentUser={currentUser}
         summaryHtml={summaryHtml}
         publicSummaries={publicSummaries}
+        signInRef={signInRef}
       />
     );
   } catch (error) {

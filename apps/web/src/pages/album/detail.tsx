@@ -11,6 +11,8 @@ import { Layout } from '../../components/layout';
 import { AiSummaryLabel, NotFoundPage, RateLimitedPage, SignInCTA, SignInGate } from '../../components/ui';
 import { aiContentClientScript, enrichLinksScript } from '../../utils/client-scripts';
 import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
+import { readRef } from '../../utils/referral';
+import type { Ref } from '../../utils/referral';
 
 interface AlbumData {
   id: string;
@@ -33,6 +35,8 @@ interface AlbumDetailProps {
   recommendationsHtml?: string | null;
   // PUBLIC_CACHED_SUMMARIES is on; the client script labels content it fetches only then.
   publicSummaries?: boolean;
+  // Validated referrer from ?ref=; tailors the sign-in prompt and is carried into /login.
+  signInRef?: Ref | null;
 }
 
 // Server-rendered cached content when present, otherwise the placeholder the client script replaces.
@@ -75,6 +79,7 @@ export function AlbumDetailPage({
   summaryHtml,
   recommendationsHtml,
   publicSummaries = false,
+  signInRef = null,
 }: AlbumDetailProps) {
   if (error || !album) {
     return (
@@ -97,6 +102,8 @@ export function AlbumDetailPage({
   const currentPath = `/album/${album.id}`;
   const summaryRendered = Boolean(summaryHtml);
   const recommendationsRendered = Boolean(recommendationsHtml);
+  // Signed-out visitors from lastfm-mcp already use Last.fm, so their prompt says so and carries the ref.
+  const lastfmMcpRef = !currentUser && signInRef === 'lastfm-mcp' ? signInRef : undefined;
 
   return (
     <Layout
@@ -168,10 +175,26 @@ export function AlbumDetailPage({
             <>
               {summaryRendered && <AlbumSummarySection html={summaryHtml} />}
               {recommendationsRendered && <AlbumRecommendationsSection html={recommendationsHtml} />}
-              <SignInCTA currentPath={currentPath} variant="personal" />
+              {lastfmMcpRef ? (
+                <SignInCTA
+                  currentPath={currentPath}
+                  variant="lastfm-mcp"
+                  entity="album"
+                  summaryShown
+                  signInRef={lastfmMcpRef}
+                />
+              ) : (
+                <SignInCTA currentPath={currentPath} variant="personal" />
+              )}
             </>
           ) : (
-            <SignInGate currentUser={currentUser ?? null} currentPath={currentPath}>
+            <SignInGate
+              currentUser={currentUser ?? null}
+              currentPath={currentPath}
+              variant={lastfmMcpRef ? 'lastfm-mcp' : undefined}
+              entity="album"
+              signInRef={lastfmMcpRef}
+            >
               <AlbumSummarySection html={summaryHtml} />
               <AlbumRecommendationsSection html={recommendationsHtml} />
             </SignInGate>
@@ -282,6 +305,7 @@ export async function handleAlbumDetail(c: Context) {
   const spotify = c.get('spotify') as SpotifyService;
   const internalToken = c.get('internalToken') as string;
   const currentUser = c.get('currentUser') as User | null;
+  const signInRef = readRef(c.req.queries('ref'));
 
   try {
     // Fetch album data from Spotify (fast)
@@ -321,6 +345,7 @@ export async function handleAlbumDetail(c: Context) {
         summaryHtml={summaryHtml}
         recommendationsHtml={recommendationsHtml}
         publicSummaries={publicSummaries}
+        signInRef={signInRef}
       />
     );
   } catch (error) {
