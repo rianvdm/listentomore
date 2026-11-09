@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { handleArtistDetail } from '../../pages/artist/detail';
+import { runPageScript } from '../utils/page-script';
 
 type TestVariables = {
   spotify: unknown;
@@ -167,13 +168,58 @@ describe('Artist page public cached summary', () => {
     expect(ai.getArtistSummary).not.toHaveBeenCalled();
   });
 
-  it('labels a summary the client script fetches for a signed-in user', async () => {
-    currentUser = SIGNED_IN_USER;
+  describe('client-fetched summary for a signed-in user on a cache miss', () => {
+    const FETCHED = { data: { summary: 'Radiohead are **an English rock band**.' } };
+    const FALLBACK = { data: { summary: 'Not enough information available about this artist.' } };
 
-    const html = await (await requestArtist({})).text();
+    beforeEach(() => {
+      currentUser = SIGNED_IN_USER;
+      ai.getCachedArtistSummary.mockResolvedValue(null);
+    });
 
-    expect(html).toContain('Loading AI summary...');
-    expect(html).toContain(`var aiSummaryLabel = ${JSON.stringify(LABEL_HTML)};`);
-    expect(html).toContain('html += aiSummaryLabel;');
+    async function runScript(env: Record<string, string>, reply: unknown) {
+      const html = await (await requestArtist(env)).text();
+      return runPageScript(html, {
+        authenticated: true,
+        responses: { '/api/internal/artist-summary': reply },
+      });
+    }
+
+    it('labels the fetched summary when the flag is on', async () => {
+      const run = await runScript(FLAG_ON, FETCHED);
+
+      expect(run.fetches).toContain(`/api/internal/artist-summary?spotifyId=${ARTIST_ID}`);
+      expect(run.html('ai-summary')).toContain('an English rock band');
+      expect(run.html('ai-summary')).toContain(LABEL_HTML);
+      expect(run.enriched).toContain('ai-summary');
+    });
+
+    it('leaves the fetched summary unlabelled when the flag is off', async () => {
+      const run = await runScript({}, FETCHED);
+
+      expect(run.html('ai-summary')).toContain('an English rock band');
+      expect(run.html('ai-summary')).not.toContain('AI-written summary');
+    });
+
+    it('passes the flag to the client as a strict boolean', async () => {
+      expect(await (await requestArtist(FLAG_ON)).text()).toContain('window.__PUBLIC_SUMMARIES__ = true;');
+      expect(await (await requestArtist({ PUBLIC_CACHED_SUMMARIES: 'TRUE' })).text()).toContain(
+        'window.__PUBLIC_SUMMARIES__ = false;',
+      );
+    });
+
+    it('neither labels nor renders a fetched fallback reply', async () => {
+      const run = await runScript(FLAG_ON, FALLBACK);
+
+      expect(run.html('ai-summary')).not.toContain('AI-written summary');
+      expect(run.html('ai-summary')).not.toContain('Not enough information available');
+      expect(run.html('ai-summary')).toContain('not available');
+    });
+
+    it('writes the artist ID into the script as a JSON string', async () => {
+      const html = await (await requestArtist(FLAG_ON)).text();
+
+      expect(html).toContain(`var artistId = ${JSON.stringify(ARTIST_ID)};`);
+    });
   });
 });

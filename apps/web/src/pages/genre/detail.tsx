@@ -5,9 +5,9 @@ import type { Context } from 'hono';
 import type { AIService } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
-import { AI_SUMMARY_LABEL_HTML, AiSummaryLabel, SignInCTA, SignInGate } from '../../components/ui';
+import { AiSummaryLabel, SignInCTA, SignInGate } from '../../components/ui';
 import { isCuratedGenre, slugToDisplayName } from '../../data/genres';
-import { enrichLinksScript } from '../../utils/client-scripts';
+import { aiContentClientScript, enrichLinksScript } from '../../utils/client-scripts';
 import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
 
 interface GenreDetailProps {
@@ -17,6 +17,8 @@ interface GenreDetailProps {
   currentUser?: User | null;
   // Sanitised HTML from the cached AI summary; null when the flag is off, the cache misses, or the reply is a fallback.
   summaryHtml?: string | null;
+  // PUBLIC_CACHED_SUMMARIES is on; the client script labels a summary it fetches only then.
+  publicSummaries?: boolean;
 }
 
 // Server-rendered cached summary when present, otherwise the placeholder the client script replaces.
@@ -38,7 +40,14 @@ function GenreSummarySection({ html }: { html?: string | null }) {
   );
 }
 
-export function GenreDetailPage({ displayName, slug, internalToken, currentUser, summaryHtml }: GenreDetailProps) {
+export function GenreDetailPage({
+  displayName,
+  slug,
+  internalToken,
+  currentUser,
+  summaryHtml,
+  publicSummaries = false,
+}: GenreDetailProps) {
   const currentPath = `/genre/${slug}`;
   const summaryRendered = Boolean(summaryHtml);
 
@@ -79,20 +88,21 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser,
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
+        ${aiContentClientScript(publicSummaries)}
 
         window.__AI_SUMMARY_RENDERED__ = ${summaryRendered};
 
         (function() {
-          if (!window.__IS_AUTHENTICATED__) return;
-
-          // Server-rendered summary only needs its search links enriched
+          // A server-rendered summary, shown to any visitor, only needs its search links enriched
           if (window.__AI_SUMMARY_RENDERED__) {
             enrichLinks('genre-summary');
             return;
           }
 
+          // Generating a summary needs a login, so logged-out visitors fetch nothing
+          if (!window.__IS_AUTHENTICATED__) return;
+
           var genreName = ${JSON.stringify(displayName)};
-          var aiSummaryLabel = ${JSON.stringify(AI_SUMMARY_LABEL_HTML)};
 
           // Fetch genre summary
           internalFetch('/api/internal/genre-summary?name=' + encodeURIComponent(genreName), { cache: 'no-store' })
@@ -104,6 +114,12 @@ export function GenreDetailPage({ displayName, slug, internalToken, currentUser,
               if (data.error) throw new Error(data.error);
               var summary = data.data;
               var content = summary.content || summary.text || '';
+
+              // The model's "no information" reply is not a summary, so it gets no label
+              if (isAiFallback(content)) {
+                document.getElementById('genre-summary').innerHTML = '<p class="text-muted">Summary not available for this genre.</p>';
+                return;
+              }
 
               var html = aiSummaryLabel + marked.parse(content);
 
@@ -131,8 +147,9 @@ export async function handleGenreDetail(c: Context) {
   const currentUser = c.get('currentUser') as User | null;
 
   // The client sends the display name to the generator, so that is the key it wrote.
+  const publicSummaries = publicSummariesEnabled(c.env);
   let summaryHtml: string | null = null;
-  if (publicSummariesEnabled(c.env)) {
+  if (publicSummaries) {
     const ai = c.get('ai') as AIService;
     summaryHtml = await loadPublicSummary(() => ai.getCachedGenreSummary(displayName), 'genre');
   }
@@ -144,6 +161,7 @@ export async function handleGenreDetail(c: Context) {
       internalToken={internalToken}
       currentUser={currentUser}
       summaryHtml={summaryHtml}
+      publicSummaries={publicSummaries}
     />
   );
 }

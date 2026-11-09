@@ -2,6 +2,9 @@
 // These are exported as strings to be included in inline <script> tags
 // Note: Markdown parsing is handled by the 'marked' library loaded via CDN in Layout.tsx
 
+import { FALLBACK_RESPONSE_PATTERN } from '@listentomore/ai';
+import { AI_SUMMARY_LABEL_HTML } from '../components/ui/AiSummaryLabel';
+
 /**
  * enrichLinks - Enriches search links with Spotify IDs for direct navigation
  * Call this after inserting HTML with artist/album search links
@@ -118,3 +121,21 @@ function enrichAlbumMentions(containerId) {
  * Combined utility scripts - include all common functions
  */
 export const clientUtilsScript = enrichLinksScript + enrichAlbumMentionsScript;
+
+/**
+ * Client helpers for AI content a page fetches after load (a signed-in visitor on a cache miss).
+ * aiSummaryLabel is the "AI-written summary" label when public summaries are on and '' when they're
+ * off, so the flag's rollback restores the unlabelled page. isAiFallback tests a reply against the
+ * shared FALLBACK_RESPONSE_PATTERN, flags included, so a fallback is never labelled as a summary.
+ */
+export function aiContentClientScript(publicSummaries: boolean): string {
+  return `
+window.__PUBLIC_SUMMARIES__ = ${publicSummaries === true};
+var aiSummaryLabel = window.__PUBLIC_SUMMARIES__ ? ${JSON.stringify(AI_SUMMARY_LABEL_HTML)} : '';
+var aiFallbackPattern = new RegExp(${JSON.stringify(FALLBACK_RESPONSE_PATTERN.source)}, ${JSON.stringify(FALLBACK_RESPONSE_PATTERN.flags)});
+
+function isAiFallback(text) {
+  return aiFallbackPattern.test(String(text || '').trim());
+}
+`;
+}

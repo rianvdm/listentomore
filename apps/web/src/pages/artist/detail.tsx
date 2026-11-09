@@ -8,15 +8,8 @@ import { isSpotifyId } from '@listentomore/shared';
 import { SpotifyNotFoundError } from '@listentomore/spotify';
 import type { SpotifyService } from '@listentomore/spotify';
 import { Layout } from '../../components/layout';
-import {
-  AI_SUMMARY_LABEL_HTML,
-  AiSummaryLabel,
-  NotFoundPage,
-  RateLimitedPage,
-  SignInCTA,
-  SignInGate,
-} from '../../components/ui';
-import { enrichLinksScript } from '../../utils/client-scripts';
+import { AiSummaryLabel, NotFoundPage, RateLimitedPage, SignInCTA, SignInGate } from '../../components/ui';
+import { aiContentClientScript, enrichLinksScript } from '../../utils/client-scripts';
 import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
 
 interface ArtistData {
@@ -34,6 +27,8 @@ interface ArtistDetailProps {
   currentUser?: User | null;
   // Sanitised HTML from the cached AI summary; null when the flag is off, the cache misses, or the reply is a fallback.
   summaryHtml?: string | null;
+  // PUBLIC_CACHED_SUMMARIES is on; the client script labels a summary it fetches only then.
+  publicSummaries?: boolean;
 }
 
 // Server-rendered cached summary when present, otherwise the placeholder the client script replaces.
@@ -61,6 +56,7 @@ export function ArtistDetailPage({
   internalToken,
   currentUser,
   summaryHtml,
+  publicSummaries = false,
 }: ArtistDetailProps) {
   if (error || !artist) {
     return (
@@ -148,12 +144,13 @@ export function ArtistDetailPage({
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
+        ${aiContentClientScript(publicSummaries)}
 
         window.__AI_SUMMARY_RENDERED__ = ${summaryRendered};
 
         (function() {
           var artistName = ${JSON.stringify(artist.name)};
-          var artistId = '${artist.id}';
+          var artistId = ${JSON.stringify(artist.id)};
           var lastfmUsername = ${currentUser?.lastfm_username ? JSON.stringify(currentUser.lastfm_username) : 'null'};
 
           // Tags to filter out (not real genres)
@@ -284,7 +281,6 @@ export function ArtistDetailPage({
 
           // Fetch AI summary - only for authenticated users, and only when the server didn't render it
           if (window.__IS_AUTHENTICATED__ && !window.__AI_SUMMARY_RENDERED__) {
-            var aiSummaryLabel = ${JSON.stringify(AI_SUMMARY_LABEL_HTML)};
             internalFetch('/api/internal/artist-summary?spotifyId=' + encodeURIComponent(artistId), { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -294,6 +290,11 @@ export function ArtistDetailPage({
                 if (data.error) throw new Error(data.error);
                 var summary = data.data;
                 var text = summary.text || summary.summary || '';
+                // The model's "no information" reply is not a summary, so it gets no label
+                if (isAiFallback(text)) {
+                  document.getElementById('ai-summary').innerHTML = '<p class="text-muted">AI summary not available for this artist.</p>';
+                  return;
+                }
                 var html = '<p style="margin-top:1.5em;margin-bottom:0.2em"><strong>Overview:</strong></p>';
                 html += aiSummaryLabel;
                 html += '<div>' + marked.parse(text) + '</div>';
@@ -339,8 +340,9 @@ export async function handleArtistDetail(c: Context) {
     };
 
     // Same name resolveSpotifyArtist passes to the generator, so the read hits the key it wrote.
+    const publicSummaries = publicSummariesEnabled(c.env);
     let summaryHtml: string | null = null;
-    if (publicSummariesEnabled(c.env)) {
+    if (publicSummaries) {
       const ai = c.get('ai') as AIService;
       summaryHtml = await loadPublicSummary(() => ai.getCachedArtistSummary(artistData.name), 'artist');
     }
@@ -351,6 +353,7 @@ export async function handleArtistDetail(c: Context) {
         internalToken={internalToken}
         currentUser={currentUser}
         summaryHtml={summaryHtml}
+        publicSummaries={publicSummaries}
       />
     );
   } catch (error) {

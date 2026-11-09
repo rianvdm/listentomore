@@ -2,7 +2,6 @@
 // ABOUTME: With PUBLIC_CACHED_SUMMARIES on, cached AI summary and recommendations are server-rendered for every visitor.
 
 import type { Context } from 'hono';
-import { FALLBACK_RESPONSE_PATTERN } from '@listentomore/ai';
 import type { AIService } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import { isSpotifyId } from '@listentomore/shared';
@@ -10,7 +9,7 @@ import { SpotifyNotFoundError } from '@listentomore/spotify';
 import type { SpotifyService } from '@listentomore/spotify';
 import { Layout } from '../../components/layout';
 import { AiSummaryLabel, NotFoundPage, RateLimitedPage, SignInCTA, SignInGate } from '../../components/ui';
-import { enrichLinksScript } from '../../utils/client-scripts';
+import { aiContentClientScript, enrichLinksScript } from '../../utils/client-scripts';
 import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
 
 interface AlbumData {
@@ -32,6 +31,8 @@ interface AlbumDetailProps {
   // Sanitised HTML from cached AI content; null when the flag is off, the cache misses, or the reply is a fallback.
   summaryHtml?: string | null;
   recommendationsHtml?: string | null;
+  // PUBLIC_CACHED_SUMMARIES is on; the client script labels content it fetches only then.
+  publicSummaries?: boolean;
 }
 
 // Server-rendered cached content when present, otherwise the placeholder the client script replaces.
@@ -73,6 +74,7 @@ export function AlbumDetailPage({
   currentUser,
   summaryHtml,
   recommendationsHtml,
+  publicSummaries = false,
 }: AlbumDetailProps) {
   if (error || !album) {
     return (
@@ -180,6 +182,7 @@ export function AlbumDetailPage({
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
+        ${aiContentClientScript(publicSummaries)}
 
         window.__AI_SUMMARY_RENDERED__ = ${summaryRendered};
         window.__AI_RECS_RENDERED__ = ${recommendationsRendered};
@@ -222,7 +225,12 @@ export function AlbumDetailPage({
               .then(function(data) {
                 if (data.error) throw new Error(data.error);
                 var summary = data.data;
-                var html = '<div>' + marked.parse(summary.content) + '</div>';
+                // The model's "no information" reply is not a summary, so it gets no label
+                if (isAiFallback(summary.content)) {
+                  document.getElementById('ai-summary').innerHTML = '<p class="text-muted">AI summary not available for this album.</p>';
+                  return;
+                }
+                var html = aiSummaryLabel + '<div>' + marked.parse(summary.content) + '</div>';
                 document.getElementById('ai-summary').innerHTML = html;
               })
               .catch(function(e) {
@@ -232,7 +240,6 @@ export function AlbumDetailPage({
           }
 
           if (window.__IS_AUTHENTICATED__ && !window.__AI_RECS_RENDERED__) {
-            var fallbackPattern = new RegExp(${JSON.stringify(FALLBACK_RESPONSE_PATTERN.source)}, 'i');
             internalFetch('/api/internal/album-recommendations' + aiQuery, { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -242,11 +249,12 @@ export function AlbumDetailPage({
                 if (data.error) throw new Error(data.error);
                 var recommendations = data.data;
                 // The model's "no information" reply, in any case
-                if (fallbackPattern.test(recommendations.content.trim())) {
+                if (isAiFallback(recommendations.content)) {
                   document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Recommendations not available for this album.</p>';
                   return;
                 }
                 var html = '<h3>Album Recommendations</h3>';
+                html += aiSummaryLabel;
                 html += '<div>' + marked.parse(recommendations.content) + '</div>';
                 document.getElementById('album-recommendations').innerHTML = html;
                 // Enrich links: search links -> direct Spotify ID links
@@ -291,9 +299,10 @@ export async function handleAlbumDetail(c: Context) {
     };
 
     // Same names resolveSpotifyAlbum passes to the generators, so the reads hit the keys they wrote.
+    const publicSummaries = publicSummariesEnabled(c.env);
     let summaryHtml: string | null = null;
     let recommendationsHtml: string | null = null;
-    if (publicSummariesEnabled(c.env)) {
+    if (publicSummaries) {
       const ai = c.get('ai') as AIService;
       [summaryHtml, recommendationsHtml] = await Promise.all([
         loadPublicSummary(() => ai.getCachedAlbumDetail(albumData.artist, albumData.name), 'album'),
@@ -311,6 +320,7 @@ export async function handleAlbumDetail(c: Context) {
         currentUser={currentUser}
         summaryHtml={summaryHtml}
         recommendationsHtml={recommendationsHtml}
+        publicSummaries={publicSummaries}
       />
     );
   } catch (error) {

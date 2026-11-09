@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { FALLBACK_RESPONSE_PATTERN } from '@listentomore/ai';
 import { handleAlbumDetail } from '../../pages/album/detail';
+import { runPageScript } from '../utils/page-script';
 
 type TestVariables = {
   spotify: unknown;
@@ -19,6 +20,7 @@ const SIGNED_IN_USER = { id: 'user-1', lastfm_username: 'rian', display_name: 'R
 
 const CACHED_SUMMARY = 'OK Computer is **a landmark** of late-90s rock.';
 const CACHED_RECOMMENDATIONS = 'Try <a href="/album?q=kid-a" data-artist="Radiohead" data-album="Kid A">Kid A</a>.';
+const LABEL_HTML = '<p class="ai-summary-label text-muted"><a href="/about#how-its-built">AI-written summary</a></p>';
 const UNLOCK_PROMPT = 'AI-powered album and artist summaries';
 const PERSONAL_PROMPT = 'Recommendations based on what you play';
 
@@ -80,7 +82,7 @@ describe('Album page public cached summaries', () => {
 
     expect(res.status).toBe(200);
     expect(html).toContain('<strong>a landmark</strong> of late-90s rock.');
-    expect(html).toContain('AI-written summary');
+    expect(html).toContain(LABEL_HTML);
     expect(html).toContain(PERSONAL_PROMPT);
     expect(html).not.toContain(UNLOCK_PROMPT);
     expect(ai.getCachedAlbumDetail).toHaveBeenCalledWith('Radiohead', 'OK Computer');
@@ -132,7 +134,7 @@ describe('Album page public cached summaries', () => {
     const html = await (await requestAlbum(FLAG_ON)).text();
 
     expect(html).not.toContain('Not enough information available about this album.');
-    expect(html).not.toContain('AI-written summary');
+    expect(html).not.toContain(LABEL_HTML);
     expect(html).toContain(UNLOCK_PROMPT);
     expectNoModelCalls();
   });
@@ -156,7 +158,7 @@ describe('Album page public cached summaries', () => {
     const html = await (await requestAlbum({})).text();
 
     expect(html).not.toContain('late-90s rock');
-    expect(html).not.toContain('AI-written summary');
+    expect(html).not.toContain(LABEL_HTML);
     expect(html).toContain(UNLOCK_PROMPT);
     expect(ai.getCachedAlbumDetail).not.toHaveBeenCalled();
     expect(ai.getCachedAlbumRecommendations).not.toHaveBeenCalled();
@@ -186,12 +188,66 @@ describe('Album page public cached summaries', () => {
     expectNoModelCalls();
   });
 
-  it('checks fetched recommendations against the shared fallback pattern, ignoring case', async () => {
+  it('serialises the shared fallback pattern with its own flags', async () => {
     currentUser = SIGNED_IN_USER;
 
     const html = await (await requestAlbum({})).text();
 
-    expect(html).toContain(`new RegExp(${JSON.stringify(FALLBACK_RESPONSE_PATTERN.source)}, 'i')`);
+    expect(html).toContain(
+      `new RegExp(${JSON.stringify(FALLBACK_RESPONSE_PATTERN.source)}, ${JSON.stringify(FALLBACK_RESPONSE_PATTERN.flags)})`,
+    );
     expect(html).not.toContain("includes('Not enough information available')");
+  });
+
+  describe('client-fetched content for a signed-in user on a cache miss', () => {
+    const SUMMARY_PATH = '/api/internal/album-summary';
+    const RECS_PATH = '/api/internal/album-recommendations';
+    const FETCHED = {
+      [SUMMARY_PATH]: { data: { content: 'OK Computer is **a landmark**.' } },
+      [RECS_PATH]: { data: { content: 'Try Kid A.' } },
+    };
+    const FALLBACKS = {
+      [SUMMARY_PATH]: { data: { content: 'Not enough information available about this album.' } },
+      [RECS_PATH]: { data: { content: 'not enough information available for recommendations.' } },
+    };
+
+    beforeEach(() => {
+      currentUser = SIGNED_IN_USER;
+      ai.getCachedAlbumDetail.mockResolvedValue(null);
+      ai.getCachedAlbumRecommendations.mockResolvedValue(null);
+    });
+
+    async function runScript(env: Record<string, string>, responses: Record<string, unknown>) {
+      const html = await (await requestAlbum(env)).text();
+      return runPageScript(html, { authenticated: true, responses });
+    }
+
+    it('labels the fetched summary and recommendations when the flag is on', async () => {
+      const run = await runScript(FLAG_ON, FETCHED);
+
+      expect(run.html('ai-summary')).toContain('a landmark');
+      expect(run.html('ai-summary')).toContain(LABEL_HTML);
+      expect(run.html('album-recommendations')).toContain('Try Kid A.');
+      expect(run.html('album-recommendations')).toContain(LABEL_HTML);
+    });
+
+    it('leaves fetched content unlabelled when the flag is off', async () => {
+      const run = await runScript({}, FETCHED);
+
+      expect(run.html('ai-summary')).toContain('a landmark');
+      expect(run.html('ai-summary')).not.toContain('AI-written summary');
+      expect(run.html('album-recommendations')).toContain('Try Kid A.');
+      expect(run.html('album-recommendations')).not.toContain('AI-written summary');
+    });
+
+    it('neither labels nor renders fetched fallback replies, in any case', async () => {
+      const run = await runScript(FLAG_ON, FALLBACKS);
+
+      for (const id of ['ai-summary', 'album-recommendations']) {
+        expect(run.html(id)).not.toContain('AI-written summary');
+        expect(run.html(id).toLowerCase()).not.toContain('not enough information available');
+        expect(run.html(id)).toContain('not available');
+      }
+    });
   });
 });

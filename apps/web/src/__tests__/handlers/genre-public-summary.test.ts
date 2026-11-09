@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { handleGenreDetail } from '../../pages/genre/detail';
+import { runPageScript } from '../utils/page-script';
 
 type TestVariables = {
   ai: unknown;
@@ -164,13 +165,63 @@ describe('Genre page public cached summary', () => {
     expect(ai.getGenreSummary).not.toHaveBeenCalled();
   });
 
-  it('labels a summary the client script fetches for a signed-in user', async () => {
-    currentUser = SIGNED_IN_USER;
+  describe('client script', () => {
+    const FETCHED = { data: { content: 'Shoegaze is **loud and dreamy**.' } };
+    const FALLBACK = { data: { content: 'There is no information available about this genre.' } };
 
-    const html = await (await requestGenre('shoegaze', {})).text();
+    async function runScript(env: Record<string, string>, reply?: unknown) {
+      const html = await (await requestGenre('shoegaze', env)).text();
+      return runPageScript(html, {
+        authenticated: currentUser !== null,
+        responses: reply === undefined ? {} : { '/api/internal/genre-summary': reply },
+      });
+    }
 
-    expect(html).toContain('Generating summary...');
-    expect(html).toContain(`var aiSummaryLabel = ${JSON.stringify(LABEL_HTML)};`);
-    expect(html).toContain('var html = aiSummaryLabel + marked.parse(content);');
+    it('enriches the links in a server-rendered summary for a logged-out visitor, without fetching a summary', async () => {
+      const run = await runScript(FLAG_ON);
+
+      expect(run.enriched).toEqual(['genre-summary']);
+      expect(run.fetches).toEqual([]);
+    });
+
+    it('does nothing for a logged-out visitor when nothing was server-rendered', async () => {
+      ai.getCachedGenreSummary.mockResolvedValue(null);
+
+      const run = await runScript(FLAG_ON);
+
+      expect(run.fetches).toEqual([]);
+      expect(run.enriched).toEqual([]);
+    });
+
+    describe('for a signed-in user on a cache miss', () => {
+      beforeEach(() => {
+        currentUser = SIGNED_IN_USER;
+        ai.getCachedGenreSummary.mockResolvedValue(null);
+      });
+
+      it('labels the fetched summary when the flag is on', async () => {
+        const run = await runScript(FLAG_ON, FETCHED);
+
+        expect(run.fetches).toEqual(['/api/internal/genre-summary?name=Shoegaze']);
+        expect(run.html('genre-summary')).toContain('loud and dreamy');
+        expect(run.html('genre-summary')).toContain(LABEL_HTML);
+      });
+
+      it('leaves the fetched summary unlabelled when the flag is off', async () => {
+        const run = await runScript({}, FETCHED);
+
+        expect(run.html('genre-summary')).toContain('loud and dreamy');
+        expect(run.html('genre-summary')).not.toContain('AI-written summary');
+        expect(await (await requestGenre('shoegaze', {})).text()).toContain('window.__PUBLIC_SUMMARIES__ = false;');
+      });
+
+      it('neither labels nor renders a fetched fallback reply', async () => {
+        const run = await runScript(FLAG_ON, FALLBACK);
+
+        expect(run.html('genre-summary')).not.toContain('AI-written summary');
+        expect(run.html('genre-summary')).not.toContain('There is no information available');
+        expect(run.html('genre-summary')).toContain('not available');
+      });
+    });
   });
 });
