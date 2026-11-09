@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - listentomore: single Worker; no new Workers or services. 2-space indent, semicolons, single quotes, trailing commas, two `// ABOUTME:` lines on every new file, `import type` for types (`AGENTS.md`).
-- Known referrer values: exactly `lastfm-mcp`. Any other `ref` value is ignored everywhere (not recorded, not forwarded, not stored).
+- Known referrer values: exactly `lastfm-mcp`. Any other `ref` value is ignored everywhere (not recorded, not forwarded, not stored). Every hop reads `ref` with `readRef(c.req.queries('ref'))` (Task 1), never `c.req.query('ref')`, so a repeated `ref` is dropped.
+- Cache TTLs live in `CACHE_CONFIG` (`packages/config/src/cache.ts`) and are read with `getTtlSeconds()` (`AGENTS.md`).
 - No new cookie for logged-out visitors. Attribution travels only in URLs.
 - Click rows store no IP address, no user agent and no searched names.
 - A wrong match is worse than a miss: when unsure, redirect to search.
@@ -27,8 +28,9 @@
 ## Review Focus
 
 1. A name with quotes, ampersands, slashes, accents or non-Latin script (`Guns N' Roses`, `AC/DC`, `"Heroes"`, `Sigur Rós`, `坂本龍一`) must resolve or miss cleanly, never 500 and never break the Spotify field-filter query. Task 4 tests a double quote in a name and a non-Latin name.
-2. A `ref` value that isn't `lastfm-mcp` (`ref=evil`, `ref=<script>`, repeated `ref`) must be dropped at every hop: lookup, page, `/login`, `/auth/lastfm`, callback. Tasks 1, 5 and 6 test it.
-3. A failed D1 click write or KV cache write must not change the redirect. Task 4 tests both.
+2. A `ref` value that isn't `lastfm-mcp` (`ref=evil`, `ref=<script>`, `ref=lastfm-mcp&ref=evil` in either order) must be dropped at every hop: lookup, both pages, `/login`, `/auth/lastfm`, callback. Tasks 1, 4, 5 and 6 test it.
+3. A failed or slow D1 click write, or a failed KV read or write, must not change or delay the redirect. Task 4 tests all three.
+3a. A `next` value that browsers resolve off-site (`/\evil.example`, `%2F%5Cevil.example`, `//evil.example`, `https://evil.example`) must never become a redirect. This guard exists today and is weak (`pages/auth/lastfm.ts:17-18` accepts `/\host`); Task 6 hardens it because it extends that flow.
 4. A Spotify error (429, 5xx, timeout) during lookup must redirect to search and must not be cached as a miss. Task 4 tests a thrown 429.
 5. A returning user who signs in with `ref=lastfm-mcp` must not get `signup_ref` written or a Discord sign-up message. Task 6 tests it.
 
@@ -45,6 +47,7 @@
   - `export const KNOWN_REFS = ['lastfm-mcp'] as const;`
   - `export type Ref = (typeof KNOWN_REFS)[number];`
   - `export function parseRef(value: string | null | undefined): Ref | null`
+  - `export function readRef(values: string[] | undefined): Ref | null`: `parseRef` of the single value when exactly one `ref` was sent, else `null`. Callers pass `c.req.queries('ref')`.
   - `export function isBotRequest(userAgent: string | null | undefined, cf?: { botManagement?: { verifiedBot?: boolean } } | null): boolean`
 
 - [ ] **Step 1: Write the failing tests**
@@ -54,6 +57,12 @@ describe('parseRef', () => {
   it('accepts lastfm-mcp', () => expect(parseRef('lastfm-mcp')).toBe('lastfm-mcp'));
   it.each([undefined, null, '', 'LASTFM-MCP', 'evil', '<script>', 'lastfm-mcp '])('rejects %s', (v) =>
     expect(parseRef(v)).toBeNull());
+});
+
+describe('readRef', () => {
+  it('accepts exactly one known value', () => expect(readRef(['lastfm-mcp'])).toBe('lastfm-mcp'));
+  it.each([[undefined], [[]], [['evil']], [['lastfm-mcp', 'evil']], [['evil', 'lastfm-mcp']], [['lastfm-mcp', 'lastfm-mcp']]])(
+    'rejects %j', (v) => expect(readRef(v)).toBeNull());
 });
 
 describe('isBotRequest', () => {
@@ -96,19 +105,21 @@ git commit -m "Add referral parsing and bot detection helpers"
 
 **Files:**
 - Create: `apps/web/src/utils/lookup-match.ts`
+- Modify: `packages/services/spotify/src/search.ts` and `index.ts` (the two candidate types and their re-export only)
 - Test: `apps/web/src/__tests__/utils/lookup-match.test.ts`
 
 **Interfaces:**
-- Consumes: `AlbumSearchResult`, `ArtistSearchResult` types from `@listentomore/spotify` (`packages/services/spotify/src/search.ts:26-42`). `AlbumSearchResult.artist` is Spotify's artist names joined with `', '` (`search.ts:150`).
 - Produces:
+  - In `packages/services/spotify/src/search.ts`, exported from `@listentomore/spotify` (Task 4's candidate methods return them): `export interface LookupAlbumCandidate { id: string; name: string; artists: string[] }`, where `artists` holds each credited artist's full name because `AlbumSearchResult.artist` joins names with `', '` (`search.ts:164`) and loses the boundaries; and `export interface LookupArtistCandidate { id: string; name: string }`.
+  - In `apps/web/src/utils/lookup-match.ts`:
   - `export function normalizeName(name: string): string`
   - `export function stripEdition(title: string): string`
-  - `export function pickAlbumMatch(candidates: AlbumSearchResult[], artist: string, album: string): AlbumSearchResult | null`
-  - `export function pickArtistMatch(candidates: ArtistSearchResult[], artist: string): ArtistSearchResult | null`
+  - `export function pickAlbumMatch(candidates: LookupAlbumCandidate[], artist: string, album: string): LookupAlbumCandidate | null`
+  - `export function pickArtistMatch(candidates: LookupArtistCandidate[], artist: string): LookupArtistCandidate | null`
 
 - [ ] **Step 1: Write the failing tests**
 
-Use a small `album(name, artist, id)` fixture builder.
+Use a small `album(name, artists: string[], id)` fixture builder (below, a bare string means a one-element array).
 
 ```typescript
 it('normalizes case, accents, punctuation, ampersands and a leading "The"', () => {
@@ -126,6 +137,16 @@ it('strips edition suffixes', () => {
   expect(stripEdition('Unplugged - Live')).toBe('Unplugged');
   expect(stripEdition('Abbey Road')).toBe('Abbey Road');
   expect(stripEdition('Songs: Ohia')).toBe('Songs: Ohia');
+  expect(stripEdition('Damnation (Deliverance)')).toBe('Damnation (Deliverance)');
+  expect(stripEdition('Alive at Wembley - Live at Wembley Stadium')).toBe('Alive at Wembley - Live at Wembley Stadium');
+});
+it('never matches names that normalize to nothing', () => {
+  expect(normalizeName('!!!')).toBe('');
+  expect(pickArtistMatch([{ name: '???', id: 'q' }], '!!!')).toBeNull();
+  expect(pickAlbumMatch([album('...', '!!!', 'x')], '!!!', '...')).toBeNull();
+});
+it('rejects a request that names only part of a comma-containing artist', () => {
+  expect(pickAlbumMatch([album('Déjà Vu', ['Crosby, Stills, Nash & Young'], 'dv')], 'Stills', 'Deja Vu')).toBeNull();
 });
 it('rejects a lone result by a different artist', () => {
   expect(pickAlbumMatch([album('Ritual', 'Some Other Band', 'x')], 'Jon Hopkins', 'Ritual')).toBeNull();
@@ -141,17 +162,17 @@ it('matches an edition-suffixed request to the base album by the same artist', (
   expect(pickAlbumMatch([album('OK Computer', 'Radiohead', 'ok')], 'Radiohead', 'OK Computer (Remastered 2009)')?.id).toBe('ok');
 });
 it('matches when the requested artist is one of several credited artists', () => {
-  expect(pickAlbumMatch([album('Watch the Throne', 'JAY-Z, Kanye West', 'wtt')], 'Kanye West', 'Watch the Throne')?.id).toBe('wtt');
+  expect(pickAlbumMatch([album('Watch the Throne', ['JAY-Z', 'Kanye West'], 'wtt')], 'Kanye West', 'Watch the Throne')?.id).toBe('wtt');
 });
 it('matches an artist name containing a comma as a whole', () => {
-  expect(pickAlbumMatch([album('Déjà Vu', 'Crosby, Stills, Nash & Young', 'dv')], 'Crosby, Stills, Nash & Young', 'Deja Vu')?.id).toBe('dv');
+  expect(pickAlbumMatch([album('Déjà Vu', ['Crosby, Stills, Nash & Young'], 'dv')], 'Crosby, Stills, Nash & Young', 'Deja Vu')?.id).toBe('dv');
 });
 it('picks the artist whose normalized name matches, not the top hit', () => {
-  const r = pickArtistMatch([{ name: 'Cure for Pain', id: 'a', url: '', image: null }, { name: 'The Cure', id: 'b', url: '', image: null }], 'The Cure');
+  const r = pickArtistMatch([{ name: 'Cure for Pain', id: 'a' }, { name: 'The Cure', id: 'b' }], 'The Cure');
   expect(r?.id).toBe('b');
 });
 it('returns null when no artist matches', () => {
-  expect(pickArtistMatch([{ name: 'Cure for Pain', id: 'a', url: '', image: null }], 'The Cure')).toBeNull();
+  expect(pickArtistMatch([{ name: 'Cure for Pain', id: 'a' }], 'The Cure')).toBeNull();
 });
 ```
 
@@ -164,18 +185,18 @@ Expected: FAIL (module not found).
 
 `normalizeName`: NFKD, drop combining marks, lowercase, curly quotes to straight, `&` to ` and `, drop a leading `the `, remove every character that is not a letter or number in any script (`\p{L}\p{N}` with the `u` flag) except spaces, collapse whitespace, trim.
 
-`stripEdition`: repeatedly remove a trailing `(...)` or `[...]` group, or a trailing ` - ...` segment, when it contains (case-insensitive) one of: `remaster`, `remastered`, `deluxe`, `edition`, `expanded`, `anniversary`, `bonus`, `version`, `reissue`, `mono`, `stereo`, `live`, `special`, `collector`. Leave anything else alone.
+`stripEdition`: repeatedly remove a trailing `(...)` or `[...]` group, or a trailing ` - ...` segment, only when **every word** in it (case-insensitive, after dropping punctuation) is a 4-digit year, a number or ordinal (`25th`), or one of: `remaster`, `remastered`, `deluxe`, `super`, `special`, `expanded`, `edition`, `version`, `anniversary`, `bonus`, `track`, `tracks`, `reissue`, `mono`, `stereo`, `mix`, `live`, `legacy`, `collector's`, `collectors`, `the`. Anything else (`Deliverance`, `Live at Wembley Stadium`) stays.
 
-`pickAlbumMatch`: keep candidates whose artist matches (normalized `candidate.artist` equals normalized requested artist, or any of `candidate.artist.split(', ')` normalized equals it). Among those, return the first whose normalized name equals the normalized requested album; else the first whose `normalizeName(stripEdition(name))` equals `normalizeName(stripEdition(album))`; else `null`. No substring or prefix matching.
+`pickAlbumMatch`: if the normalized requested artist or album is empty, return `null`. Keep candidates where some entry of `candidate.artists`, normalized, equals the normalized requested artist (whole names only, never fragments). Among those, return the first whose normalized name equals the normalized requested album; else the first whose `normalizeName(stripEdition(name))` is non-empty and equals `normalizeName(stripEdition(album))`; else `null`. No substring or prefix matching.
 
-`pickArtistMatch`: first candidate whose normalized name equals the normalized requested artist, else `null`.
+`pickArtistMatch`: `null` if the normalized request is empty; else the first candidate whose normalized name equals it; else `null`.
 
 - [ ] **Step 4: Run to verify they pass** (same command; expected PASS)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/utils/lookup-match.ts apps/web/src/__tests__/utils/lookup-match.test.ts
+git add apps/web/src/utils/lookup-match.ts apps/web/src/__tests__/utils/lookup-match.test.ts packages/services/spotify/src/search.ts packages/services/spotify/src/index.ts
 git commit -m "Add strict artist and album name matching for lookups"
 ```
 
@@ -183,7 +204,7 @@ git commit -m "Add strict artist and album name matching for lookups"
 
 **Files:**
 - Create: `packages/db/src/migrations/010_referrals.sql`
-- Modify: `packages/db/src/schema.ts` (`User`), `packages/db/src/index.ts` (`createUser` at `:64-80`, new method)
+- Modify: `packages/db/src/schema.ts` (`User`), `packages/db/src/index.ts` (`createUser` at `:64-80`, new method), `apps/web/src/__tests__/middleware/session-scope.test.ts:19` (add `signup_ref: null` to the typed `User` fixture), and any other typed `User` fixture `pnpm typecheck` flags
 - Test: `apps/web/src/__tests__/services/referral-db.test.ts`
 
 **Interfaces:**
@@ -210,9 +231,12 @@ it('stores signup_ref when creating a user', async () => {
 });
 it('stores null signup_ref when none is given', async () => {
   await db.createUser({ id: 'u1', username: 'x', lastfm_username: 'X' });
-  expect(lastBind).toContain(null);
+  expect(lastSql).toMatch(/INSERT INTO users \(id, username, lastfm_username, lastfm_session_key, display_name, avatar_url, profile_visibility, signup_ref, login_count\)/);
+  expect(lastBind).toEqual(['u1', 'x', 'X', null, 'X', null, 'public', null]);
 });
 ```
+
+Both `createUser` tests must fail against the current method (no `signup_ref` column). Check the existing defaults for `display_name` and `profile_visibility` in `packages/db/src/index.ts:79` and keep them; adjust the expected array only if those defaults differ from the above.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -236,7 +260,7 @@ Expected: `010_referrals.sql` applied. Do **not** run with `--remote`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/db/src/migrations/010_referrals.sql packages/db/src/schema.ts packages/db/src/index.ts apps/web/src/__tests__/services/referral-db.test.ts
+git add packages/db/src/migrations/010_referrals.sql packages/db/src/schema.ts packages/db/src/index.ts apps/web/src/__tests__/services/referral-db.test.ts apps/web/src/__tests__/middleware/session-scope.test.ts
 git commit -m "Add referral_clicks table and users.signup_ref"
 ```
 
@@ -244,35 +268,42 @@ git commit -m "Add referral_clicks table and users.signup_ref"
 
 **Files:**
 - Create: `apps/web/src/pages/lookup.ts`
-- Modify: `packages/services/spotify/src/index.ts` (new method), `apps/web/src/index.tsx` (route next to the album routes at `:652`), `apps/web/src/robots.ts`
-- Test: `apps/web/src/__tests__/handlers/lookup.test.ts`, `apps/web/src/__tests__/robots.test.ts`
+- Modify: `packages/services/spotify/src/search.ts` and `index.ts` (new methods), `packages/config/src/cache.ts` (`CACHE_CONFIG.lookup`), `apps/web/src/index.tsx` (route next to the album routes at `:652`), `apps/web/src/robots.ts`
+- Test: `apps/web/src/__tests__/handlers/lookup.test.ts`, `apps/web/src/__tests__/services/spotify.test.ts`, `apps/web/src/__tests__/robots.test.ts`
 
 **Interfaces:**
-- Consumes: `parseRef`, `isBotRequest` (Task 1); `pickAlbumMatch`, `pickArtistMatch`, `normalizeName`, `stripEdition` (Task 2); `Database.recordReferralClick` (Task 3); `createServiceDefer` from `@listentomore/shared` and `getWaitUntil` from `utils/wait-until.ts`, as `middleware/auth.ts:200-212` uses them.
+- Consumes: `readRef`, `isBotRequest` (Task 1); `LookupAlbumCandidate`, `LookupArtistCandidate`, `pickAlbumMatch`, `pickArtistMatch`, `normalizeName`, `stripEdition` (Task 2); `Database.recordReferralClick` (Task 3); `createServiceDefer` from `@listentomore/shared` and `getWaitUntil` from `utils/wait-until.ts`, as `middleware/auth.ts:200-212` uses them.
 - Produces:
-  - `SpotifyService.searchCandidates<T extends SearchType>(query: string, type: T, limit: number)`, delegating to `SpotifySearch.search` (already KV-cached per query).
+  - `SpotifySearch.searchAlbumCandidates(query: string, limit: number): Promise<LookupAlbumCandidate[]>` and `SpotifySearch.searchArtistCandidates(query: string, limit: number): Promise<LookupArtistCandidate[]>`, exposed on `SpotifyService` under the same names. They call the Spotify search API with the same auth and rate limiter as `search()` but **do not read or write the `spotify:search:` KV cache**: that cache's key omits `limit` (`search.ts:112`), caches empty results for 30 days, and its stored arrays have no per-artist names. Album candidates carry `artists: item.artists.map((a) => a.name)`. Existing callers of `search()` are unchanged. The return types are the ones Task 2 defined.
+  - `CACHE_CONFIG.lookup = { hit: { ttlDays: 30 }, miss: { ttlDays: 1 } }`, read with `getTtlSeconds()`.
   - `export async function handleLookup(c: Context): Promise<Response>`, registered as `app.get('/lookup', handleLookup)`.
   - URL contract used by lastfm-mcp (Task 10): `GET /lookup?artist=<name>[&album=<name>][&ref=lastfm-mcp]`.
 
 **Behaviour:**
 - `artist` missing, blank, or either name over 300 characters → `400` plain text.
-- Lookup cache: KV `CACHE`, key `lookup:v1:album:<normalizeName(artist)>|<normalizeName(stripEdition(album))>` or `lookup:v1:artist:<normalizeName(artist)>`, value `{"id":"<spotifyId>"}` (TTL 30 days) or `{"miss":true}` (TTL 1 day). A cached value skips Spotify.
-- Album candidates, stopping at the first that `pickAlbumMatch` accepts: (1) `artist:"A" album:"B"` limit 10; (2) the same with `stripEdition(album)` when it differs; (3) natural `A B` limit 10. Before building a field filter, remove `"` from both names. Artist: `searchCandidates(artist, 'artist', 10)` then `pickArtistMatch`.
-- Match → `302` to `/album/<id>` or `/artist/<id>`, plus `?ref=lastfm-mcp` only when `parseRef` accepts the ref.
+- Lookup cache: KV `CACHE`, key `lookup:v1:album:<normalizeName(artist)>|<normalizeName(album)>` (the full requested title, so `Rumours` and `Rumours (Super Deluxe)` are separate entries) or `lookup:v1:artist:<normalizeName(artist)>`, value `{"id":"<spotifyId>"}` (TTL `lookup.hit`) or `{"miss":true}` (TTL `lookup.miss`). A cached value skips Spotify. If either normalized name is empty, skip the cache and treat the request as a miss.
+- Album candidates, stopping at the first that `pickAlbumMatch` accepts: (1) `searchAlbumCandidates('artist:"A" album:"B"', 10)`; (2) the same with `stripEdition(album)` when it differs; (3) natural `A B`, limit 10. Before building a field filter, remove `"` from both names. Artist: `searchArtistCandidates(artist, 10)` then `pickArtistMatch`.
+- Match → `302` to `/album/<id>` or `/artist/<id>`, plus `?ref=lastfm-mcp` only when `readRef(c.req.queries('ref'))` accepts it. The ID comes from Spotify or the cache and is checked with `isSpotifyId` (`packages/shared/src/utils/spotify-id.ts:10`, the check the pages already use) before it goes into `Location`; a cached value that fails the check is treated as a miss.
 - No match → cache the miss, `302` to `/album?q=<artist> <album>` or `/artist?q=<artist>` (URL-encoded), with no `ref`.
 - Spotify throws → log with `console.error('[Lookup] ...')`, `302` to the search URL, cache nothing.
 - Every response sets `X-Robots-Tag: noindex` and `Cache-Control: no-store`.
-- When `parseRef` accepts the ref, record one click through `createServiceDefer('[Lookup]', getWaitUntil(c))(db.recordReferralClick({...}), 'referral click')` with `matched`, `signedIn: Boolean(c.get('currentUser'))`, `isBot: isBotRequest(c.req.header('User-Agent'), c.req.raw.cf as ...)`. No click is recorded for an unknown or missing ref.
-- KV read/write failures are logged and treated as a cache miss/no-op.
+- When `readRef` accepts the ref, record exactly one click per request (cache hit, Spotify match, miss and Spotify error alike) through `createServiceDefer('[Lookup]', getWaitUntil(c))(db.recordReferralClick({...}), 'referral click')` with `matched`, `signedIn: Boolean(c.get('currentUser'))`, `isBot: isBotRequest(c.req.header('User-Agent'), c.req.raw.cf as ...)`. No click is recorded for an unknown or missing ref.
+- A KV read failure is logged and resolution continues against Spotify; a KV write failure is logged and the redirect is unchanged.
 
 - [ ] **Step 1: Write the failing tests**
 
-Build the app as `album-public-summary.test.ts` does, with `spotify = { searchCandidates: vi.fn() }`, `db = { recordReferralClick: vi.fn().mockResolvedValue(undefined) }`, `createMockKV()` from `__tests__/utils/mocks.ts` passed as `env.CACHE`, and `currentUser` settable. Tests:
+In `spotify.test.ts`, test the two candidate methods through the real `SpotifySearch` with `setupFetchMock` and `createMockKV`, as the existing `searchArtist` tests do: the request URL carries the given `limit`; album candidates carry each artist's full name in `artists` (fixture album credited to `Crosby, Stills, Nash & Young` and `Neil Young` gives `['Crosby, Stills, Nash & Young', 'Neil Young']`); and the KV mock sees no `get` or `put` with a `spotify:search:` key.
+
+For the handler, build the app as `album-public-summary.test.ts` does, with `spotify = { searchAlbumCandidates: vi.fn(), searchArtistCandidates: vi.fn() }`, `db = { recordReferralClick: vi.fn().mockResolvedValue(undefined) }`, `createMockKV()` from `__tests__/utils/mocks.ts` passed as `env.CACHE`, and `currentUser` settable. Tests:
 
 ```typescript
 it('redirects a matched album to its page with ref', ...)              // 302, Location '/album/<id>?ref=lastfm-mcp'
 it('redirects a matched artist to its page', ...)                     // /artist/<id>?ref=lastfm-mcp
 it('drops an unknown ref and records no click', ...)                  // ref=evil → Location has no ref; recordReferralClick not called
+it.each(['ref=lastfm-mcp&ref=evil', 'ref=evil&ref=lastfm-mcp'])('drops a repeated ref (%s)', ...)
+it('keeps base and deluxe titles apart in the cache, in either order', ...) // 'Rumours' then 'Rumours (Super Deluxe)' and the reverse each land on their own ID; a cached miss for one doesn't answer the other
+it('treats a cached ID that is not a Spotify ID as a miss', ...)      // KV holds {"id":"/\\evil.example"} → search redirect, never that Location
+it('resolves from Spotify when the KV read throws', ...)
 it('redirects a miss to the search page and caches the miss', ...)    // Location '/album?q=Jon%20Hopkins%20Nonexistent'; second request makes no Spotify call
 it('serves a cached hit without calling Spotify', ...)
 it('retries with the edition stripped before the natural query', ...) // 'OK Computer (Remastered 2009)' → second call's query is artist:"Radiohead" album:"OK Computer"
@@ -281,7 +312,9 @@ it('resolves a non-Latin artist name', ...)                           // '坂本
 it('returns 400 when artist is missing or blank', ...)
 it('returns 400 when a name is over 300 characters', ...)
 it('redirects to search and caches nothing when Spotify throws a 429', ...)
-it('still redirects when the click write rejects', ...)               // recordReferralClick rejects → 302 unchanged
+it('still redirects when the click write rejects', ...)               // recordReferralClick rejects → 302 unchanged, error logged
+it('does not wait for the click write', ...)                          // recordReferralClick returns a never-settling promise and the app.request gets an executionCtx whose waitUntil is a spy → response arrives, waitUntil received the promise
+it('records one click per request for a cache hit, a miss and a Spotify error', ...)
 it('still redirects when the KV write throws', ...)
 it('records matched, signed-in and bot flags', ...)                   // UA 'Claude-User' → isBot true; currentUser set → signedIn true
 it('sets noindex and no-store headers', ...)
@@ -291,10 +324,10 @@ In `robots.test.ts` add: `it('disallows /lookup for every crawler', () => expect
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `pnpm --filter @listentomore/web exec vitest run src/__tests__/handlers/lookup.test.ts src/__tests__/robots.test.ts`
-Expected: FAIL.
+Run: `pnpm --filter @listentomore/web exec vitest run src/__tests__/handlers/lookup.test.ts src/__tests__/services/spotify.test.ts src/__tests__/robots.test.ts`
+Expected: the new tests FAIL.
 
-- [ ] **Step 3: Implement `searchCandidates`, `handleLookup`, the route, and `Disallow: /lookup`** (in the `User-agent: *` group, after `Disallow: /api/`)
+- [ ] **Step 3: Implement the candidate methods, `CACHE_CONFIG.lookup`, `handleLookup`, the route, and `Disallow: /lookup`** (in the `User-agent: *` group, after `Disallow: /api/`)
 
 - [ ] **Step 4: Run the full web suite and typecheck**
 
@@ -304,7 +337,7 @@ Expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/pages/lookup.ts apps/web/src/index.tsx apps/web/src/robots.ts packages/services/spotify/src/index.ts apps/web/src/__tests__/handlers/lookup.test.ts apps/web/src/__tests__/robots.test.ts
+git add apps/web/src/pages/lookup.ts apps/web/src/index.tsx apps/web/src/robots.ts packages/services/spotify/src/search.ts packages/services/spotify/src/index.ts packages/config/src/cache.ts apps/web/src/__tests__/handlers/lookup.test.ts apps/web/src/__tests__/services/spotify.test.ts apps/web/src/__tests__/robots.test.ts
 git commit -m "Add /lookup route that resolves names to album and artist pages"
 ```
 
@@ -315,12 +348,12 @@ git commit -m "Add /lookup route that resolves names to album and artist pages"
 - Test: `apps/web/src/__tests__/components/ui/sign-in-cta.test.ts` (create), `apps/web/src/__tests__/handlers/album-public-summary.test.ts`, `apps/web/src/__tests__/handlers/artist-public-summary.test.ts`
 
 **Interfaces:**
-- Consumes: `parseRef`, `Ref` (Task 1).
+- Consumes: `readRef`, `Ref` (Task 1).
 - Produces:
   - `SignInCTAVariant = 'unlock' | 'personal' | 'lastfm-mcp'`.
   - `SignInCTAProps` gains `entity?: 'album' | 'artist'` (used by `'lastfm-mcp'`; defaults to `'album'`) and `signInRef?: Ref`. When `signInRef` is set, the login URL is `/login?next=<encoded path>&ref=<ref>`.
   - `SignInGateProps` gains optional `variant`, `entity` and `signInRef`, passed through to `SignInCTA`.
-  - Album and artist page props gain `signInRef?: Ref | null`; handlers set it from `parseRef(c.req.query('ref'))`.
+  - Album and artist page props gain `signInRef?: Ref | null`; handlers set it from `readRef(c.req.queries('ref'))`.
 
 **Copy for `'lastfm-mcp'` (Rian reviews the wording in the PR):**
 - Heading: `You already use Last.fm`
@@ -346,6 +379,7 @@ In the album and artist public-summary tests add:
 it('shows the Last.fm prompt in the summary slot for ?ref=lastfm-mcp with no cached summary', ...)
 it('shows the summary and the Last.fm prompt for ?ref=lastfm-mcp with a cached summary', ...)
 it('shows the default prompt for an unknown ref', ...)            // ?ref=evil → 'Sign in to unlock more'
+it('shows the default prompt for a repeated ref', ...)            // ?ref=lastfm-mcp&ref=evil
 it('shows no prompt to a signed-in visitor with ref', ...)
 it('keeps ref out of the canonical URL', ...)                       // <link rel="canonical" href="https://listentomore.com/album/<id>">
 it('shows the Last.fm prompt with the flag off', ...)               // ?ref=lastfm-mcp, flag off → 'You already use Last.fm'
@@ -376,12 +410,14 @@ git commit -m "Show a Last.fm sign-in prompt to visitors from lastfm-mcp"
 - Test: `apps/web/src/__tests__/handlers/auth-referral.test.ts` (create)
 
 **Interfaces:**
-- Consumes: `parseRef` (Task 1); `createUser({... signup_ref })` (Task 3).
-- Produces: the URL chain `/login?next=<p>&ref=lastfm-mcp` → `/auth/lastfm?next=<p>&ref=lastfm-mcp` → Last.fm `cb=<origin>/auth/lastfm/callback?next=<p>&ref=lastfm-mcp` → `createUser({ ..., signup_ref: 'lastfm-mcp' })`.
+- Consumes: `readRef` (Task 1); `createUser({... signup_ref })` (Task 3).
+- Produces:
+  - The URL chain `/login?next=<p>&ref=lastfm-mcp` → `/auth/lastfm?next=<p>&ref=lastfm-mcp` → Last.fm `cb=<origin>/auth/lastfm/callback?next=<p>&ref=lastfm-mcp` → `createUser({ ..., signup_ref: 'lastfm-mcp' })`.
+  - A hardened `isSafeRedirect(url: string): boolean` in `pages/auth/lastfm.ts` (exported for tests): true only when the value starts with a single `/`, contains no `\`, no ASCII control characters and no `//` at the start, and `new URL(url, 'https://listentomore.com').origin === 'https://listentomore.com'`. The existing check (`:17-18`) accepts `/\evil.example`, which browsers treat as `//evil.example`; this is a pre-existing open redirect in the flow this task extends.
 
 - [ ] **Step 1: Write the failing tests**
 
-Mock `fetch` for the Last.fm session call (see `__tests__/utils/mocks.ts` `setupFetchMock`) and a `db` with `getUserByLastfmUsername`, `createUser`, `updateUser` and session creation as `lastfm.ts` uses them.
+Mock `fetch` for the Last.fm session call (see `__tests__/utils/mocks.ts` `setupFetchMock`) and a `db` with `getUserByLastfmUsername`, `createUser`, `updateUser` and session creation as `lastfm.ts` uses them. Pass an `executionCtx` with a spy `waitUntil` to `app.request` (the Discord paths call `c.executionCtx.waitUntil` directly, `lastfm.ts:156`), and in every callback test assert the final `302` `Location` and that a session was created, so a handler that fails after the database calls can't pass.
 ```typescript
 it('login page forwards a known ref to /auth/lastfm', ...)          // link href contains '&ref=lastfm-mcp'
 it('login page drops an unknown ref', ...)
@@ -390,8 +426,12 @@ it('auth start forwards ref with no next', ...)                     // cb '...ca
 it('auth start drops an unknown ref', ...)
 it('callback stores signup_ref on a new user', ...)                 // createUser called with signup_ref 'lastfm-mcp'
 it('callback stores no signup_ref for an unknown ref', ...)         // signup_ref undefined
-it('callback does not write signup_ref for a returning user', ...)  // existing user → createUser not called, updateUser args have no signup_ref
+it('callback does not write signup_ref for a returning user', ...)  // existing user → createUser not called, updateUser args have no signup_ref, no Discord sign-up message
+it('callback keeps the claim notification for an existing account with login_count 0', ...) // claim message unchanged, no signup_ref, no '(via'
 it('Discord message names the referrer for a new user', ...)        // body contains '(via lastfm-mcp)'
+it.each(['ref=lastfm-mcp&ref=evil', 'ref=evil&ref=lastfm-mcp'])('drops a repeated ref at login, auth start and callback (%s)', ...)
+it.each(['/\\evil.example', '/%5Cevil.example', '//evil.example', 'https://evil.example', '/\tevil'])('rejects next=%s at auth start and callback', ...) // callback falls back to the profile URL
+it.each(['/album/6dVIqQ8qmQ5GBnJ9shOYGE', '/artist/4Z8W4fKeB5YxbusRsdQVPb?ref=lastfm-mcp'])('accepts next=%s', ...)
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -465,6 +505,8 @@ git commit -m "Add referral report script for lookup clicks and sign-ups"
 ```typescript
 it('says a lastfm-mcp link click is recorded without IP or browser details', ...)  // text contains 'lastfm-mcp' and 'not your IP address'
 it('says a new account records that it came from lastfm-mcp', ...)
+it('says looked-up names are cached to find the page again', ...)
+it('says the sign-up notification names where you came from', ...)
 it('still says the site sets no cookie if you never sign in', ...)
 ```
 
@@ -475,7 +517,11 @@ Expected: the new tests FAIL.
 
 - [ ] **Step 3: Write the copy**
 
-Plain first person, current behaviour only (2026-11-08 privacy decision). Substance: following a ListenToMore link from lastfm-mcp records the time, whether it was an album or artist, whether a match was found, whether you were signed in and whether the request looked like a bot, and nothing else (not your IP address, browser or what was looked up); if you then create an account, the account records that it came from lastfm-mcp. Inventory rows cite file:line for the writes (`pages/lookup.ts`, `pages/auth/lastfm.ts`, `packages/db/src/index.ts`) and the migration. Update the effective date to the day this is written and the existing effective-date test with it.
+Plain first person, current behaviour only (2026-11-08 privacy decision). Substance:
+- Following a ListenToMore link from lastfm-mcp adds a row to the click log with the time, whether it was an album or artist, whether a match was found, whether you were signed in and whether the request looked like a bot. That row holds nothing else: not your IP address, your browser or what was looked up. Scope this claim to the click log only; don't promise anything site-wide.
+- The artist and album names in a lookup are kept, in normalised form, as a cache key for 30 days (a day if nothing matched) so the same lookup doesn't search Spotify again, and they reach Spotify as a search, which the existing Spotify row in §3 should cover; check that it does.
+- If you then create an account, the account records that it came from lastfm-mcp, and the sign-up notification to Rian's Discord says so (update the existing Discord wording at `privacy.tsx:51` and inventory `:34`).
+Inventory rows cite file:line for each write (`pages/lookup.ts`, `pages/auth/lastfm.ts`, `packages/db/src/index.ts`) and the migration. Update the effective date to the day this is written and the existing effective-date test with it.
 
 - [ ] **Step 4: Run the full web suite and typecheck** (as Task 4 Step 4)
 
@@ -494,8 +540,9 @@ Not for an implementer subagent.
 - [ ] **Step 2: Local check.** `pnpm dev` with `.dev.vars`; in Chrome open `http://localhost:8787/lookup?artist=Radiohead&album=OK%20Computer&ref=lastfm-mcp`, signed out. Expect the album page with the Last.fm prompt, and a row in local `referral_clicks`. Follow the button to `/login` and check the `ref` in the sign-in link. Then Rian looks at the prompt and approves the copy.
 - [ ] **Step 3:** Push the branch and open the PR (Rian's go). Merge after Rian says "merge it".
 - [ ] **Step 4:** With Rian's go: `npx wrangler d1 migrations apply listentomore --remote` (from `apps/web`), then `pnpm --filter @listentomore/web run deploy`; confirm with `wrangler deployments list`.
-- [ ] **Step 5: Firewall test on production.** Request `/lookup` for each of: `Sigur Rós`, `Hermanos Gutiérrez` / `Sonido Cósmico`, `Bon Iver` / `i,i`, `Songs: Ohia`, `AC/DC`, `Guns N' Roses`, `David Bowie` / `"Heroes"`, `坂本龍一`, `Pink Floyd` / `The Dark Side of the Moon`, `Weezer` / `Pinkerton (Deluxe Edition)`, `SELECT` / `DROP TABLE`, from a browser (Chrome) or with the `Discordbot` user agent. Expect `302` for each (a miss → search page is fine). Then query Security Events for `/lookup` in the window (`firewallEventsAdaptiveGroups` via GraphQL, as in `corrections/workers-platform.md`). Any block → stop and bring options to Rian; change no firewall rule without his approval.
-- [ ] **Step 6:** `pnpm dlx tsx scripts/referral-report.ts --from <today> --to <tomorrow>` against production shows the test clicks (all flagged as bots if sent with `Discordbot`).
+- [ ] **Step 5: Resolver controls on production.** listentomore.com blocks curl and headless Chrome, so use interactive Chrome, or page requests with the `Discordbot` user agent (rate-limited, never `/api/`). Before testing, look up the expected Spotify IDs for two controls: `/lookup?artist=Radiohead&album=OK%20Computer&ref=lastfm-mcp` and `/lookup?artist=Sigur%20R%C3%B3s&ref=lastfm-mcp`. Each must redirect to its expected `/album/<id>?ref=lastfm-mcp` or `/artist/<id>?ref=lastfm-mcp` and that page must render. A search-page redirect here is a failure: it's what a broken Spotify credential would also produce.
+- [ ] **Step 6: Firewall test on production.** Request `/lookup?...&ref=lastfm-mcp` the same way for: `Sigur Rós`, `Hermanos Gutiérrez` / `Sonido Cósmico`, `Bon Iver` / `i,i`, `Songs: Ohia`, `AC/DC`, `Guns N' Roses`, `David Bowie` / `"Heroes"`, `坂本龍一`, `Pink Floyd` / `The Dark Side of the Moon`, `Weezer` / `Pinkerton (Deluxe Edition)`, `SELECT` / `DROP TABLE`. Expect a `302` from the Worker for each (a miss to the search page is fine here). Then query Security Events for `/lookup` in the window (`firewallEventsAdaptiveGroups` via GraphQL, as in `corrections/workers-platform.md`). Any block → stop and bring options to Rian; change no firewall rule without his approval.
+- [ ] **Step 7:** `pnpm dlx tsx scripts/referral-report.ts --from <today> --to <tomorrow>` against production shows one click per request from Steps 5 and 6 (`Discordbot` ones flagged as bots).
 
 ### Task 10: lastfm-mcp link line (after Task 9 passes)
 
@@ -527,7 +574,17 @@ it('encodes ampersands, slashes and quotes', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify they fail:** `npx vitest run test/utils/listentomore-link.test.ts` → FAIL.
+Then `test/mcp/tools/public-listentomore-link.test.ts`: call `registerPublicTools` (`src/mcp/server.ts:90` shows the call) with a stub server whose `registerTool(name, meta, handler)` records handlers, and a stub client whose `getAlbumInfo`/`getArtistInfo` return fixtures where Last.fm's names differ from the input (input `radiohead` / `ok computer`, response `Radiohead` / `OK Computer`).
+
+```typescript
+it('get_album_info includes one link built from the names Last.fm returned', ...) // exactly one 'listentomore.com/lookup', with artist=Radiohead&album=OK+Computer
+it('get_artist_info includes one link', ...)
+it('puts the link before the Next steps block', ...)          // indexOf(link) < indexOf('**Next steps:**')
+it('still includes the link when there is no description or bio', ...)
+it('other public tools carry no ListenToMore link', ...)      // e.g. get_track_info output has no 'listentomore.com'
+```
+
+- [ ] **Step 2: Run to verify they fail:** `npx vitest run test/utils/listentomore-link.test.ts test/mcp/tools/public-listentomore-link.test.ts` → FAIL.
 - [ ] **Step 3: Implement** with `URLSearchParams`. In `public.ts`, add the line after the `**Description:**`/`**Bio:**` block and before the sign-in note and `${nextSteps}`, using `data.album.name` with `albumArtist`, and `data.artist.name`. Nothing in `buildNextSteps`, the server instructions or other tools changes.
 - [ ] **Step 4:** `npm test`, `npm run lint`, `npm run format:check`, `npm run build` all pass. If the server snapshot changes, the only diff allowed is the version.
 - [ ] **Step 5: Commit** (`git add` the explicit paths; message `feat(tools): link album and artist results to ListenToMore`), then the version bump as its own commit (`chore(release): bump version to 2.8.0`).
@@ -537,8 +594,8 @@ it('encodes ampersands, slashes and quotes', () => {
 
 Repo `~/git/elezea.com`, new branch `fix/listentomore-slug-links` from up-to-date `main`. Read its `AGENTS.md` first. A push to `main` deploys production.
 
-- [ ] **Step 1:** List the 17 links: `/usr/bin/grep -n -o 'listentomore.com/album/[^)"]*_[^)" ]*' src/content/posts/my-2024-in-music.md src/content/posts/the-cure-deliver-the-power-doom-epic-weve-been-waiting-for.md`. Expected: 16 + 1.
+- [ ] **Step 1:** List the links: `/usr/bin/grep -n -o 'listentomore.com/album/[^)"]*_[^)" ]*' src/content/posts/my-2024-in-music.md src/content/posts/the-cure-deliver-the-power-doom-epic-weve-been-waiting-for.md`. Expected: 18 occurrences (17 + 1) covering 17 unique albums; line 94 of the 2024 post holds two, and the Cure album appears in both posts.
 - [ ] **Step 2:** For each, write the artist and album names by hand from the post text, resolve them through production `/lookup` (Chrome) or a scratchpad script using listentomore's Spotify credentials, and record slug → Spotify ID → Spotify album name in a table in the session scratchpad.
 - [ ] **Step 3:** Rian checks the table. Any row that didn't resolve or looks wrong gets an ID he picks.
-- [ ] **Step 4:** Replace each link with `https://listentomore.com/album/<spotifyId>`; grep again expecting 0 slug links; `npm run check`, `npm test`, `npm run build:prod` pass.
+- [ ] **Step 4:** Replace all 18 occurrences with `https://listentomore.com/album/<spotifyId>`; grep again expecting 0 slug links; `npm run check`, `npm test`, `npm run build:prod` pass.
 - [ ] **Step 5 (gated):** commit by explicit path, push, open the PR; Rian merges.
