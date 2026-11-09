@@ -63,7 +63,7 @@ Full programmatic access to music discovery features. Rate-limited with tiered a
 
 The application follows a **progressive loading** pattern:
 1. Pages render instantly with basic data from Spotify (~300ms)
-2. AI summaries and additional data stream in via client-side JavaScript
+2. Cached AI summaries render in the page; new summaries (for signed-in visitors) and additional data stream in via client-side JavaScript
 3. Links are progressively enriched with direct Spotify IDs
 
 All pages are **server-side rendered** - no client-side frameworks, just vanilla JS for progressive enhancement.

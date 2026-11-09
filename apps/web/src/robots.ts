@@ -1,6 +1,8 @@
 // ABOUTME: robots.txt for listentomore.com: every crawler may read pages but not /api/,
 // ABOUTME: and AI training crawlers are kept out entirely. Mirrors the zone's AI-training setting.
 
+import { SITE_CONFIG } from '@listentomore/config';
+
 // Crawlers that collect pages to train models. Search crawlers (OAI-SearchBot,
 // Claude-SearchBot, PerplexityBot) and user-triggered fetchers (ChatGPT-User,
 // Claude-User, Perplexity-User) are deliberately absent: blocking them would stop
@@ -16,9 +18,8 @@ export const TRAINING_CRAWLERS = [
   'Bytespider',
 ] as const;
 
-// No Sitemap line until the site publishes one; a Sitemap pointing at a 404
-// wastes crawl requests. No Crawl-delay: Google ignores it, and the zone's
-// rate limit protects the upstream APIs.
+// The Sitemap line points at /sitemap.xml (sitemap.ts). No Crawl-delay: Google
+// ignores it, and the zone's rate limit protects the upstream APIs.
 export const ROBOTS_TXT = `# ListenToMore robots.txt
 User-agent: *
 Allow: /
@@ -27,4 +28,6 @@ Disallow: /api/
 # AI training crawlers
 ${TRAINING_CRAWLERS.map((agent) => `User-agent: ${agent}`).join('\n')}
 Disallow: /
+
+Sitemap: ${SITE_CONFIG.url}/sitemap.xml
 `;

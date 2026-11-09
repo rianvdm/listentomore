@@ -2,8 +2,10 @@
 // ABOUTME: Both take a Spotify album ID and resolve the names server-side, so free text never travels in the URL.
 
 import { Hono } from 'hono';
+import { aiCacheKey } from '@listentomore/ai';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
+import { recordEntityPage } from './entity-pages';
 import { resolveSpotifyAlbum } from './spotify-lookup';
 
 const app = new Hono<InternalAppContext>();
@@ -13,11 +15,16 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
   if (!resolved.ok) {
     return resolved.response;
   }
-  const { artist, name, releaseYear } = resolved.value;
+  const { spotifyId, artist, name, releaseYear } = resolved.value;
 
   try {
     const ai = c.get('ai');
     const result = await ai.getAlbumDetail(artist, name, releaseYear);
+    recordEntityPage(c, {
+      cacheKey: aiCacheKey('albumDetail', artist, name),
+      type: 'album',
+      path: `/album/${spotifyId}`,
+    });
     return c.json({ data: result });
   } catch (error) {
     console.error('Internal album summary error:', error);

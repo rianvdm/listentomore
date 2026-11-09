@@ -28,7 +28,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AIService, isCacheableResponse } from '@listentomore/ai';
+import { AIService, FALLBACK_RESPONSE_PATTERN, isCacheableResponse } from '@listentomore/ai';
 import type {
   ChatClient,
   CommonChatResponse,
@@ -153,9 +153,6 @@ const SELF_CORRECTION_PATTERN = /\b(Correction|final answer|final:|Actually,|Let
 // Well over the prompt's 38-word cap, so a slightly long sentence still
 // passes but a doubled draft does not.
 const ARTIST_SENTENCE_MAX_WORDS = 60;
-
-const FALLBACK_PATTERN =
-  /^(Not enough information available|There is no information available)/i;
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = join(SCRIPT_DIR, '..');
@@ -479,7 +476,7 @@ function scoreRecord(input: ScoringInput): string[] {
   const { task, content } = input;
   const violations: string[] = [];
 
-  if (FALLBACK_PATTERN.test(content.trim())) {
+  if (FALLBACK_RESPONSE_PATTERN.test(content.trim())) {
     violations.push('fallback: model said there is not enough information');
   }
 

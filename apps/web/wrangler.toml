@@ -62,6 +62,10 @@ new_sqlite_classes = ["MusicBrainzRateLimiterDO"]
 # For preview deployments, add [env.preview.vars] below if needed.
 [vars]
 ENVIRONMENT = "production"
+# Renders already-cached AI summaries for every visitor and lists those pages in
+# /sitemap.xml. Any value other than "true" restores the signed-in-only gating.
+# See docs/feature-gating.md ("Public when cached").
+PUBLIC_CACHED_SUMMARIES = "true"
 
 # Scheduled triggers (CRON jobs)
 [triggers]

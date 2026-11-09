@@ -40,6 +40,7 @@ import { handleUserLikes } from './pages/user/likes';
 import { handleUserInsights } from './pages/user/insights';
 import { handleStatsLookup } from './pages/stats/entry';
 import { ROBOTS_TXT } from './robots';
+import { handleSitemap } from './sitemap';
 import { handleLogin } from './pages/auth/login';
 import { handleLastfmAuth, handleLastfmCallback, handleLogout } from './pages/auth/lastfm';
 import { handleAccount, handleAccountProfile, handleAccountPrivacy, handleAccountDelete } from './pages/account';
@@ -225,6 +226,9 @@ app.get('/robots.txt', (c) => {
     'Cache-Control': 'public, max-age=86400',
   });
 });
+
+// sitemap.xml - static pages plus pages with a cached AI summary; see sitemap.ts
+app.get('/sitemap.xml', handleSitemap);
 
 // Home page - different experience for logged-in vs logged-out users
 app.get('/', async (c) => {

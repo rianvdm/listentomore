@@ -10,12 +10,16 @@ import type { InternalAppContext } from '../../types';
 export type LookupResult<T> = { ok: true; value: T } | { ok: false; response: Response };
 
 export type ResolvedAlbum = {
+  /** The validated ?spotifyId= value, which is also the album page's URL ID. */
+  spotifyId: string;
   artist: string;
   name: string;
   releaseYear: number | undefined;
 };
 
 export type ResolvedArtist = {
+  /** The validated ?spotifyId= value, which is also the artist page's URL ID. */
+  spotifyId: string;
   name: string;
 };
 
@@ -63,6 +67,7 @@ export async function resolveSpotifyAlbum(c: Context<InternalAppContext>): Promi
     return {
       ok: true,
       value: {
+        spotifyId: read.value,
         artist: album.artist,
         name: album.name,
         releaseYear: Number.isFinite(year) ? year : undefined,
@@ -87,7 +92,7 @@ export async function resolveSpotifyArtist(c: Context<InternalAppContext>): Prom
     if (!artist) {
       return { ok: false, response: c.json({ error: 'Spotify artist not found' }, 404) };
     }
-    return { ok: true, value: { name: artist.name } };
+    return { ok: true, value: { spotifyId: read.value, name: artist.name } };
   } catch (error) {
     return { ok: false, response: lookupFailure(c, 'artist', error) };
   }

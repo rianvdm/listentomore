@@ -1,10 +1,12 @@
-// Internal artist API routes for progressive loading
+// ABOUTME: Internal artist routes for progressive loading: the AI summary (signed-in only), Last.fm data
+// ABOUTME: and the one-line artist sentence. The summary route also records the artist's page for the sitemap.
 
 import { Hono } from 'hono';
-import { RegionUnsupportedError } from '@listentomore/ai';
+import { aiCacheKey, RegionUnsupportedError } from '@listentomore/ai';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
 import { getCurrentUser } from '../../middleware/session';
+import { recordEntityPage } from './entity-pages';
 import { resolveSpotifyArtist } from './spotify-lookup';
 
 const app = new Hono<InternalAppContext>();
@@ -15,10 +17,16 @@ app.get('/artist-summary', requireSessionAuth, async (c) => {
   if (!resolved.ok) {
     return resolved.response;
   }
+  const { spotifyId, name } = resolved.value;
 
   try {
     const ai = c.get('ai');
-    const result = await ai.getArtistSummary(resolved.value.name);
+    const result = await ai.getArtistSummary(name);
+    recordEntityPage(c, {
+      cacheKey: aiCacheKey('artistSummary', name),
+      type: 'artist',
+      path: `/artist/${spotifyId}`,
+    });
     return c.json({ data: result });
   } catch (error) {
     console.error('Internal artist summary error:', error);

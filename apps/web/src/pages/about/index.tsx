@@ -175,7 +175,7 @@ export function AboutPage({ currentUser }: AboutPageProps) {
       </section>
 
       <section>
-        <h2>How it's built</h2>
+        <h2 id="how-its-built">How it's built</h2>
         <p>
           The whole site is one Cloudflare{' '}
           <ExternalLink href="https://developers.cloudflare.com/workers/">Worker</ExternalLink>{' '}

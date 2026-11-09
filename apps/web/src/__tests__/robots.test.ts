@@ -83,9 +83,13 @@ describe('robots.txt', () => {
     }
   });
 
-  it('drops Crawl-delay, retired Anthropic names and the sitemap line', () => {
+  it('points crawlers at the sitemap', () => {
+    expect(ROBOTS_TXT).toContain('\nSitemap: https://listentomore.com/sitemap.xml\n');
+    expect(directives.filter((d) => d === 'sitemap')).toHaveLength(1);
+  });
+
+  it('drops Crawl-delay and retired Anthropic names', () => {
     expect(directives).not.toContain('crawl-delay');
-    expect(directives).not.toContain('sitemap');
     const agents = groups.flatMap((g) => g.agents);
     expect(agents).not.toContain('anthropic-ai');
     expect(agents).not.toContain('claude-web');

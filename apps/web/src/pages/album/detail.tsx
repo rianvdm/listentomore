@@ -1,14 +1,16 @@
-// Album detail page component
-// Loads basic data immediately, then progressively loads AI summary and streaming links
+// ABOUTME: Album detail page: Spotify data renders immediately, streaming links and AI content load progressively.
+// ABOUTME: With PUBLIC_CACHED_SUMMARIES on, cached AI summary and recommendations are server-rendered for every visitor.
 
 import type { Context } from 'hono';
+import type { AIService } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import { isSpotifyId } from '@listentomore/shared';
 import { SpotifyNotFoundError } from '@listentomore/spotify';
 import type { SpotifyService } from '@listentomore/spotify';
 import { Layout } from '../../components/layout';
-import { NotFoundPage, RateLimitedPage, SignInGate } from '../../components/ui';
-import { enrichLinksScript } from '../../utils/client-scripts';
+import { AiSummaryLabel, NotFoundPage, RateLimitedPage, SignInCTA, SignInGate } from '../../components/ui';
+import { aiContentClientScript, enrichLinksScript } from '../../utils/client-scripts';
+import { loadPublicSummary, publicSummariesEnabled } from '../../utils/public-summaries';
 
 interface AlbumData {
   id: string;
@@ -26,9 +28,54 @@ interface AlbumDetailProps {
   error?: string;
   internalToken?: string;
   currentUser?: User | null;
+  // Sanitised HTML from cached AI content; null when the flag is off, the cache misses, or the reply is a fallback.
+  summaryHtml?: string | null;
+  recommendationsHtml?: string | null;
+  // PUBLIC_CACHED_SUMMARIES is on; the client script labels content it fetches only then.
+  publicSummaries?: boolean;
 }
 
-export function AlbumDetailPage({ album, error, internalToken, currentUser }: AlbumDetailProps) {
+// Server-rendered cached content when present, otherwise the placeholder the client script replaces.
+function AlbumSummarySection({ html }: { html?: string | null }) {
+  return (
+    <div id="ai-summary" class="ai-summary">
+      {html ? (
+        <>
+          <AiSummaryLabel />
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </>
+      ) : (
+        <p class="text-muted">Loading AI summary...</p>
+      )}
+    </div>
+  );
+}
+
+function AlbumRecommendationsSection({ html }: { html?: string | null }) {
+  return (
+    <div id="album-recommendations" class="ai-summary" style={{ marginTop: '2rem' }}>
+      <h3>Album Recommendations</h3>
+      {html ? (
+        <>
+          <AiSummaryLabel />
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </>
+      ) : (
+        <p class="text-muted">Loading recommendations...</p>
+      )}
+    </div>
+  );
+}
+
+export function AlbumDetailPage({
+  album,
+  error,
+  internalToken,
+  currentUser,
+  summaryHtml,
+  recommendationsHtml,
+  publicSummaries = false,
+}: AlbumDetailProps) {
   if (error || !album) {
     return (
       <Layout title="Album Not Found" currentUser={currentUser}>
@@ -47,6 +94,9 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
   }
 
   const albumImage = album.image || 'https://file.elezea.com/noun-no-image.png';
+  const currentPath = `/album/${album.id}`;
+  const summaryRendered = Boolean(summaryHtml);
+  const recommendationsRendered = Boolean(recommendationsHtml);
 
   return (
     <Layout
@@ -113,23 +163,29 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
             </div>
           </div>
 
-          {/* AI Summary + Recommendations - gated behind login */}
-          <SignInGate currentUser={currentUser ?? null} currentPath={`/album/${album.id}`}>
-            <div id="ai-summary" class="ai-summary">
-              <p class="text-muted">Loading AI summary...</p>
-            </div>
-
-            <div id="album-recommendations" class="ai-summary" style={{ marginTop: '2rem' }}>
-              <h3>Album Recommendations</h3>
-              <p class="text-muted">Loading recommendations...</p>
-            </div>
-          </SignInGate>
+          {/* AI Summary + Recommendations: cached content is public; generating it needs a login */}
+          {!currentUser && (summaryRendered || recommendationsRendered) ? (
+            <>
+              {summaryRendered && <AlbumSummarySection html={summaryHtml} />}
+              {recommendationsRendered && <AlbumRecommendationsSection html={recommendationsHtml} />}
+              <SignInCTA currentPath={currentPath} variant="personal" />
+            </>
+          ) : (
+            <SignInGate currentUser={currentUser ?? null} currentPath={currentPath}>
+              <AlbumSummarySection html={summaryHtml} />
+              <AlbumRecommendationsSection html={recommendationsHtml} />
+            </SignInGate>
+          )}
         </section>
       </main>
 
       {/* Progressive loading script */}
       <script dangerouslySetInnerHTML={{ __html: `
         ${enrichLinksScript}
+        ${aiContentClientScript(publicSummaries)}
+
+        window.__AI_SUMMARY_RENDERED__ = ${summaryRendered};
+        window.__AI_RECS_RENDERED__ = ${recommendationsRendered};
 
         (function() {
           var albumId = ${JSON.stringify(album.id)};
@@ -154,9 +210,13 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
               document.getElementById('streaming-links').innerHTML = '<a href="' + spotifyUrl + '" target="_blank" rel="noopener noreferrer">Spotify ↗</a>';
             });
 
-          // AI features - only fetch for authenticated users
-          if (window.__IS_AUTHENTICATED__) {
-            // Fetch AI summary
+          // Server-rendered recommendations still need their search links enriched
+          if (window.__AI_RECS_RENDERED__) {
+            enrichLinks('album-recommendations');
+          }
+
+          // AI features - only fetch for authenticated users, and only what the server didn't render
+          if (window.__IS_AUTHENTICATED__ && !window.__AI_SUMMARY_RENDERED__) {
             internalFetch('/api/internal/album-summary' + aiQuery, { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -165,15 +225,21 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
               .then(function(data) {
                 if (data.error) throw new Error(data.error);
                 var summary = data.data;
-                var html = '<div>' + marked.parse(summary.content) + '</div>';
+                // The model's "no information" reply is not a summary, so it gets no label
+                if (isAiFallback(summary.content)) {
+                  document.getElementById('ai-summary').innerHTML = '<p class="text-muted">AI summary not available for this album.</p>';
+                  return;
+                }
+                var html = aiSummaryLabel + '<div>' + marked.parse(summary.content) + '</div>';
                 document.getElementById('ai-summary').innerHTML = html;
               })
               .catch(function(e) {
                 console.error('Album summary error:', e);
                 document.getElementById('ai-summary').innerHTML = '<p class="text-muted">Unable to load AI summary.</p>';
               });
+          }
 
-            // Fetch album recommendations
+          if (window.__IS_AUTHENTICATED__ && !window.__AI_RECS_RENDERED__) {
             internalFetch('/api/internal/album-recommendations' + aiQuery, { cache: 'no-store' })
               .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -182,12 +248,13 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
               .then(function(data) {
                 if (data.error) throw new Error(data.error);
                 var recommendations = data.data;
-                // Check if no info available
-                if (recommendations.content.includes('Not enough information available')) {
+                // The model's "no information" reply, in any case
+                if (isAiFallback(recommendations.content)) {
                   document.getElementById('album-recommendations').innerHTML = '<h3>Album Recommendations</h3><p class="text-muted">Recommendations not available for this album.</p>';
                   return;
                 }
                 var html = '<h3>Album Recommendations</h3>';
+                html += aiSummaryLabel;
                 html += '<div>' + marked.parse(recommendations.content) + '</div>';
                 document.getElementById('album-recommendations').innerHTML = html;
                 // Enrich links: search links -> direct Spotify ID links
@@ -204,7 +271,7 @@ export function AlbumDetailPage({ album, error, internalToken, currentUser }: Al
   );
 }
 
-// Route handler - now only fetches Spotify data (fast)
+// Route handler: Spotify data, plus cached AI content when public summaries are on (never a model call)
 export async function handleAlbumDetail(c: Context) {
   const spotifyId = c.req.param('id');
 
@@ -231,7 +298,31 @@ export async function handleAlbumDetail(c: Context) {
       spotifyUrl: albumData.url,
     };
 
-    return c.html(<AlbumDetailPage album={album} internalToken={internalToken} currentUser={currentUser} />);
+    // Same names resolveSpotifyAlbum passes to the generators, so the reads hit the keys they wrote.
+    const publicSummaries = publicSummariesEnabled(c.env);
+    let summaryHtml: string | null = null;
+    let recommendationsHtml: string | null = null;
+    if (publicSummaries) {
+      const ai = c.get('ai') as AIService;
+      [summaryHtml, recommendationsHtml] = await Promise.all([
+        loadPublicSummary(() => ai.getCachedAlbumDetail(albumData.artist, albumData.name), 'album'),
+        loadPublicSummary(
+          () => ai.getCachedAlbumRecommendations(albumData.artist, albumData.name),
+          'album recommendations'
+        ),
+      ]);
+    }
+
+    return c.html(
+      <AlbumDetailPage
+        album={album}
+        internalToken={internalToken}
+        currentUser={currentUser}
+        summaryHtml={summaryHtml}
+        recommendationsHtml={recommendationsHtml}
+        publicSummaries={publicSummaries}
+      />
+    );
   } catch (error) {
     // A well-formed ID Spotify doesn't know; 404 so crawlers don't index a soft 404.
     if (error instanceof SpotifyNotFoundError) {
