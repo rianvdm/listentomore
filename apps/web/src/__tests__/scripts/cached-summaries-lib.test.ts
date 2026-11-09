@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   auditFlags,
   cacheNamespaceId,
+  classifyRefreshValue,
   entityPageInsert,
   parseSummaryKey,
   pickSpotifyMatch,
@@ -160,6 +161,45 @@ describe('summaryText', () => {
     expect(summaryText('albumDetail', { content: 42 })).toBeNull();
     expect(summaryText('albumDetail', null)).toBeNull();
     expect(summaryText('albumDetail', 'plain string')).toBeNull();
+  });
+});
+
+describe('classifyRefreshValue', () => {
+  const KEY = 'ai:albumDetail:radiohead:ok computer';
+
+  it('refreshes a normal value, writing back the parsed JSON', () => {
+    const raw = JSON.stringify({ content: CLEAN_SUMMARY });
+
+    expect(classifyRefreshValue('albumDetail', KEY, raw)).toEqual({ outcome: 'refresh', body: raw });
+  });
+
+  it('reads the artist summary field', () => {
+    const raw = JSON.stringify({ summary: CLEAN_SUMMARY });
+
+    expect(classifyRefreshValue('artistSummary', 'ai:artistSummary:radiohead', raw).outcome).toBe('refresh');
+  });
+
+  it('fails a value that is not JSON', () => {
+    expect(classifyRefreshValue('albumDetail', KEY, '{"content": "cut off')).toEqual({
+      outcome: 'failed',
+      reason: 'not valid JSON',
+    });
+  });
+
+  it('fails a value without its text field', () => {
+    expect(classifyRefreshValue('artistSummary', 'ai:artistSummary:radiohead', '{"content":"wrong field"}')).toEqual({
+      outcome: 'failed',
+      reason: 'missing its text field',
+    });
+    expect(classifyRefreshValue('albumDetail', KEY, 'null').outcome).toBe('failed');
+  });
+
+  it('fails a value whose text is empty or whitespace', () => {
+    expect(classifyRefreshValue('albumDetail', KEY, '{"content":""}')).toEqual({
+      outcome: 'failed',
+      reason: 'empty text',
+    });
+    expect(classifyRefreshValue('albumDetail', KEY, '{"content":"  \\n "}').outcome).toBe('failed');
   });
 });
 

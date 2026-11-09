@@ -14,6 +14,8 @@
 // every other albumDetail, albumRecommendations, artistSummary and
 // genreSummary entry with its current value and a fresh TTL from
 // getCacheTtlSeconds(task). Without --yes it only prints what it would do.
+// An entry that is not JSON, lacks its text field or has empty text counts as
+// failed, and any failure makes the run exit non-zero.
 // A list of flagged keys to edit into an approve file:
 //   jq '[.[] | select(.flags | length > 0) | .key]' eval-output/cached-summaries-audit.json
 //
@@ -33,13 +35,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { aiCacheKey, isCacheableResponse } from '@listentomore/ai';
+import { aiCacheKey } from '@listentomore/ai';
 import { getCacheTtlSeconds } from '@listentomore/config';
 import type { EntityPageType } from '@listentomore/db';
 import {
   SUMMARY_TASKS,
   auditFlags,
   cacheNamespaceId,
+  classifyRefreshValue,
   entityPageInsert,
   parseSummaryKey,
   pickSpotifyMatch,
@@ -164,8 +167,12 @@ async function kvList(nsId: string, prefix: string): Promise<KeyEntry[]> {
  * wrangler fails (a 404 for a key that expired since listing, or a network
  * error), because wrangler prints its error text to stdout as well.
  */
+async function kvGetText(nsId: string, key: string): Promise<string> {
+  return wrangler(['kv', 'key', 'get', key, '--namespace-id', nsId, '--remote', '--text']);
+}
+
 async function kvGetJson(nsId: string, key: string): Promise<unknown> {
-  const stdout = await wrangler(['kv', 'key', 'get', key, '--namespace-id', nsId, '--remote', '--text']);
+  const stdout = await kvGetText(nsId, key);
   try {
     return JSON.parse(stdout);
   } catch {
@@ -336,14 +343,16 @@ async function refresh(nsId: string, approvePath: string, yes: boolean): Promise
 
   const results = await mapLimit(toRefresh, CONCURRENCY, async ({ name, task }): Promise<'refreshed' | 'skipped' | 'failed'> => {
     try {
-      const value = await kvGetJson(nsId, name);
-      const text = summaryText(task, value);
-      // A refresh is a cache write, so it obeys the same rule as the app.
-      if (text === null || !isCacheableResponse(text, undefined, task, name)) {
-        console.log(`[refresh] skipped (not JSON, missing its text field, or empty; left to expire): ${name}`);
+      const decision = classifyRefreshValue(task, name, await kvGetText(nsId, name));
+      if (decision.outcome === 'failed') {
+        console.error(`[refresh] failed ${name}: ${decision.reason}`);
+        return 'failed';
+      }
+      if (decision.outcome === 'skipped') {
+        console.log(`[refresh] skipped (${decision.reason}; left to expire): ${name}`);
         return 'skipped';
       }
-      await kvPut(nsId, name, JSON.stringify(value), getCacheTtlSeconds(task));
+      await kvPut(nsId, name, decision.body, getCacheTtlSeconds(task));
       console.log(`[refresh] refreshed ${name}`);
       return 'refreshed';
     } catch (error) {

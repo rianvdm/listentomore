@@ -1,7 +1,7 @@
-// ABOUTME: Pure helpers for scripts/cached-summaries.ts: audit flags for cached AI summaries, Spotify
-// ABOUTME: exact-name matching, summary cache key parsing, wrangler.toml lookup and backfill SQL.
+// ABOUTME: Pure helpers for scripts/cached-summaries.ts: audit flags and refresh outcomes for cached AI
+// ABOUTME: summaries, Spotify exact-name matching, cache key parsing, wrangler.toml lookup and backfill SQL.
 
-import { FALLBACK_RESPONSE_PATTERN } from '@listentomore/ai';
+import { FALLBACK_RESPONSE_PATTERN, isCacheableResponse } from '@listentomore/ai';
 import type { EntityPageType } from '@listentomore/db';
 
 export type SummaryTask = 'albumDetail' | 'artistSummary' | 'genreSummary' | 'albumRecommendations';
@@ -124,6 +124,33 @@ export function summaryText(task: SummaryTask, value: unknown): string | null {
   const field = task === 'artistSummary' ? 'summary' : 'content';
   const text = (value as Record<string, unknown>)[field];
   return typeof text === 'string' ? text : null;
+}
+
+export type RefreshDecision =
+  | { outcome: 'refresh'; body: string }
+  | { outcome: 'skipped'; reason: string }
+  | { outcome: 'failed'; reason: string };
+
+/**
+ * What the refresh does with one stored value, given its raw KV text. A value the app could not
+ * have written (not JSON, no text field, empty text) is 'failed', so the run exits non-zero instead
+ * of reporting success while an approved summary was never refreshed. 'skipped' is reserved for
+ * isCacheableResponse refusing the text: a refresh is a cache write, so it obeys the app's rule.
+ */
+export function classifyRefreshValue(task: SummaryTask, key: string, raw: string): RefreshDecision {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { outcome: 'failed', reason: 'not valid JSON' };
+  }
+  const text = summaryText(task, value);
+  if (text === null) return { outcome: 'failed', reason: 'missing its text field' };
+  if (text.trim() === '') return { outcome: 'failed', reason: 'empty text' };
+  if (!isCacheableResponse(text, undefined, task, key)) {
+    return { outcome: 'skipped', reason: 'refused by isCacheableResponse' };
+  }
+  return { outcome: 'refresh', body: JSON.stringify(value) };
 }
 
 /**
