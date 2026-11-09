@@ -63,9 +63,22 @@ app.get('/album-summary', requireSessionAuth, async (c) => {
 
 The album and artist AI routes take `?spotifyId=` and resolve names server-side via `api/internal/spotify-lookup.ts` (normally a KV cache hit, since the page already fetched the entity). Do not put artist or album names in these URLs: the zone WAF's managed rules read titles such as `I'm Like a Virgin...` (quote followed by `LIKE`) as SQL injection and challenge the request, which a background fetch can never pass.
 
+## Public When Cached
+
+Album, artist and genre pages show an AI summary to every visitor when one is already cached. Generating a summary still needs a sign-in. This covers four AI tasks: `albumDetail`, `artistSummary`, `genreSummary` and `albumRecommendations`.
+
+- **Anonymous requests never trigger generation.** Page handlers read the cache with the read-only `AIService` methods (`getCachedAlbumDetail`, `getCachedAlbumRecommendations`, `getCachedArtistSummary`, `getCachedGenreSummary`), which return `null` on a miss or a KV error and never call a model. The internal AI routes that generate keep `requireSessionAuth`, and the client script fetches them only when `window.__IS_AUTHENTICATED__` is set and the server rendered nothing.
+- **Output is sanitised.** Cached Markdown goes through `renderPublicSummary` (`apps/web/src/utils/public-summaries.ts`). It escapes raw HTML except site-relative album links, drops unsafe link URLs, renders images as alt text, and refuses empty and "Not enough information available" replies, which leaves the page as it is on a miss.
+- **On a hit**, logged-out visitors see the summary with an "AI-written summary" label and, below it, a sign-in prompt for personal features (`SignInCTA variant="personal"`). Signed-in visitors get the same server-rendered summary. **On a miss**, logged-out visitors see the usual `<SignInGate>` prompt and signed-in visitors get the progressive fetch.
+- **Sitemap.** `/sitemap.xml` (`apps/web/src/sitemap.ts`) lists the static pages, plus album and artist pages whose `albumDetail` or `artistSummary` key is live in KV and has a row in the D1 `entity_pages` table (migration 009), plus curated genres (`isCuratedGenre`) with a cached `genreSummary`. Other genres keep `noindex` and stay out. The signed-in album and artist summary routes write the `entity_pages` rows; `apps/web/scripts/cached-summaries.ts backfill` maps entries cached before the table existed.
+- **Flag.** All of this runs only when `PUBLIC_CACHED_SUMMARIES` is exactly `"true"` (`[vars]` in `apps/web/wrangler.toml`). To revert, set it to anything else and deploy: pages go back to sign-in-only summaries and the sitemap lists the static pages only. No code change is needed.
+
 ## Currently Gated
 
 ### Gated (AI-powered, costly)
+
+Generation stays behind sign-in. With `PUBLIC_CACHED_SUMMARIES` on, album, artist and genre pages also show already-cached output from the first four routes to everyone (see "Public When Cached").
+
 - `/api/internal/album-summary`
 - `/api/internal/album-recommendations`
 - `/api/internal/artist-summary`
