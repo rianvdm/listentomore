@@ -39,6 +39,7 @@ import { handleUserStats } from './pages/user/stats';
 import { handleUserLikes } from './pages/user/likes';
 import { handleUserInsights } from './pages/user/insights';
 import { handleStatsLookup } from './pages/stats/entry';
+import { handleLookup } from './pages/lookup';
 import { ROBOTS_TXT } from './robots';
 import { handleSitemap } from './sitemap';
 import { handleLogin } from './pages/auth/login';
@@ -651,6 +652,9 @@ app.get('/', async (c) => {
 // Album routes
 app.get('/album', handleAlbumSearch);
 app.get('/album/:id', handleAlbumDetail);
+
+// Name-based lookup (lastfm-mcp links): redirects to an album or artist page, or to search
+app.get('/lookup', handleLookup);
 
 // Artist routes
 app.get('/artist', handleArtistSearch);

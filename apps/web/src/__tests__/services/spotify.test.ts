@@ -332,6 +332,102 @@ describe('SpotifySearch', () => {
     });
   });
 
+  describe('lookup candidates', () => {
+    const albumItem = (id: string, name: string, artists: string[], albumType = 'album') => ({
+      id,
+      name,
+      album_type: albumType,
+      artists: artists.map((artistName, index) => ({ name: artistName, id: `artist${index}` })),
+      release_date: '1970-03-11',
+      total_tracks: 10,
+      external_urls: { spotify: `https://open.spotify.com/album/${id}` },
+      images: [],
+    });
+
+    function expectNoSearchCache() {
+      const keys = [
+        ...vi.mocked(mockKV.get).mock.calls.map((call) => call[0]),
+        ...vi.mocked(mockKV.put).mock.calls.map((call) => call[0]),
+      ];
+      expect(keys.filter((key) => String(key).startsWith('spotify:search:'))).toEqual([]);
+    }
+
+    it('returns album candidates with each artist kept whole, at the given limit, without the search cache', async () => {
+      const fetchMock = setupFetchMock([
+        {
+          pattern: /api\.spotify\.com\/v1\/search.*type=album/,
+          response: {
+            albums: {
+              items: [albumItem('4fRCaQeKCxKN8u6aWmy7Gz', 'Déjà Vu', ['Crosby, Stills, Nash & Young', 'Neil Young'])],
+            },
+          },
+        },
+      ]);
+
+      const result = await search.searchAlbumCandidates('artist:"Neil Young" album:"Deja Vu"', 10);
+
+      expect(result).toEqual([
+        { id: '4fRCaQeKCxKN8u6aWmy7Gz', name: 'Déjà Vu', artists: ['Crosby, Stills, Nash & Young', 'Neil Young'] },
+      ]);
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain('limit=10');
+      expect(url).toContain(`q=${encodeURIComponent('artist:"Neil Young" album:"Deja Vu"')}`);
+      expectNoSearchCache();
+    });
+
+    it('lists full albums before singles and EPs with the same title', async () => {
+      setupFetchMock([
+        {
+          pattern: /api\.spotify\.com\/v1\/search.*type=album/,
+          response: {
+            albums: {
+              items: [
+                albumItem('1yAwtBaoHLEDWAnWR87hBT', 'Hounds of Love', ['Kate Bush'], 'single'),
+                albumItem('1jWUM2ITjmLX8cHSSCzpzP', 'Hounds of Love', ['Kate Bush'], 'album'),
+              ],
+            },
+          },
+        },
+      ]);
+
+      const result = await search.searchAlbumCandidates('Kate Bush Hounds of Love', 10);
+
+      expect(result.map((candidate) => candidate.id)).toEqual(['1jWUM2ITjmLX8cHSSCzpzP', '1yAwtBaoHLEDWAnWR87hBT']);
+    });
+
+    it('returns artist candidates at the given limit without the search cache', async () => {
+      const fetchMock = setupFetchMock([
+        {
+          pattern: /api\.spotify\.com\/v1\/search.*type=artist/,
+          response: {
+            artists: {
+              items: [
+                {
+                  id: '4Z8W4fKeB5YxbusRsdQVPb',
+                  name: 'Radiohead',
+                  external_urls: { spotify: 'https://open.spotify.com/artist/4Z8W4fKeB5YxbusRsdQVPb' },
+                  images: [],
+                },
+              ],
+            },
+          },
+        },
+      ]);
+
+      const result = await search.searchArtistCandidates('Radiohead', 7);
+
+      expect(result).toEqual([{ id: '4Z8W4fKeB5YxbusRsdQVPb', name: 'Radiohead' }]);
+      expect(String(fetchMock.mock.calls[0][0])).toContain('limit=7');
+      expectNoSearchCache();
+    });
+
+    it('throws when Spotify rejects the search', async () => {
+      setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/search/, response: {}, options: { status: 500, ok: false } }]);
+
+      await expect(search.searchArtistCandidates('Radiohead', 10)).rejects.toThrow('Spotify search failed: 500');
+    });
+  });
+
   describe('searchTrack', () => {
     it('searches for tracks and returns first result', async () => {
       const trackSearchResponse = {

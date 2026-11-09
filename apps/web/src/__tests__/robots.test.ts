@@ -58,6 +58,11 @@ describe('robots.txt', () => {
     }
   });
 
+  it('disallows /lookup for every crawler', () => {
+    expect(ROBOTS_TXT).toMatch(/User-agent: \*[\s\S]*Disallow: \/lookup/);
+    expect(groupFor(groups, 'SomeNewBot')?.disallow).toContain('/lookup');
+  });
+
   it('lets search and user-triggered AI fetchers crawl pages', () => {
     const fetchers = [
       'Googlebot',
