@@ -47,6 +47,22 @@ function isEditionSegment(segment: string): boolean {
   return words.length > 0 && words.every((word) => NUMBER_OR_ORDINAL.test(word) || EDITION_WORDS.has(word));
 }
 
+/**
+ * Index of the last " - " that sits outside any (...) or [...] group, or -1. A dash inside
+ * a group, as in "Live (London - 1991)", is part of protected title text, not a suffix.
+ */
+function lastTopLevelDash(title: string): number {
+  let depth = 0;
+  let found = -1;
+  for (let i = 0; i < title.length; i++) {
+    const char = title[i];
+    if (char === '(' || char === '[') depth++;
+    else if ((char === ')' || char === ']') && depth > 0) depth--;
+    else if (depth === 0 && title.startsWith(DASH_SEPARATOR, i)) found = i;
+  }
+  return found;
+}
+
 /** Removes one trailing edition group or dash segment, or returns null if there is none. */
 function stripOneEdition(title: string): string | null {
   for (const pattern of [TRAILING_PAREN, TRAILING_BRACKET]) {
@@ -56,7 +72,7 @@ function stripOneEdition(title: string): string | null {
     }
   }
 
-  const dashIndex = title.lastIndexOf(DASH_SEPARATOR);
+  const dashIndex = lastTopLevelDash(title);
   if (dashIndex !== -1 && isEditionSegment(title.slice(dashIndex + DASH_SEPARATOR.length))) {
     return title.slice(0, dashIndex).trimEnd();
   }
@@ -76,10 +92,11 @@ export function normalizeName(name: string): string {
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/&/g, ' and ')
-    .replace(/^\s*the\s+/, '')
     .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    // After punctuation removal, so '"The Cure"' and 'The Cure' both lose the article.
+    .replace(/^the /, '');
 }
 
 /**

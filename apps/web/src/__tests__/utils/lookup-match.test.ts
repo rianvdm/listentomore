@@ -18,6 +18,10 @@ describe('normalizeName', () => {
     expect(normalizeName('AC/DC')).toBe(normalizeName('ACDC'));
     expect(normalizeName('坂本龍一')).toBe('坂本龍一');
   });
+
+  it('drops a leading "The" even when the name is wrapped in punctuation', () => {
+    expect(normalizeName('"The Cure"')).toBe(normalizeName('The Cure'));
+  });
 });
 
 describe('stripEdition', () => {
@@ -30,6 +34,12 @@ describe('stripEdition', () => {
     expect(stripEdition('Songs: Ohia')).toBe('Songs: Ohia');
     expect(stripEdition('Damnation (Deliverance)')).toBe('Damnation (Deliverance)');
     expect(stripEdition('Alive at Wembley - Live at Wembley Stadium')).toBe('Alive at Wembley - Live at Wembley Stadium');
+  });
+
+  it('only treats " - " as a suffix separator outside parentheses and brackets', () => {
+    expect(stripEdition('Live (London - 1991)')).toBe('Live (London - 1991)');
+    expect(stripEdition('Live (London - 1992)')).toBe('Live (London - 1992)');
+    expect(stripEdition('Live [London - 1991]')).toBe('Live [London - 1991]');
   });
 });
 
@@ -50,6 +60,10 @@ describe('pickAlbumMatch / pickArtistMatch', () => {
 
   it('rejects a title that only contains the requested title', () => {
     expect(pickAlbumMatch([album('Voices 2', 'Max Richter', 'x')], 'Max Richter', 'Voices')).toBeNull();
+  });
+
+  it('does not match albums whose protected parentheticals differ', () => {
+    expect(pickAlbumMatch([album('Live (London - 1992)', 'Some Band', 'x')], 'Some Band', 'Live (London - 1991)')).toBeNull();
   });
 
   it('prefers an exact title over an edition variant', () => {
