@@ -42,7 +42,11 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>A short bio, if you write one on the account page.</li>
         <li>Whether your profile is public or private.</li>
         <li>When your account was created, when you last signed in, and how many times you have.</li>
-        <li>If you created your account after following a link from lastfm-mcp, a note saying so.</li>
+        <li>
+          If you created your account with the sign-in button on the page a lastfm-mcp link opened, a
+          note saying so. Signing up any other way, including from the Sign In link at the top of the
+          page, doesn't add the note.
+        </li>
       </ul>
       <p>
         I don't ask for or store your email address. Your listening history stays at Last.fm. The
@@ -51,7 +55,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       </p>
       <p>
         When a new account is created, I get a message in my own Discord server with the username
-        and profile link, plus "via lastfm-mcp" if you came from there.
+        and profile link, plus "via lastfm-mcp" when the account has the lastfm-mcp note above.
       </p>
 
       <h2>2. Sessions, cookies, and logs</h2>
@@ -81,7 +85,8 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <p>
         The artist and album names in the link go into the lookup cache (section 4). If they
         aren't cached yet, Spotify gets them as a search, and they can show up in Cloudflare's logs
-        (see section 3 for both).
+        (see section 3 for both). If nothing matches, the link opens the search page with the names
+        filled in, and that search is cached with the names unchanged (section 4).
       </p>
       <p>
         There is also a log of calls to the site's API, which needs an API key that I hand out
@@ -139,9 +144,14 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>The AI summary and album picks on your insights page: 1 day.</li>
         <li>Your Last.fm profile details and your play count for an artist: 30 days.</li>
         <li>
-          Artist and album names from a lookup link, such as one from lastfm-mcp, with the album or
-          artist they matched: 30 days, or 1 day if nothing matched. The names are kept in lowercase,
-          without accents or punctuation, so the same lookup doesn't search Spotify again.
+          The result of a lookup link, such as one from lastfm-mcp: the artist and album names, in
+          lowercase without accents or punctuation, and the album or artist they matched. The lookup
+          cache keeps a match for 30 days and a miss for 1 day, so the same lookup doesn't search
+          Spotify again.
+        </li>
+        <li>
+          Text searched on the album or artist search page, exactly as entered, with the results: 30
+          days, even when nothing was found.
         </li>
       </ul>
 

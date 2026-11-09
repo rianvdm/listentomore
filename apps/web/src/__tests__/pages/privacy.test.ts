@@ -49,18 +49,26 @@ describe('PrivacyPage', () => {
     expect(text).toContain('not your IP address, not your browser details and not the names you looked up');
   });
 
-  it('says a new account records that it came from lastfm-mcp', () => {
-    expect(text).toContain('If you created your account after following a link from lastfm-mcp, a note saying so.');
+  it('says a new account records lastfm-mcp only when created from the sign-in button the link led to', () => {
+    expect(text).toContain('If you created your account with the sign-in button on the page a lastfm-mcp link opened, a note saying so.');
+    expect(text).toContain('Signing up any other way, including from the Sign In link at the top of the page, doesn\'t add the note.');
+    expect(text).not.toContain('after following a link from lastfm-mcp, a note saying so');
   });
 
-  it('says looked-up names are cached to find the page again', () => {
-    expect(text).toContain('Artist and album names from a lookup link, such as one from lastfm-mcp');
-    expect(text).toContain('30 days, or 1 day if nothing matched');
+  it('says looked-up names are cached to find the page again, scoped to the lookup cache', () => {
+    expect(text).toContain('The lookup cache keeps a match for 30 days and a miss for 1 day');
     expect(text).toContain('so the same lookup doesn\'t search Spotify again');
+    expect(text).not.toContain('30 days, or 1 day if nothing matched');
   });
 
-  it('says the sign-up notification names where you came from', () => {
-    expect(text).toContain('with the username and profile link, plus "via lastfm-mcp" if you came from there');
+  it('says searches are cached as typed for 30 days, including the search a missed lookup opens', () => {
+    expect(text).toContain('Text searched on the album or artist search page, exactly as entered, with the results: 30 days, even when nothing was found.');
+    expect(text).toContain('If nothing matches, the link opens the search page with the names filled in, and that search is cached with the names unchanged (section 4).');
+  });
+
+  it('says the sign-up notification names lastfm-mcp only when the account has the note', () => {
+    expect(text).toContain('with the username and profile link, plus "via lastfm-mcp" when the account has the lastfm-mcp note above');
+    expect(text).not.toContain('if you came from there');
   });
 
   it('still says the site sets no cookie if you never sign in', () => {
