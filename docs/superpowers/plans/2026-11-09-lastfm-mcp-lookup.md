@@ -288,7 +288,7 @@ git commit -m "Add referral_clicks table and users.signup_ref"
 - Spotify throws → log with `console.error('[Lookup] ...')`, `302` to the search URL, cache nothing.
 - Every response sets `X-Robots-Tag: noindex` and `Cache-Control: no-store`.
 - When `readRef` accepts the ref, record exactly one click per request (cache hit, Spotify match, miss and Spotify error alike) through `createServiceDefer('[Lookup]', getWaitUntil(c))(db.recordReferralClick({...}), 'referral click')` with `matched`, `signedIn: Boolean(c.get('currentUser'))`, `isBot: isBotRequest(c.req.header('User-Agent'), c.req.raw.cf as ...)`. No click is recorded for an unknown or missing ref.
-- A KV read failure is logged and resolution continues against Spotify; a KV write failure is logged and the redirect is unchanged.
+- A failed read of the **lookup cache entry** is logged and resolution continues against Spotify; a failed write of it is logged and the redirect is unchanged. A wider KV outage that also breaks Spotify's token cache (`packages/services/spotify/src/auth.ts:33`) surfaces as a Spotify error and goes to search; making the token cache survive KV failures is out of scope.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -303,7 +303,7 @@ it('drops an unknown ref and records no click', ...)                  // ref=evi
 it.each(['ref=lastfm-mcp&ref=evil', 'ref=evil&ref=lastfm-mcp'])('drops a repeated ref (%s)', ...)
 it('keeps base and deluxe titles apart in the cache, in either order', ...) // 'Rumours' then 'Rumours (Super Deluxe)' and the reverse each land on their own ID; a cached miss for one doesn't answer the other
 it('treats a cached ID that is not a Spotify ID as a miss', ...)      // KV holds {"id":"/\\evil.example"} → search redirect, never that Location
-it('resolves from Spotify when the KV read throws', ...)
+it('resolves from Spotify when the lookup-cache read throws', ...)  // KV get throws only for 'lookup:v1:' keys
 it('redirects a miss to the search page and caches the miss', ...)    // Location '/album?q=Jon%20Hopkins%20Nonexistent'; second request makes no Spotify call
 it('serves a cached hit without calling Spotify', ...)
 it('retries with the edition stripped before the natural query', ...) // 'OK Computer (Remastered 2009)' → second call's query is artist:"Radiohead" album:"OK Computer"
@@ -430,7 +430,8 @@ it('callback does not write signup_ref for a returning user', ...)  // existing 
 it('callback keeps the claim notification for an existing account with login_count 0', ...) // claim message unchanged, no signup_ref, no '(via'
 it('Discord message names the referrer for a new user', ...)        // body contains '(via lastfm-mcp)'
 it.each(['ref=lastfm-mcp&ref=evil', 'ref=evil&ref=lastfm-mcp'])('drops a repeated ref at login, auth start and callback (%s)', ...)
-it.each(['/\\evil.example', '/%5Cevil.example', '//evil.example', 'https://evil.example', '/\tevil'])('rejects next=%s at auth start and callback', ...) // callback falls back to the profile URL
+it.each(['/\\evil.example', '//evil.example', 'https://evil.example', '/\tevil'])('rejects next=%s at auth start and callback', ...) // values are URL-encoded into the query; callback falls back to the profile URL
+it('rejects the raw query next=%2F%5Cevil.example', ...)          // request URL written literally, so it decodes to '/\evil.example'
 it.each(['/album/6dVIqQ8qmQ5GBnJ9shOYGE', '/artist/4Z8W4fKeB5YxbusRsdQVPb?ref=lastfm-mcp'])('accepts next=%s', ...)
 ```
 
