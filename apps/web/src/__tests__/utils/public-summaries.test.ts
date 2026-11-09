@@ -61,6 +61,28 @@ describe('renderPublicSummary', () => {
       expect(html).not.toContain('<a href="//evil.example"');
     });
 
+    // Browsers decode entities and strip tabs inside attribute values, so each of these hrefs
+    // turns into the protocol-relative //evil.example.
+    it.each([
+      ['a decimal entity slash', '/&#47;evil.example'],
+      ['a hex entity slash', '/&#x2F;evil.example'],
+      ['a literal tab', '/\t/evil.example'],
+      ['a named tab entity', '/&Tab;/evil.example'],
+      ['a backslash after the first character', '/a\\..\\/evil.example'],
+    ])('escapes a raw anchor whose href hides an off-site path with %s', (_name, href) => {
+      const html = renderPublicSummary(`Go <a href="${href}">here</a>.`);
+      expect(html).not.toContain('<a href=');
+      expect(html).toContain('&lt;a href=&quot;');
+    });
+
+    it('keeps a placeholder link whose names contain an ampersand, since encodeURIComponent escapes it', () => {
+      // replacePlaceholders builds the href with encodeURIComponent and escapes the data attributes.
+      const href = `/album?q=${encodeURIComponent('Simon & Garfunkel Bookends')}`;
+      const anchor = `<a href="${href}" data-artist="Simon &amp; Garfunkel" data-album="Bookends">Bookends</a>`;
+      expect(href).not.toContain('&');
+      expect(renderPublicSummary(`Try ${anchor}.`)).toContain(anchor);
+    });
+
     it('escapes a raw relative anchor that carries other attributes', () => {
       const html = renderPublicSummary('Go <a href="/album?q=x" onclick="alert(1)">here</a>.');
       expect(html).not.toContain('<a href="/album?q=x" onclick');
@@ -73,6 +95,16 @@ describe('renderPublicSummary', () => {
       const html = renderPublicSummary('Click [x](javascript:alert(1)) now.');
       expect(html).not.toMatch(/javascript:/i);
       expect(html).toContain('Click x now.');
+    });
+
+    it.each([
+      ['a decimal entity slash', '/&#47;evil.example'],
+      ['a hex entity slash', '/&#x2F;evil.example'],
+    ])('drops a site-relative href that hides an off-site path with %s', (_name, href) => {
+      // marked emits the href undecoded, and the browser then decodes it to //evil.example.
+      const html = renderPublicSummary(`Go [x](${href}) now.`);
+      expect(html).not.toContain('href');
+      expect(html).toContain('Go x now.');
     });
 
     it('drops a data: href', () => {

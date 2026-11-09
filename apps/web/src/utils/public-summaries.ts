@@ -22,9 +22,14 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
-// Site-relative only: '//host' and '/\host' are protocol-relative in browsers.
+// Site-relative only. '//host' and '/\host' are protocol-relative in browsers, and since href values
+// are emitted undecoded, an entity ('/&#47;host'), a tab or a backslash could become one after the
+// browser decodes or normalises it. Placeholder hrefs are encodeURIComponent output, so they never
+// contain '&', whitespace or '\'.
+const SITE_RELATIVE_URL = /^\/(?![/\\])[^\s&\\]*$/;
+
 function isSiteRelative(url: string): boolean {
-  return url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/\\');
+  return SITE_RELATIVE_URL.test(url);
 }
 
 function isSafeLinkUrl(url: string): boolean {
