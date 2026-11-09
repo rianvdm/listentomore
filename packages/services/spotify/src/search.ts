@@ -34,6 +34,23 @@ export interface AlbumSearchResult {
   image: string | null;
 }
 
+/**
+ * An album candidate for strict name matching on /lookup. `artists` keeps each credited
+ * artist's full name, because AlbumSearchResult.artist joins them with ', ' and loses the
+ * boundaries ("Crosby, Stills, Nash & Young" would split into fragments).
+ */
+export interface LookupAlbumCandidate {
+  id: string;
+  name: string;
+  artists: string[];
+}
+
+/** An artist candidate for strict name matching on /lookup. */
+export interface LookupArtistCandidate {
+  id: string;
+  name: string;
+}
+
 export interface ArtistSearchResult {
   name: string;
   id: string;

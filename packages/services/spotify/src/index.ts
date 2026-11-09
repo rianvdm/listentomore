@@ -20,6 +20,8 @@ export type {
   AlbumSearchResult,
   ArtistSearchResult,
   SearchResult,
+  LookupAlbumCandidate,
+  LookupArtistCandidate,
 } from './search';
 
 export { SpotifyAlbums } from './albums';
