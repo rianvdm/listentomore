@@ -1,6 +1,6 @@
 # Privacy data inventory
 
-Last verified against the code on 2026-11-08 (branch `about-page-refresh`). Every row cites the code that produces it. The privacy policy (`apps/web/src/pages/legal/privacy.tsx`) and the About page "what we store" bullets are written from this file, so change this file first when the code changes.
+Last verified against the code on 2026-11-08 (branch `about-page-refresh`). Section 1, the cookie rows in sections 2 and 10, the Spotify and Discord rows in section 4, the lookup row in section 5, the `pages/auth/lastfm.ts` citations in sections 6 and 7, and section 11 were re-verified on 2026-11-09 (branch `feat/lastfm-mcp-lookup`); line numbers elsewhere may have drifted. Every row cites the code that produces it. The privacy policy (`apps/web/src/pages/legal/privacy.tsx`) and the About page "what we store" bullets are written from this file, so change this file first when the code changes.
 
 "Unconfirmed" means I could not establish the fact from the repository. Unconfirmed items are kept out of the policy and the About page.
 
@@ -8,30 +8,31 @@ This file records current behavior, including known gaps the policy leaves out u
 
 ## 1. User columns actually written
 
-Table `users` (`packages/db/src/schema.ts:3`). Writers: `createUser` (`packages/db/src/index.ts:62`), `updateUser` (`packages/db/src/index.ts:94`), called from `apps/web/src/pages/auth/lastfm.ts` and `apps/web/src/pages/account/index.tsx`.
+Table `users` (`packages/db/src/schema.ts:3`). Writers: `createUser` (`packages/db/src/index.ts:64`), `updateUser` (`packages/db/src/index.ts:98`), called from `apps/web/src/pages/auth/lastfm.ts` and `apps/web/src/pages/account/index.tsx`.
 
 | Column | Written? | Source |
 |---|---|---|
-| `id` | Yes, random UUID | `pages/auth/lastfm.ts:132` |
-| `username` | Yes, lowercased Last.fm username | `pages/auth/lastfm.ts:108,133` |
-| `lastfm_username` | Yes, as Last.fm returns it | `pages/auth/lastfm.ts:99,134` |
-| `lastfm_session_key` | Yes, on sign-up and refreshed on every sign-in. Stored as received (not hashed or encrypted in code). **Never read anywhere in the repo** (grep for `lastfm_session_key` finds only the two writes), so nothing uses it today | `pages/auth/lastfm.ts:135,189` |
-| `display_name` | Yes, defaults to the Last.fm username; user can edit | `pages/auth/lastfm.ts:136,217`; `pages/account/index.tsx:239` |
-| `avatar_url` | Yes, the largest image URL from Last.fm `user.getinfo` at sign-up (or at a later sign-in if it was empty) | `pages/auth/lastfm.ts:110-138,194-213` |
+| `id` | Yes, random UUID | `pages/auth/lastfm.ts:146` |
+| `username` | Yes, lowercased Last.fm username | `pages/auth/lastfm.ts:122,147` |
+| `lastfm_username` | Yes, as Last.fm returns it | `pages/auth/lastfm.ts:113,148` |
+| `lastfm_session_key` | Yes, on sign-up and refreshed on every sign-in. Stored as received (not hashed or encrypted in code). **Never read anywhere in the repo** (grep for `lastfm_session_key` finds only the two writes), so nothing uses it today | `pages/auth/lastfm.ts:149,206` |
+| `display_name` | Yes, defaults to the Last.fm username; user can edit | `pages/auth/lastfm.ts:150,234`; `pages/account/index.tsx:239` |
+| `avatar_url` | Yes, the largest image URL from Last.fm `user.getinfo` at sign-up (or at a later sign-in if it was empty) | `pages/auth/lastfm.ts:124-152,211-230` |
 | `bio` | Yes, free text the user types on the account page | `pages/account/index.tsx:240` |
-| `profile_visibility` | Yes, `public` at sign-up, user can switch to `private` | `pages/auth/lastfm.ts:138`; `pages/account/index.tsx:259` |
-| `last_login_at` | Yes, on returning sign-ins only (not set at creation) | `pages/auth/lastfm.ts:190` |
-| `login_count` | Yes, 1 at creation, incremented on each sign-in | `packages/db/src/index.ts:74`; `pages/auth/lastfm.ts:191` |
-| `created_at`, `updated_at` | Yes, database defaults and `updateUser` | `packages/db/src/index.ts:150`; migrations |
-| `email` | **Never set.** `updateUser` accepts it but no caller passes it, and no form collects it | `packages/db/src/index.ts:100`; grep of `updateUser(` callers: `pages/auth/lastfm.ts:220`, `pages/account/index.tsx:238,258` |
-| `discogs_username` | **Never set** (same evidence) | `packages/db/src/index.ts:112` |
-| `spotify_connected` | **Never set** (same evidence) | `packages/db/src/index.ts:116` |
+| `profile_visibility` | Yes, `public` at sign-up, user can switch to `private` | `pages/auth/lastfm.ts:152`; `pages/account/index.tsx:259` |
+| `last_login_at` | Yes, on returning sign-ins only (not set at creation) | `pages/auth/lastfm.ts:207` |
+| `login_count` | Yes, 1 at creation, incremented on each sign-in | `packages/db/src/index.ts:76-77`; `pages/auth/lastfm.ts:208` |
+| `created_at`, `updated_at` | Yes, database defaults and `updateUser` | `packages/db/src/index.ts:152`; migrations |
+| `email` | **Never set.** `updateUser` accepts it but no caller passes it, and no form collects it | `packages/db/src/index.ts:100,105-107`; grep of `updateUser(` callers: `pages/auth/lastfm.ts:237`, `pages/account/index.tsx:238,258` |
+| `discogs_username` | **Never set** (same evidence) | `packages/db/src/index.ts:117-119` |
+| `spotify_connected` | **Never set** (same evidence) | `packages/db/src/index.ts:121-123` |
+| `signup_ref` | Yes, only at account creation and only when the sign-in callback URL carries exactly one `ref=lastfm-mcp` (the only known referrer); otherwise NULL. Never updated afterwards, and not set when an existing account is claimed. Removed with the `users` row on deletion | `pages/auth/lastfm.ts:70,153`; `packages/db/src/index.ts:72,76,88`; `utils/referral.ts:4,14-17`; column added in `packages/db/src/migrations/010_referrals.sql:18` |
 
 Other tables that exist in migrations but have no writer in the app: `discogs_sync_state` and `discogs_releases` (`upsertRelease`, `updateSyncState` are defined in `packages/db/src/index.ts` but have no callers outside the db package; there is no Discogs service in `packages/services/`). `searches` and `recent_searches` were dropped in `packages/db/src/migrations/008_remove_unused_tables.sql`. Whether production D1 still holds old rows in the Discogs tables is **unconfirmed** (the migration `007` cascade covers them if so).
 
-Sign-in flow: the site redirects to Last.fm, Last.fm returns a one-time token, the Worker exchanges it for a session key and username (`pages/auth/lastfm.ts:70-99`). The site never sees a Last.fm password.
+Sign-in flow: the site redirects to Last.fm, Last.fm returns a one-time token, the Worker exchanges it for a session key and username (`pages/auth/lastfm.ts:84-113`). A known `ref` is carried from `/login` through `/auth/lastfm` to the callback in the URL only (`pages/auth/login.tsx:104`; `pages/auth/lastfm.ts:51-55`); no cookie or storage holds it. The site never sees a Last.fm password.
 
-New-signup notification: when `DISCORD_WEBHOOK_URL` is set, a new account (and a first-time claim of an existing account) posts the username and profile URL to the owner's Discord channel (`pages/auth/lastfm.ts:145-182,226-265`). That message lives in Discord and is not removed by account deletion.
+New-signup notification: when `DISCORD_WEBHOOK_URL` is set, a new account (and a first-time claim of an existing account) posts the username and profile URL to the owner's Discord channel (`pages/auth/lastfm.ts:158-202,241-282`). For a new account with `signup_ref` set, the message adds ` (via lastfm-mcp)` after the username (`pages/auth/lastfm.ts:161-165`); the account-claim message has no referrer (`:245-247`). The full payload, including that text, is also written to Workers logs (`:166-171`). That message lives in Discord and is not removed by account deletion.
 
 ## 2. Sessions and cookies
 
@@ -46,7 +47,7 @@ New-signup notification: when `DISCORD_WEBHOOK_URL` is set, a new account (and a
 | Sign out deletes the session row and clears the cookie | `utils/session.ts:94-104`; `pages/auth/lastfm.ts:281-288` |
 | An expired session row is deleted when that browser next presents the cookie | `utils/session.ts:76-80` |
 | `deleteExpiredSessions` exists but has **no caller** (no scheduled cleanup): expired rows for browsers that never return stay in D1 | `packages/db/src/index.ts:231`; `scheduled()` in `apps/web/src/index.tsx:813-957` does not call it |
-| Visitors who never sign in get no cookie from the app | grep for `setCookie`/`document.cookie` in `apps/web/src`: only `utils/session.ts:44` |
+| Visitors who never sign in get no cookie from the app, including visitors arriving through `/lookup` or with `?ref=lastfm-mcp` (the referrer travels only in URLs) | grep for `setCookie`/`Set-Cookie`/`document.cookie` in `apps/web/src` (excluding tests) on 2026-11-09: only `utils/session.ts:44`; `git diff 37bf279..HEAD` adds no cookie code |
 | Cloudflare, in front of the Worker, sets its own bot-detection cookie `__cf_bm` on responses to every visitor (HttpOnly, Secure, SameSite=None, about 30 minutes), and `cf_clearance` after a visitor passes a security check (challenge). These come from the zone, not the app code | Seen on `curl -sI https://listentomore.com/about` on 2026-11-08; [Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/) |
 
 ## 3. API keys and `api_usage_log`
@@ -72,12 +73,12 @@ Providers and models come from `packages/config/src/ai.ts` (`AI_TASKS`).
 | **Last.fm** (`ws.audioscrobbler.com`, `www.last.fm`) | Sign-in redirect and token exchange. After sign-in, the site calls Last.fm with the member's Last.fm username to fetch top artists, top albums, recent tracks, loved tracks, user info, and per-artist play counts. Requests for public pages also pass the viewed username | `pages/auth/lastfm.ts:79-80,113`; `packages/services/lastfm/src/top-artists.ts:72,130`, `top-albums.ts:54`, `recent-tracks.ts:41`, `loved-tracks.ts:50`, `user-info.ts:57`, `artist-detail.ts:84,142`; `api/internal/artist.ts:41` |
 | **Anthropic** (Claude) | Used for artist/album/genre text, "Ask" answers, and the signed-in insights. See the insights prompt below | `config/src/ai.ts:118-230` |
 | **OpenAI** | Only the `randomFact` task (`gpt-5.6-luna`), which has no user input. It is wired up as a switch-back for other tasks but no task uses it for user data today | `config/src/ai.ts:168-180`; `apps/web/src/index.tsx:826-838` |
-| **Spotify** | Search text and album/artist ids for catalog lookups, using the site's app credentials (no user is signed in to Spotify; `spotify_connected` is never set) | `packages/services/spotify/src/search.ts:127`, `albums.ts:97`, `artists.ts:62,157,210`, token request `auth.ts:66` |
+| **Spotify** | Search text and album/artist ids for catalog lookups, using the site's app credentials (no user is signed in to Spotify; `spotify_connected` is never set). `/lookup` sends the artist name, or artist and album names, as up to three searches on a lookup-cache miss (section 11) | `packages/services/spotify/src/search.ts:127,197-232`, `albums.ts:97`, `artists.ts:62,157,210`, token request `auth.ts:66`; `apps/web/src/pages/lookup.ts:84-104,133-140` |
 | **MusicBrainz** | Artist plus album or track names, to look up UPCs and ISRCs | `packages/services/musicbrainz/src/release-lookup.ts:65,137`, `recording-lookup.ts:63,133` (via `fetch.ts:37`) |
 | **Apple Music API** | Album or track metadata, to find the Apple Music link | `packages/services/streaming-links/src/providers/apple-music.ts:161`; called from `streaming-links/src/index.ts:208,252,492,564` |
 | **YouTube** | **Nothing at runtime.** `YouTubeProvider` is constructed but never called; both result builders hardcode `youtube: null`. The key is only passed to the constructor | `streaming-links/src/index.ts:107,216,260`; `apps/web/src/index.tsx:141` |
 | **Songlink/Odesli** | The server only builds the string `https://song.link/<spotify url>` and sends Songlink nothing. When a visitor clicks "More services" (album pages only; there is no track page, `pages/album/detail.tsx:148`), Songlink sees the album's Spotify ID and the visitor's IP address, from the visitor's own browser. `SonglinkService` (the `api.song.link` call at `songlink/src/index.ts:7,64`) is imported only by a test | `streaming-links/src/index.ts:211-212,255-256,597`; `apps/web/src/__tests__/services/songlink.test.ts` |
-| **Discord** | The owner's webhook gets username + profile URL on signup (section 1). The Discord bot is a separate Worker (section 8) | `pages/auth/lastfm.ts:145-182` |
+| **Discord** | The owner's webhook gets username + profile URL on signup, plus ` (via lastfm-mcp)` when `signup_ref` is set (section 1). The Discord bot is a separate Worker (section 8) | `pages/auth/lastfm.ts:158-202` |
 | **jsDelivr** (`cdn.jsdelivr.net`) | Every page loads the `marked` script from jsDelivr, so the visitor's browser sends jsDelivr its IP address and user agent | `components/layout/Layout.tsx:71` |
 | **Image hosts** | Album art and Last.fm avatars are URLs returned by Spotify and Last.fm, loaded by the visitor's browser from those services' servers; a fallback image loads from `file.elezea.com` | `pages/auth/lastfm.ts:124` (avatar URL stored); `packages/services/lastfm/src/top-artists.ts:8` |
 | **Cloudflare** | Hosts the Worker, D1 database, KV and Durable Object. Workers Observability logs, traces and Issues are enabled (`[observability]`, `[observability.traces]`, sampling 100%). Retention of those logs and exactly which request fields they hold are **unconfirmed** | `apps/web/wrangler.toml:19-34` |
@@ -108,6 +109,7 @@ All in the `CACHE` namespace. TTLs from `packages/config/src/cache.ts` and `ai.t
 | `ai:userInsightsSummary:<name>:v3` | The AI weekly summary text | 1 day | `prompts/user-insights-summary.ts:261`; `ai.ts:208-220` |
 | `ai:userInsightsRecommendations:<name>` | The four AI album picks | 1 day | `prompts/user-insights-recommendations.ts:160`; `ai.ts:223-228` |
 | `insights-refresh:<name>` | Timestamp of the last manual refresh | 5 minutes | `api/internal/insights.ts:58-83`; `cache.ts:27` |
+| `lookup:v1:artist:<artist>`, `lookup:v1:album:<artist>\|<album>` | Not user-keyed: the result of a `/lookup`, `{ id }` (a Spotify ID) or `{ miss: true }`, keyed on the names normalized by `normalizeName` (lowercase, accents and punctuation removed, `&` as "and", a leading "The" dropped). Written on every lookup that searched Spotify, with or without a `ref`. Keys over 512 bytes are not cached | 30 days (hit), 1 day (miss) | `apps/web/src/pages/lookup.ts:36-42,67-75,132-147`; `utils/lookup-match.ts:87-100`; `cache.ts:47-51` |
 | `ratelimit:user:<API key id or IP>:<minute>` | A request counter, only on `/api/*` routes, which need an API key (so IP-keyed only in rare fallbacks) | about a minute | `middleware/auth.ts:109-148` |
 
 Longest-lived user-keyed entry: 30 days (`lastfm:userInfo`, `lastfm:artistDetail:...:user:<name>`).
@@ -127,7 +129,7 @@ Not hidden:
 - `GET /widget/recent?username=<name>` is public and fetches the latest track from Last.fm live for any username on a cache miss, with no check of `profile_visibility` (`apps/web/src/index.tsx:722-790`). Whether Last.fm itself withholds recent tracks for users who hide them is unconfirmed, so the policy does not claim it.
 - `GET /api/internal/artist-lastfm?name=<artist>` returns a play count only for the signed-in user, read from the session; a `username` query parameter is ignored (`apps/web/src/api/internal/artist.ts`, fixed in [#51](https://github.com/rianvdm/listentomore/issues/51)). Signed-out requests get artist data with no play count.
 - Last.fm's own privacy settings are separate and unaffected.
-- Default for new accounts is `public` (`pages/auth/lastfm.ts:138`).
+- Default for new accounts is `public` (`pages/auth/lastfm.ts:152`).
 
 ## 7. Deleting an account
 
@@ -135,7 +137,7 @@ Handler: `handleAccountDelete` (`pages/account/index.tsx:266-354`), `POST /accou
 
 Removed from D1:
 
-- The `users` row.
+- The `users` row, including `signup_ref`.
 - All `sessions` rows (`ON DELETE CASCADE`: `migrations/006_sessions.sql:6`).
 - `api_keys` rows tied to the user (`ON DELETE CASCADE`: `002_api_keys.sql:7`; none exist in practice, see section 3).
 - `discogs_sync_state` and `discogs_releases` rows for the user (`migrations/007_cascade_user_deletes.sql`). The cascade depends on D1 enforcing foreign keys, which I did not test.
@@ -144,8 +146,9 @@ Remains after deletion:
 
 - KV entries in section 5 until their TTL expires (at most 30 days). Cron stops refreshing the user's `widget:recent:` entry once the row is gone.
 - `api_usage_log` rows: not linked to users (section 3), and `ON DELETE SET NULL` on the key reference (`002_api_keys.sql:38`).
-- Workers logs: the handler logs `user_id`, `username`, `lastfm_username` at start, and sign-in logs the username and Last.fm name (`pages/account/index.tsx:295-323`; `pages/auth/lastfm.ts:141,222`). These stay until Cloudflare's log retention ends (period unconfirmed).
-- The Discord signup notification (section 1).
+- Workers logs: the handler logs `user_id`, `username`, `lastfm_username` at start, and sign-in logs the username and Last.fm name (`pages/account/index.tsx:295-323`; `pages/auth/lastfm.ts:156,239`). These stay until Cloudflare's log retention ends (period unconfirmed).
+- The Discord signup notification (section 1), including ` (via lastfm-mcp)` if it had one.
+- `referral_clicks` rows: they have no user reference (section 11).
 - Anything Last.fm, Anthropic, Spotify or other providers keep on their side.
 - Deleting does not revoke the site's authorization on the user's Last.fm account (the site has no call to do so). The user can remove it in their Last.fm settings.
 
@@ -180,3 +183,19 @@ The account page text says deletion removes the account and all sessions, and li
 | Cookies `__cf_bm`, `cf_clearance` | Set by Cloudflare, not the app: bot detection on every visitor, and a passed security check | Section 2; [Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/) |
 
 Nothing else uses `localStorage`, `sessionStorage` or `document.cookie` in `apps/web/src`. Page loads embed `window.__INTERNAL_TOKEN__`, a 5-minute HMAC token with only issued-at and expiry times, no user or IP data (`utils/internal-token.ts:1-35`).
+
+## 11. Referral clicks (`referral_clicks`) and `/lookup`
+
+`GET /lookup?artist=<name>[&album=<name>][&ref=<ref>]` is the link lastfm-mcp uses. It redirects to an album or artist page, or to the search page (`apps/web/src/pages/lookup.ts:110-173`; route at `apps/web/src/index.tsx:657`). `robots.txt` disallows it (`apps/web/src/robots.ts:27`).
+
+| Fact | Source |
+|---|---|
+| Table columns: `id`, `ref`, `type` (`album` or `artist`), `matched`, `signed_in`, `is_bot`, `created_at`. No user id, IP address, user agent or searched name | `packages/db/src/migrations/010_referrals.sql:6-14` |
+| One row per `/lookup` request that carries exactly one known `ref` (only `lastfm-mcp`); unknown or repeated `ref` values write nothing. Requests rejected with 400 (missing or over-long names) write nothing | `pages/lookup.ts:117-123,153-166`; `utils/referral.ts:4,8-17` |
+| Written by `recordReferralClick` with `ref`, `type`, `matched` (a Spotify ID was found), `signed_in` (a session user was present) and `is_bot`; `created_at` is the database default | `packages/db/src/index.ts:635-654`; `pages/lookup.ts:157-163` |
+| `is_bot` is computed from the user agent and Cloudflare's verified-bot flag at request time; neither value is stored | `utils/referral.ts:26-33`; `pages/lookup.ts:155,162` |
+| Rows are not linked to accounts, so account deletion leaves them. No code deletes rows (no retention job) | migration above; `pages/account/index.tsx:266-354` |
+| The only reader is the owner's report script, which counts clicks per referrer and day range and counts `users.signup_ref` sign-ups, reading production D1 with `wrangler d1 execute --remote` | `apps/web/scripts/referral-report.ts:1-2`; `referral-report-lib.ts:32-50` |
+| The artist and album names never go into `referral_clicks`. They go into the lookup KV cache (section 5) and, on a cache miss, to Spotify search (section 4) | `pages/lookup.ts:132-147` |
+| Logs: `lookup.ts` logs only error messages, not names (`:54,143`; deferred-write failures through `packages/shared/src/utils/defer.ts:21-22`). The Spotify search logs the query, which contains the names, when Spotify returns 429. The request URL holds the names too; which request fields Workers logs keep is unconfirmed (section 4, Cloudflare row) | `packages/services/spotify/src/search.ts:236-239`; `apps/web/wrangler.toml:19-34` |
+| The redirect to an album or artist page keeps `?ref=lastfm-mcp` in the URL only, so the sign-in prompt can carry it to `/login` and the sign-in callback (section 1) | `pages/lookup.ts:168-170`; `pages/album/detail.tsx:310`; `components/ui/SignInCTA.tsx:77` |
