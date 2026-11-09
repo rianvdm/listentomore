@@ -149,6 +149,7 @@ describe('entity page index', () => {
         expect.any(Error)
       );
     });
+
     it('still returns the summary when the upsert throws synchronously', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       services.db.upsertEntityPage.mockImplementation(() => {

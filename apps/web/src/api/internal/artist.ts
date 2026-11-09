@@ -1,4 +1,5 @@
-// Internal artist API routes for progressive loading
+// ABOUTME: Internal artist routes for progressive loading: the AI summary (signed-in only), Last.fm data
+// ABOUTME: and the one-line artist sentence. The summary route also records the artist's page for the sitemap.
 
 import { Hono } from 'hono';
 import { aiCacheKey, RegionUnsupportedError } from '@listentomore/ai';
