@@ -171,11 +171,15 @@ export function AlbumDetailPage({
           </div>
 
           {/* AI Summary + Recommendations: cached content is public; generating it needs a login */}
-          {!currentUser && (summaryRendered || recommendationsRendered) ? (
+          {lastfmMcpRef ? (
+            // Signed out, from lastfm-mcp: the prompt takes the summary slot unless a summary is cached.
             <>
               {summaryRendered && <AlbumSummarySection html={summaryHtml} />}
+              {!summaryRendered && (
+                <SignInCTA currentPath={currentPath} variant="lastfm-mcp" entity="album" signInRef={lastfmMcpRef} />
+              )}
               {recommendationsRendered && <AlbumRecommendationsSection html={recommendationsHtml} />}
-              {lastfmMcpRef ? (
+              {summaryRendered && (
                 <SignInCTA
                   currentPath={currentPath}
                   variant="lastfm-mcp"
@@ -183,18 +187,16 @@ export function AlbumDetailPage({
                   summaryShown
                   signInRef={lastfmMcpRef}
                 />
-              ) : (
-                <SignInCTA currentPath={currentPath} variant="personal" />
               )}
             </>
+          ) : !currentUser && (summaryRendered || recommendationsRendered) ? (
+            <>
+              {summaryRendered && <AlbumSummarySection html={summaryHtml} />}
+              {recommendationsRendered && <AlbumRecommendationsSection html={recommendationsHtml} />}
+              <SignInCTA currentPath={currentPath} variant="personal" />
+            </>
           ) : (
-            <SignInGate
-              currentUser={currentUser ?? null}
-              currentPath={currentPath}
-              variant={lastfmMcpRef ? 'lastfm-mcp' : undefined}
-              entity="album"
-              signInRef={lastfmMcpRef}
-            >
+            <SignInGate currentUser={currentUser ?? null} currentPath={currentPath}>
               <AlbumSummarySection html={summaryHtml} />
               <AlbumRecommendationsSection html={recommendationsHtml} />
             </SignInGate>

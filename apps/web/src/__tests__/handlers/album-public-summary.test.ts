@@ -234,6 +234,32 @@ describe('Album page public cached summaries', () => {
       expectNoModelCalls();
     });
 
+    it('puts the Last.fm prompt in the summary slot, before cached recommendations, when only recommendations are cached', async () => {
+      ai.getCachedAlbumDetail.mockResolvedValue(null);
+
+      const html = await (await requestAlbum(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).not.toContain('A public profile page');
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html).not.toContain('id="ai-summary"');
+      expect(html).toContain('id="album-recommendations"');
+      expect(html.indexOf(LASTFM_HEADING)).toBeLessThan(html.indexOf('id="album-recommendations"'));
+      expect(html.split(LASTFM_HEADING)).toHaveLength(2);
+      expectNoModelCalls();
+    });
+
+    it('keeps today\'s page for an unknown ref when only recommendations are cached', async () => {
+      ai.getCachedAlbumDetail.mockResolvedValue(null);
+
+      const html = await (await requestAlbum(FLAG_ON, '?ref=evil')).text();
+
+      expect(html).toBe(await (await requestAlbum(FLAG_ON)).text());
+      expect(html).toContain(PERSONAL_PROMPT);
+      expect(html).not.toContain(LASTFM_HEADING);
+    });
+
     it('shows the default prompt for an unknown ref', async () => {
       ai.getCachedAlbumDetail.mockResolvedValue(null);
       ai.getCachedAlbumRecommendations.mockResolvedValue(null);
