@@ -13,6 +13,7 @@ describe('buildReferralReportSql', () => {
       expect(sql).toContain("'2026-12-01'");
     }
     expect(clicks).toContain('FROM referral_clicks');
+    expect(clicks).toContain('COALESCE(SUM(is_bot = 0 AND signed_in = 0), 0) AS human_signed_out');
     expect(signups).toContain('FROM users');
   });
 
@@ -27,7 +28,20 @@ describe('buildReferralReportSql', () => {
 });
 
 describe('formatReferralReport', () => {
-  const clicks = { total: 50, matched: 30, missed: 20, human: 40, bot: 10 };
+  const clicks = { total: 50, matched: 30, missed: 20, human: 40, humanSignedOut: 25, bot: 10 };
+
+  it('prints signed-out human clicks right after human clicks', () => {
+    const lines = formatReferralReport({
+      ref: 'lastfm-mcp',
+      from: '2026-11-01',
+      to: '2026-12-01',
+      clicks,
+      signups: 2,
+    }).split('\n');
+    const humanIndex = lines.indexOf('Human clicks: 40');
+    expect(humanIndex).toBeGreaterThan(-1);
+    expect(lines[humanIndex + 1]).toBe('Human clicks, signed out: 25');
+  });
 
   it('formats conversion as a percentage of human clicks', () => {
     const report = formatReferralReport({
@@ -45,7 +59,7 @@ describe('formatReferralReport', () => {
       ref: 'lastfm-mcp',
       from: '2026-11-01',
       to: '2026-12-01',
-      clicks: { total: 3, matched: 0, missed: 3, human: 0, bot: 3 },
+      clicks: { total: 3, matched: 0, missed: 3, human: 0, humanSignedOut: 0, bot: 3 },
       signups: 0,
     });
     expect(report.endsWith('counts requests not people): n/a')).toBe(true);

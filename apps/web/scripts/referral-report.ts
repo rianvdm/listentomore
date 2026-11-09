@@ -107,6 +107,7 @@ async function main(): Promise<void> {
         matched: integerField(clicks, 'matched'),
         missed: integerField(clicks, 'missed'),
         human: integerField(clicks, 'human'),
+        humanSignedOut: integerField(clicks, 'human_signed_out'),
         bot: integerField(clicks, 'bot'),
       },
       signups: integerField(signups, 'signups'),

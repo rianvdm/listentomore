@@ -9,6 +9,8 @@ export interface ClickCounts {
   matched: number;
   missed: number;
   human: number;
+  /** Human clicks from visitors who were not signed in: the audience a sign-up could come from. */
+  humanSignedOut: number;
   bot: number;
 }
 
@@ -45,6 +47,7 @@ export function buildReferralReportSql(ref: Ref, from: string, to: string): stri
     'COALESCE(SUM(matched = 1), 0) AS matched, ' +
     'COALESCE(SUM(matched = 0), 0) AS missed, ' +
     'COALESCE(SUM(is_bot = 0), 0) AS human, ' +
+    'COALESCE(SUM(is_bot = 0 AND signed_in = 0), 0) AS human_signed_out, ' +
     'COALESCE(SUM(is_bot = 1), 0) AS bot ' +
     `FROM referral_clicks WHERE ref = '${ref}' AND ${range};`;
   const signups = `SELECT COUNT(*) AS signups FROM users WHERE signup_ref = '${ref}' AND ${range};`;
@@ -66,6 +69,7 @@ export function formatReferralReport(input: ReferralReportInput): string {
     `Matched: ${clicks.matched}`,
     `Missed: ${clicks.missed}`,
     `Human clicks: ${clicks.human}`,
+    `Human clicks, signed out: ${clicks.humanSignedOut}`,
     `Bot clicks: ${clicks.bot}`,
     `Sign-ups: ${signups}`,
     `Conversion (sign-ups ÷ human clicks, counts requests not people): ${conversion(signups, clicks.human)}`,
