@@ -95,6 +95,9 @@ export function normalizeName(name: string): string {
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/&/g, ' and ')
+    // Emoji variation selectors (U+FE0F) and keycap marks (U+20E3) are marks with no letter of
+    // their own, so they would otherwise survive the filter below after their emoji is dropped.
+    .replace(/[\p{Variation_Selector}\p{Me}]/gu, '')
     // Keeps \p{M} too: a Devanagari vowel sign such as U+093F is a mark, and dropping it
     // would fold दिल into दल.
     .replace(/[^\p{L}\p{M}\p{N}\s]/gu, '')

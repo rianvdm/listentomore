@@ -27,6 +27,12 @@ describe('normalizeName', () => {
     expect(normalizeName('दिल')).not.toBe(normalizeName('दल'));
     expect(normalizeName('ポップ')).not.toBe(normalizeName('ホッフ'));
   });
+
+  it('ignores emoji variation selectors and keycap marks', () => {
+    expect(normalizeName('Love ❤️')).toBe(normalizeName('Love ❤'));
+    expect(normalizeName('1️⃣ One')).toBe(normalizeName('1 One'));
+    expect(normalizeName('❤️')).toBe('');
+  });
 });
 
 describe('stripEdition', () => {
