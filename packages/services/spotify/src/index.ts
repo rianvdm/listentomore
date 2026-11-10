@@ -8,6 +8,7 @@ import { SpotifyArtists } from './artists';
 import { SpotifyRateLimiter } from './rate-limit';
 import { createDefer } from './defer';
 import type { WaitUntil } from './defer';
+import type { LookupAlbumCandidate, LookupArtistCandidate } from './search';
 
 export { SpotifyAuth } from './auth';
 export { SpotifyNotFoundError } from './errors';
@@ -20,6 +21,8 @@ export type {
   AlbumSearchResult,
   ArtistSearchResult,
   SearchResult,
+  LookupAlbumCandidate,
+  LookupArtistCandidate,
 } from './search';
 
 export { SpotifyAlbums } from './albums';
@@ -85,6 +88,14 @@ export class SpotifyService {
 
   async searchArtist(query: string) {
     return this.search.searchArtist(query);
+  }
+
+  async searchAlbumCandidates(query: string, limit: number): Promise<LookupAlbumCandidate[]> {
+    return this.search.searchAlbumCandidates(query, limit);
+  }
+
+  async searchArtistCandidates(query: string, limit: number): Promise<LookupArtistCandidate[]> {
+    return this.search.searchArtistCandidates(query, limit);
   }
 
   async searchTrack(query: string) {

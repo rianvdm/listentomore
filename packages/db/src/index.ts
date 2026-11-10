@@ -69,11 +69,12 @@ export class Database {
     display_name?: string;
     avatar_url?: string;
     profile_visibility?: 'public' | 'private';
+    signup_ref?: string;
   }): Promise<User> {
     const result = await this.db
       .prepare(
-        `INSERT INTO users (id, username, lastfm_username, lastfm_session_key, display_name, avatar_url, profile_visibility, login_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        `INSERT INTO users (id, username, lastfm_username, lastfm_session_key, display_name, avatar_url, profile_visibility, signup_ref, login_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
          RETURNING *`
       )
       .bind(
@@ -83,7 +84,8 @@ export class Database {
         data.lastfm_session_key || null,
         data.display_name || data.lastfm_username,
         data.avatar_url || null,
-        data.profile_visibility || 'public'
+        data.profile_visibility || 'public',
+        data.signup_ref || null
       )
       .first<User>();
 
@@ -623,6 +625,32 @@ export class Database {
       .prepare('SELECT * FROM entity_pages')
       .all<EntityPage>();
     return result.results;
+  }
+
+  // Referral tracking
+
+  /**
+   * Record one lookup click from a known referrer. Stores no IP, user agent or searched names.
+   */
+  async recordReferralClick(click: {
+    ref: string;
+    type: 'album' | 'artist';
+    matched: boolean;
+    signedIn: boolean;
+    isBot: boolean;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        'INSERT INTO referral_clicks (ref, type, matched, signed_in, is_bot) VALUES (?, ?, ?, ?, ?)'
+      )
+      .bind(
+        click.ref,
+        click.type,
+        click.matched ? 1 : 0,
+        click.signedIn ? 1 : 0,
+        click.isBot ? 1 : 0
+      )
+      .run();
   }
 
   /**

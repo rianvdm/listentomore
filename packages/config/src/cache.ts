@@ -44,6 +44,12 @@ export const CACHE_CONFIG = {
     lookup: { ttlDays: 30 }, // ISRCs/UPCs never change once assigned
   },
 
+  // /lookup name → Spotify ID results. Misses expire sooner so new releases resolve within a day.
+  lookup: {
+    hit: { ttlDays: 30 },
+    miss: { ttlDays: 1 },
+  },
+
   // HTTP cache headers for responses
   http: {
     static: { maxAge: 86400, staleWhileRevalidate: 43200 }, // 1 day

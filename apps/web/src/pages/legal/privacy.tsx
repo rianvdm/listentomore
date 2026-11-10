@@ -5,7 +5,7 @@ import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { SITE_CONFIG } from '@listentomore/config';
 
-export const PRIVACY_EFFECTIVE_DATE = 'November 8, 2026';
+export const PRIVACY_EFFECTIVE_DATE = 'November 9, 2026';
 
 interface PrivacyPageProps {
   currentUser?: User | null;
@@ -42,6 +42,11 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>A short bio, if you write one on the account page.</li>
         <li>Whether your profile is public or private.</li>
         <li>When your account was created, when you last signed in, and how many times you have.</li>
+        <li>
+          If you created your account with the sign-in button on the page a lastfm-mcp link opened, a
+          note saying so. Signing up any other way, including from the Sign In link at the top of the
+          page, doesn't add the note.
+        </li>
       </ul>
       <p>
         I don't ask for or store your email address. Your listening history stays at Last.fm. The
@@ -50,7 +55,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       </p>
       <p>
         When a new account is created, I get a message in my own Discord server with the username
-        and profile link.
+        and profile link, plus "via lastfm-mcp" when the account has the lastfm-mcp note above.
       </p>
 
       <h2>2. Sessions, cookies, and logs</h2>
@@ -65,9 +70,23 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         browser sends the cookie.
       </p>
       <p>
-        If you never sign in, the site itself sets no cookie, though Cloudflare sets its own (see
-        section 8). Your browser also stores two small things on your device only: your light or
-        dark theme choice, and whether you dismissed an announcement banner.
+        If you never sign in, the site itself sets no cookie, even when you arrive from a lastfm-mcp
+        link, though Cloudflare sets its own (see section 8). Your browser also stores two small
+        things on your device only: your light or dark theme choice, and whether you dismissed an
+        announcement banner.
+      </p>
+      <p>
+        If you follow a link to this site from lastfm-mcp, I add a row to a click log. The row has
+        the time, that the link came from lastfm-mcp, whether you were looking for an album or an
+        artist, whether the site found a match, whether you were signed in, and whether the request
+        looked like it came from a bot. The row holds nothing else: not your IP address, not your
+        browser details and not the names you looked up. The click log isn't linked to accounts.
+      </p>
+      <p>
+        The artist and album names in the link go into the lookup cache (section 4). If they
+        aren't cached yet, Spotify gets them as a search, and they can show up in Cloudflare's logs
+        (see section 3 for both). If nothing matches, the link opens the search page with the names
+        filled in, and that search is cached with the names unchanged (section 4).
       </p>
       <p>
         There is also a log of calls to the site's API, which needs an API key that I hand out
@@ -124,6 +143,16 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>Artist recommendations on your profile: 6 hours.</li>
         <li>The AI summary and album picks on your insights page: 1 day.</li>
         <li>Your Last.fm profile details and your play count for an artist: 30 days.</li>
+        <li>
+          The result of a lookup link, such as one from lastfm-mcp: the artist and album names, in
+          lowercase without accents or punctuation, and the album or artist they matched. The lookup
+          cache keeps a match for 30 days and a miss for 1 day, so the same lookup doesn't search
+          Spotify again.
+        </li>
+        <li>
+          Text searched on the album or artist search page, exactly as entered, with the results: 30
+          days, even when nothing was found.
+        </li>
       </ul>
 
       <h2>5. Private profiles</h2>
@@ -156,6 +185,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         </li>
         <li>The Discord message I received when your account was created stays in Discord.</li>
         <li>The API log doesn't point to accounts, so deletion doesn't touch it.</li>
+        <li>The click log for lastfm-mcp links doesn't point to accounts either, so it stays too.</li>
         <li>
           Data that Last.fm, Anthropic or the other services in section 3 already hold is theirs to
           manage. Deleting here also doesn't remove this site from your Last.fm connected

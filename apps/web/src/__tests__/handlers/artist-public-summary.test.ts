@@ -22,6 +22,10 @@ const CACHED_SUMMARY = `Radiohead are **an English rock band**. Start with ${ALB
 const LABEL_HTML = '<p class="ai-summary-label text-muted"><a href="/about#how-its-built">AI-written summary</a></p>';
 const UNLOCK_PROMPT = 'AI-powered album and artist summaries';
 const PERSONAL_PROMPT = 'Recommendations based on what you play';
+const LASTFM_HEADING = 'You already use Last.fm';
+const LASTFM_SUMMARY_BULLET = 'The AI summary of this artist';
+const DEFAULT_LOGIN_HREF = `href="/login?next=%2Fartist%2F${ARTIST_ID}"`;
+const REF_LOGIN_HREF = `href="/login?next=%2Fartist%2F${ARTIST_ID}&amp;ref=lastfm-mcp"`;
 
 describe('Artist page public cached summary', () => {
   let app: Hono<{ Variables: TestVariables }>;
@@ -33,8 +37,8 @@ describe('Artist page public cached summary', () => {
     getArtistSummary: vi.fn(),
   };
 
-  function requestArtist(env?: Record<string, string>) {
-    return app.request(`/artist/${ARTIST_ID}`, undefined, env);
+  function requestArtist(env?: Record<string, string>, query = '') {
+    return app.request(`/artist/${ARTIST_ID}${query}`, undefined, env);
   }
 
   beforeEach(() => {
@@ -166,6 +170,90 @@ describe('Artist page public cached summary', () => {
     expect(html).not.toContain(PERSONAL_PROMPT);
     expect(html).not.toContain(UNLOCK_PROMPT);
     expect(ai.getArtistSummary).not.toHaveBeenCalled();
+  });
+
+  describe('visitors from lastfm-mcp', () => {
+    const REF_QUERY = '?ref=lastfm-mcp';
+
+    it('shows the Last.fm prompt in the summary slot for ?ref=lastfm-mcp with no cached summary', async () => {
+      ai.getCachedArtistSummary.mockResolvedValue(null);
+
+      const html = await (await requestArtist(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html).not.toContain(UNLOCK_PROMPT);
+      expect(html).not.toContain('Sign in to unlock more');
+      expect(html).not.toContain('id="ai-summary"');
+      expect(ai.getArtistSummary).not.toHaveBeenCalled();
+    });
+
+    it('shows the summary and the Last.fm prompt for ?ref=lastfm-mcp with a cached summary', async () => {
+      const html = await (await requestArtist(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain('<strong>an English rock band</strong>');
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain('A public profile page');
+      expect(html).not.toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).not.toContain('Sign in with Last.fm for more');
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html.indexOf('an English rock band')).toBeLessThan(html.indexOf(LASTFM_HEADING));
+      expect(ai.getArtistSummary).not.toHaveBeenCalled();
+    });
+
+    it('shows the default prompt for an unknown ref', async () => {
+      ai.getCachedArtistSummary.mockResolvedValue(null);
+
+      const html = await (await requestArtist(FLAG_ON, '?ref=evil')).text();
+
+      expect(html).toBe(await (await requestArtist(FLAG_ON)).text());
+      expect(html).toContain('Sign in to unlock more');
+      expect(html).toContain(DEFAULT_LOGIN_HREF);
+      expect(html).not.toContain(LASTFM_HEADING);
+      expect(html).not.toMatch(/[?&;]ref=/);
+    });
+
+    it('shows the default prompt for a repeated ref', async () => {
+      ai.getCachedArtistSummary.mockResolvedValue(null);
+
+      const html = await (await requestArtist(FLAG_ON, '?ref=lastfm-mcp&ref=evil')).text();
+
+      expect(html).toBe(await (await requestArtist(FLAG_ON)).text());
+      expect(html).toContain('Sign in to unlock more');
+      expect(html).toContain(DEFAULT_LOGIN_HREF);
+      expect(html).not.toContain(LASTFM_HEADING);
+      expect(html).not.toMatch(/[?&;]ref=/);
+    });
+
+    it('shows no prompt to a signed-in visitor with ref', async () => {
+      currentUser = SIGNED_IN_USER;
+
+      const html = await (await requestArtist(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain('an English rock band');
+      expect(html).not.toContain(LASTFM_HEADING);
+      expect(html).not.toContain(UNLOCK_PROMPT);
+      expect(html).not.toContain(PERSONAL_PROMPT);
+      expect(html).not.toContain('/login?next=');
+    });
+
+    it('keeps ref out of the canonical URL', async () => {
+      const html = await (await requestArtist(FLAG_ON, REF_QUERY)).text();
+
+      expect(html).toContain(`<link rel="canonical" href="https://listentomore.com/artist/${ARTIST_ID}"/>`);
+    });
+
+    it('shows the Last.fm prompt with the flag off', async () => {
+      const html = await (await requestArtist({}, REF_QUERY)).text();
+
+      expect(html).toContain(LASTFM_HEADING);
+      expect(html).toContain(LASTFM_SUMMARY_BULLET);
+      expect(html).toContain(REF_LOGIN_HREF);
+      expect(html).not.toContain('an English rock band');
+      expect(html).not.toContain(UNLOCK_PROMPT);
+      expect(ai.getCachedArtistSummary).not.toHaveBeenCalled();
+    });
   });
 
   describe('client-fetched summary for a signed-in user on a cache miss', () => {

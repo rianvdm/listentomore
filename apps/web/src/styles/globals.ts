@@ -1389,6 +1389,11 @@ blockquote {
   margin: 2rem auto;
 }
 
+/* The global h3 rule left-aligns headings; CTA boxes centre theirs with the rest of the box */
+.cta-box h3 {
+  text-align: center;
+}
+
 .cta-box p {
   margin: 0 0 1rem;
   font-size: 1rem;

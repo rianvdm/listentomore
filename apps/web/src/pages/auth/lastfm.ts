@@ -2,20 +2,33 @@
 // Implements Last.fm Web Authentication flow
 
 import type { Context } from 'hono';
+import type { Database } from '@listentomore/db';
 import type { Bindings, Variables } from '../../types';
 import { lastfmSignature } from '../../utils/md5';
+import { readRef } from '../../utils/referral';
 import { createSession } from '../../utils/session';
-import type { Database } from '@listentomore/db';
 
 const LASTFM_AUTH_URL = 'https://www.last.fm/api/auth/';
 const LASTFM_API_URL = 'https://ws.audioscrobbler.com/2.0/';
 
+const SITE_ORIGIN = 'https://listentomore.com';
+
+// ASCII control characters. URL parsers strip tabs and newlines, so '/\t/evil.example' would become '//evil.example'.
+const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+
 /**
  * Validate that a redirect target is a safe relative path on this origin.
- * Rejects absolute URLs and protocol-relative URLs (//evil.com).
+ * Rejects absolute and protocol-relative URLs, backslashes (browsers read '/\evil.example'
+ * as '//evil.example') and control characters, then confirms the path resolves to this origin.
  */
-function isSafeRedirect(url: string): boolean {
-  return url.startsWith('/') && !url.startsWith('//');
+export function isSafeRedirect(url: string): boolean {
+  if (!url.startsWith('/') || url.startsWith('//')) return false;
+  if (url.includes('\\') || CONTROL_CHARS.test(url)) return false;
+  try {
+    return new URL(url, SITE_ORIGIN).origin === SITE_ORIGIN;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -30,19 +43,19 @@ export function handleLastfmAuth(c: Context<{ Bindings: Bindings; Variables: Var
     return c.redirect('/login?error=no_secret');
   }
 
-  // Build callback URL
-  const url = new URL(c.req.url);
-  const callbackUrl = `${url.origin}/auth/lastfm/callback`;
+  // Preserve 'next' and 'ref' through the OAuth flow on the callback URL.
+  // Only a safe relative 'next' and a known 'ref' are forwarded.
+  const callbackParams = new URLSearchParams();
+  const next = c.req.query('next');
+  if (next && isSafeRedirect(next)) callbackParams.set('next', next);
+  const ref = readRef(c.req.queries('ref'));
+  if (ref) callbackParams.set('ref', ref);
 
-  // Preserve the 'next' parameter through the OAuth flow.
-  // Only forward safe relative paths to prevent open redirect via the callback.
-  const nextRaw = c.req.query('next');
-  const next = nextRaw && isSafeRedirect(nextRaw) ? nextRaw : null;
-  const cb = next ? `${callbackUrl}?next=${encodeURIComponent(next)}` : callbackUrl;
+  const callbackQuery = callbackParams.toString();
+  const callbackUrl = `${new URL(c.req.url).origin}/auth/lastfm/callback${callbackQuery ? `?${callbackQuery}` : ''}`;
+  const authParams = new URLSearchParams({ api_key: apiKey, cb: callbackUrl });
 
-  const authUrl = `${LASTFM_AUTH_URL}?api_key=${apiKey}&cb=${encodeURIComponent(cb)}`;
-
-  return c.redirect(authUrl);
+  return c.redirect(`${LASTFM_AUTH_URL}?${authParams}`);
 }
 
 /**
@@ -54,6 +67,7 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
   // Validate next is a safe relative path to prevent open redirect.
   const nextRaw = c.req.query('next') || '/';
   const next = isSafeRedirect(nextRaw) ? nextRaw : '/';
+  const signupRef = readRef(c.req.queries('ref'));
 
   if (!token) {
     return c.redirect('/login?error=no_token');
@@ -136,6 +150,7 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
       display_name: lastfmUsername,
       avatar_url: avatarUrl || undefined,
       profile_visibility: 'public',
+      signup_ref: signupRef ?? undefined,
     });
 
     console.log(`Created new user: ${username} (Last.fm: ${lastfmUsername})`);
@@ -144,7 +159,9 @@ export async function handleLastfmCallback(c: Context<{ Bindings: Bindings; Vari
     // Use ctx.waitUntil() so the fetch is not dropped when the response is sent.
     if (c.env.DISCORD_WEBHOOK_URL) {
       const webhookPayload = {
-        content: `🎉 New signup: **${username}** — https://listentomore.com/u/${username}`
+        content: signupRef
+          ? `🎉 New signup: **${username}** (via ${signupRef}) — https://listentomore.com/u/${username}`
+          : `🎉 New signup: **${username}** — https://listentomore.com/u/${username}`,
       };
       console.log('[DISCORD_WEBHOOK] Sending new signup notification', {
         username,

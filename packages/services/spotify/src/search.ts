@@ -34,6 +34,23 @@ export interface AlbumSearchResult {
   image: string | null;
 }
 
+/**
+ * An album candidate for strict name matching on /lookup. `artists` keeps each credited
+ * artist's full name, because AlbumSearchResult.artist joins them with ', ' and loses the
+ * boundaries ("Crosby, Stills, Nash & Young" would split into fragments).
+ */
+export interface LookupAlbumCandidate {
+  id: string;
+  name: string;
+  artists: string[];
+}
+
+/** An artist candidate for strict name matching on /lookup. */
+export interface LookupArtistCandidate {
+  id: string;
+  name: string;
+}
+
 export interface ArtistSearchResult {
   name: string;
   id: string;
@@ -121,27 +138,7 @@ export class SpotifySearch {
     }
 
     console.log(`[Spotify] Cache miss, searching API: ${type} "${query}"`);
-    const accessToken = await getAccessToken();
-
-    const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
-    const response = await spotifyFetch(
-      url,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        timeout: 'fast',
-      },
-      this.rateLimiter
-    );
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After') || 'unknown';
-        console.error(`[Spotify] 429 Rate Limited for search "${query}", Retry-After: ${retryAfter}s`);
-      }
-      throw new Error(`Spotify search failed: ${response.status} ${response.statusText}`);
-    }
-
-    const data = (await response.json()) as SpotifySearchResponse;
+    const data = await this.requestSearch(query, type, limit, await getAccessToken());
     let results: SearchResult[];
 
     if (type === 'track' && data.tracks) {
@@ -191,6 +188,59 @@ export class SpotifySearch {
     );
 
     return results as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
+  }
+
+  /**
+   * Album candidates for strict name matching on /lookup, full albums first.
+   * Uncached: the `spotify:search:` key omits `limit` and its stored results join artist names.
+   */
+  async searchAlbumCandidates(query: string, limit: number): Promise<LookupAlbumCandidate[]> {
+    const data = await this.requestSearch(query, 'album', limit, await this.auth.getAccessToken());
+    const items = data.albums?.items ?? [];
+    // Stable reorder so a single or EP sharing the album's title never wins over the album
+    const ordered = [
+      ...items.filter((item) => item.album_type === 'album'),
+      ...items.filter((item) => item.album_type !== 'album'),
+    ];
+    return ordered.map((item) => ({
+      id: item.id,
+      name: item.name,
+      artists: item.artists.map((a) => a.name),
+    }));
+  }
+
+  /** Artist candidates for strict name matching on /lookup, in Spotify's order. Uncached. */
+  async searchArtistCandidates(query: string, limit: number): Promise<LookupArtistCandidate[]> {
+    const data = await this.requestSearch(query, 'artist', limit, await this.auth.getAccessToken());
+    return (data.artists?.items ?? []).map((item) => ({ id: item.id, name: item.name }));
+  }
+
+  /** One rate-limited call to Spotify's search API. Throws on a non-OK response. */
+  private async requestSearch(
+    query: string,
+    type: SearchType,
+    limit: number,
+    accessToken: string
+  ): Promise<SpotifySearchResponse> {
+    const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
+    const response = await spotifyFetch(
+      url,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 'fast',
+      },
+      this.rateLimiter
+    );
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || 'unknown';
+        console.error(`[Spotify] 429 Rate Limited for search "${query}", Retry-After: ${retryAfter}s`);
+      }
+      throw new Error(`Spotify search failed: ${response.status} ${response.statusText}`);
+    }
+
+    return (await response.json()) as SpotifySearchResponse;
   }
 
   async searchTrack(query: string): Promise<TrackSearchResult | null> {

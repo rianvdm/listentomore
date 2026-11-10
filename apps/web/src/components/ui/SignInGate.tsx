@@ -4,17 +4,22 @@
 import type { Child } from 'hono/jsx';
 import type { User } from '@listentomore/db';
 import { SignInCTA } from './SignInCTA';
+import type { SignInCTAProps } from './SignInCTA';
 
 interface SignInGateProps {
   currentUser: User | null;
   currentPath: string;
   children: Child;
+  // Passed through to SignInCTA for anonymous visitors.
+  variant?: SignInCTAProps['variant'];
+  entity?: SignInCTAProps['entity'];
+  signInRef?: SignInCTAProps['signInRef'];
 }
 
-export function SignInGate({ currentUser, currentPath, children }: SignInGateProps) {
+export function SignInGate({ currentUser, currentPath, children, variant, entity, signInRef }: SignInGateProps) {
   if (currentUser) {
     return <>{children}</>;
   }
 
-  return <SignInCTA currentPath={currentPath} />;
+  return <SignInCTA currentPath={currentPath} variant={variant} entity={entity} signInRef={signInRef} />;
 }

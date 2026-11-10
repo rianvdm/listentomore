@@ -1,4 +1,4 @@
-// ABOUTME: robots.txt for listentomore.com: every crawler may read pages but not /api/,
+// ABOUTME: robots.txt for listentomore.com: every crawler may read pages but not /api/ or /lookup,
 // ABOUTME: and AI training crawlers are kept out entirely. Mirrors the zone's AI-training setting.
 
 import { SITE_CONFIG } from '@listentomore/config';
@@ -24,6 +24,7 @@ export const ROBOTS_TXT = `# ListenToMore robots.txt
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /lookup
 
 # AI training crawlers
 ${TRAINING_CRAWLERS.map((agent) => `User-agent: ${agent}`).join('\n')}
