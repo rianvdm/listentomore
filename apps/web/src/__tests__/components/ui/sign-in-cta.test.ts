@@ -30,7 +30,7 @@ describe('SignInCTA', () => {
 
       expect(html).toContain('<h3 style="margin-top:0">You already use Last.fm</h3>');
       expect(html).toContain('<p>Sign in with it to get more from ListenToMore:</p>');
-      expect(html).toContain('<li>The AI summary and recommendations for this album</li>');
+      expect(html).toContain('<li>The AI summary of this album</li>');
       expect(html).toContain('<li>Recommendations based on what you play</li>');
       expect(html).toContain('<li>Your listening stats and weekly insights</li>');
       expect(html).not.toContain('A public profile page');
@@ -52,7 +52,7 @@ describe('SignInCTA', () => {
     it('says artist on artist pages', () => {
       const html = SignInCTA({ currentPath: '/artist/abc', variant: 'lastfm-mcp', entity: 'artist' }).toString();
 
-      expect(html).toContain('The AI summary and recommendations for this artist');
+      expect(html).toContain('The AI summary of this artist');
       expect(html).not.toContain('for this album');
     });
 

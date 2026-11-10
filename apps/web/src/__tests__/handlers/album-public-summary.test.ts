@@ -24,7 +24,7 @@ const LABEL_HTML = '<p class="ai-summary-label text-muted"><a href="/about#how-i
 const UNLOCK_PROMPT = 'AI-powered album and artist summaries';
 const PERSONAL_PROMPT = 'Recommendations based on what you play';
 const LASTFM_HEADING = 'You already use Last.fm';
-const LASTFM_SUMMARY_BULLET = 'The AI summary and recommendations for this album';
+const LASTFM_SUMMARY_BULLET = 'The AI summary of this album';
 const DEFAULT_LOGIN_HREF = `href="/login?next=%2Falbum%2F${ALBUM_ID}"`;
 const REF_LOGIN_HREF = `href="/login?next=%2Falbum%2F${ALBUM_ID}&amp;ref=lastfm-mcp"`;
 

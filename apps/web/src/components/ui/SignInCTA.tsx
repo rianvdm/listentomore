@@ -59,7 +59,7 @@ function getCopy(variant: SignInCTAVariant, entity: SignInCTAEntity, summaryShow
               'A public profile page',
             ]
           : [
-              `The AI summary and recommendations for this ${entity}`,
+              `The AI summary of this ${entity}`,
               'Recommendations based on what you play',
               'Your listening stats and weekly insights',
             ],
