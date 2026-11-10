@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import type { Bindings, Variables } from '../../types';
+import { deleteUserInsightsData } from '../../utils/insights-cleanup';
 
 interface AccountPageProps {
   user: User;
@@ -303,6 +304,20 @@ export async function handleAccountDelete(c: Context<{ Bindings: Bindings; Varia
     console.log('[DELETE_USER] Deleting user sessions', { user_id: currentUser.id });
     await db.deleteUserSessions(currentUser.id);
     console.log('[DELETE_USER] Sessions deleted successfully');
+
+    // Delete the user's cached insights and per-user Last.fm data. A KV failure is logged and never
+    // blocks the account deletion; the remaining keys expire on their TTLs.
+    if (currentUser.lastfm_username) {
+      try {
+        const deletedKeys = await deleteUserInsightsData(c.env.CACHE, currentUser.lastfm_username);
+        console.log('[DELETE_USER] Cached data deleted', { user_id: currentUser.id, keys: deletedKeys });
+      } catch (error) {
+        console.error('[DELETE_USER] Cached data cleanup failed, continuing', {
+          user_id: currentUser.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // Delete user (CASCADE will handle api_keys, searches, discogs data)
     console.log('[DELETE_USER] Deleting user record (CASCADE will delete related data)', {

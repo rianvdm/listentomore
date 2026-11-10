@@ -34,7 +34,7 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 | `albumDetail` | `claude-opus-5-5` | low | Long-form with web search, cached 120 days |
 | `genreSummary` | `claude-opus-5-5` | low | Long-form, cached 180 days |
 | `albumRecommendations` | `claude-opus-5-5` | low | Web search plus judgement about what to recommend |
-| `userInsightsSummary` | `claude-opus-5-5` | low | Warm long-form writing that follows the few-shot examples |
+| `userInsightsSummary` | `claude-opus-5-5` | low | The weekly note: two to four sentences, returned as JSON with the ids of the ranked week facts each one cites, then checked by the guard. Uncached here; the insights route caches only a note that passes |
 | `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
 | `artistSentence` | `claude-opus-5-5` | low | Short output with web search, cached 180 days. Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval rows (64-74 words against the 38-word cap) |
 | `listenAi` | `claude-sonnet-5-5` | low | Chat; the user waits on it |
@@ -43,6 +43,26 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 The `artistSummary`, `albumDetail`, and `genreSummary` prompts carry word caps (180, 350, 350) so Claude's output matches the length GPT produced.
 
 To compare models or settings, run the eval script `apps/web/scripts/ai-eval.ts` (flags: `--label`, `--only`, `--rescore`).
+
+### Evaluating the weekly insights note
+
+The weekly note has its own eval, `apps/web/scripts/insights-eval.ts`. Run it before merging any change to the note prompt (`packages/services/ai/src/prompts/user-insights-note.ts`), to the `userInsightsSummary` config, or to a salience weight in `@listentomore/insights`.
+
+```bash
+cd apps/web
+pnpm dlx tsx scripts/insights-eval.ts --label <name> --dry-run      # call count and projected cost, no API calls
+pnpm dlx tsx scripts/insights-eval.ts --label <name> [--extra <dir>]
+```
+
+For every `WeekInputs` fixture in `packages/services/insights/__fixtures__` (and in `--extra <dir>`), it builds the week's facts and asks the model for the note twice. Each note goes through the production guard (`guardNote`) and a rubric of banned words and constructions (`apps/web/scripts/insights-rubric.ts`), which reads the note with the week's artist and album names masked. `--extra` is for weeks that must stay out of the repository, such as another listener's; their output is labelled `extra-1`, `extra-2` and so on. Everything goes to `apps/web/eval-output/<label>/insights/` (gitignored): one JSON per fixture with the prompt view, both replies, guard results, rubric hits, tokens and cost, plus a `summary.md` with the table, every note and an opener-overlap figure.
+
+Exit codes:
+
+- `0`: every week got at least one note past the guard, and no note tripped the rubric.
+- `1`: a week failed the guard on both runs, so the page would show the code-written line instead of a note, or a note used a banned word or construction. Read the failure codes in `summary.md` before changing anything. A code can come from a guard false positive as well as from a model miss, and the fix for each is different.
+- `2`: the run could not start (a missing key or a bad label).
+
+Each fixture costs two calls. The first full run (8 fixtures, 16 calls) cost $0.16. The eval calls the live API and spends real money, so it never runs in CI; run it by hand. `ANTHROPIC_API_KEY` comes from `apps/web/.dev.vars` first.
 
 ---
 

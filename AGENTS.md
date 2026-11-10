@@ -186,6 +186,10 @@ Mount in the directory's `index.ts` via `app.route('/path', myRoutes)`.
 - Services accessed via Hono context: `c.get('spotify')`, `c.get('lastfm')`, `c.get('ai')`, `c.get('db')`
 - User auth state: `c.get('currentUser')`, `c.get('isAuthenticated')` on pages and public API routes. `/api/internal/*` skips the eager session lookup; use `await getCurrentUser(c)` (`middleware/session.ts`) or `requireSessionAuth` there
 - Check `profile_visibility` before exposing any user profile data
+- **The insights `WeekFacts` object and its prompt view never leave the server** -- not in an HTTP response, not in a log line
+- Salience scores (`packages/services/insights/src/`) and the note prompt (`packages/services/ai/src/prompts/user-insights-note.ts`) change only alongside a run of `apps/web/scripts/insights-eval.ts` (see `docs/how-to/ai-models.md`)
+- The insights history caches (scrobble days, charts, top lists, per-user artist and album counts) and the insights keys use the builders in `packages/services/insights/src/keys.ts`, whose `userKeyPrefixes` and `userExactKeys` account deletion reads. Per-user artist detail and the older per-user `lastfm:*` families (user info, top artists, top albums, loved tracks) are listed in `apps/web/src/utils/insights-cleanup.ts` itself. A new per-user family goes in one of the two, or deletion misses it
+- **Run D1 migration `011_user_timezone.sql` on production before deploying the insights week-facts branch.** Without it every signed-in page load fires a failing `UPDATE` (pages still render)
 - Pass `internalToken` to Layout for pages that use internal APIs
 - Do not expose secrets or session tokens to the browser
 

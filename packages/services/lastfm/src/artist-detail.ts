@@ -68,10 +68,12 @@ export class ArtistDetails {
   ) {}
 
   async getArtistDetail(artistName: string, username?: string): Promise<ArtistDetail> {
-    // Normalize artist name for cache key (include username when provided)
+    // A user's copy (it carries their play count) lives in its own family, with the user first, so
+    // account deletion clears it by prefix and never touches the global entry for any artist name.
+    const artistKey = artistName.toLowerCase().trim();
     const cacheKey = username
-      ? `lastfm:artistDetail:${artistName.toLowerCase().trim()}:user:${username.toLowerCase()}`
-      : `lastfm:artistDetail:${artistName.toLowerCase().trim()}`;
+      ? `lastfm:userArtistDetail:${username.toLowerCase()}:${artistKey}`
+      : `lastfm:artistDetail:${artistKey}`;
 
     // Check cache first
     if (this.cache) {

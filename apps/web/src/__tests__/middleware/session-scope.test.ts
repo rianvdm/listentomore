@@ -29,6 +29,7 @@ const SIGNED_IN_USER: User = {
   bio: null,
   profile_visibility: 'public',
   signup_ref: null,
+  timezone: null,
   last_login_at: null,
   login_count: 1,
   created_at: '2026-01-01T00:00:00Z',
@@ -74,14 +75,23 @@ function createExecutionCtx() {
 
 async function request(
   path: string,
-  options: { signedIn?: boolean; internal?: boolean; cache?: KVNamespace; ctx?: ExecutionContext } = {}
+  options: {
+    signedIn?: boolean;
+    internal?: boolean;
+    cache?: KVNamespace;
+    ctx?: ExecutionContext;
+    cf?: Record<string, unknown>;
+  } = {}
 ) {
   const headers: Record<string, string> = {};
   if (options.signedIn) headers.Cookie = SESSION_COOKIE;
   if (options.internal) headers['X-Internal-Token'] = await generateInternalToken(INTERNAL_SECRET);
 
+  const req = new Request(`https://listentomore.com${path}`, { headers });
+  if (options.cf) Object.defineProperty(req, 'cf', { value: options.cf });
+
   return worker.fetch(
-    new Request(`https://listentomore.com${path}`, { headers }),
+    req,
     createEnv(options.cache) as never,
     options.ctx ?? createExecutionCtx()
   );
@@ -93,6 +103,7 @@ describe('session loading scope', () => {
   let updateSessionActivity: MockInstance<Database['updateSessionActivity']>;
   let logApiUsage: MockInstance<Database['logApiUsage']>;
   let getUserByLastfmUsername: MockInstance<Database['getUserByLastfmUsername']>;
+  let updateUser: MockInstance<Database['updateUser']>;
 
   beforeEach(() => {
     getSessionByToken = vi.spyOn(Database.prototype, 'getSessionByToken').mockResolvedValue(ACTIVE_SESSION);
@@ -101,6 +112,7 @@ describe('session loading scope', () => {
     logApiUsage = vi.spyOn(Database.prototype, 'logApiUsage').mockResolvedValue();
     getUserByLastfmUsername = vi.spyOn(Database.prototype, 'getUserByLastfmUsername').mockResolvedValue(null);
     vi.spyOn(Database.prototype, 'getUserByUsername').mockResolvedValue(null);
+    updateUser = vi.spyOn(Database.prototype, 'updateUser').mockResolvedValue();
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -261,5 +273,25 @@ describe('session loading scope', () => {
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
     });
 
+    it('stores the signed-in user\'s timezone on a page load', async () => {
+      const ctx = createExecutionCtx();
+
+      const res = await request('/about', { signedIn: true, ctx, cf: { timezone: 'America/Los_Angeles' } });
+
+      expect(res.status).toBe(200);
+      expect(updateUser).toHaveBeenCalledWith(SIGNED_IN_USER.id, { timezone: 'America/Los_Angeles' });
+    });
+
+    it('never stores a timezone from an internal route', async () => {
+      const res = await request('/api/internal/album-summary', {
+        signedIn: true,
+        internal: true,
+        cf: { timezone: 'America/Los_Angeles' },
+      });
+
+      expect(res.status).toBe(400);
+      expect(getSessionByToken).toHaveBeenCalledTimes(1);
+      expect(updateUser).not.toHaveBeenCalled();
+    });
   });
 });

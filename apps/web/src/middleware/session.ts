@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type { Database, User } from '@listentomore/db';
 import { validateSession } from '../utils/session';
+import { syncUserTimezone } from '../utils/timezone';
 import { getWaitUntil } from '../utils/wait-until';
 import type { Bindings, Variables } from '../types';
 
@@ -39,6 +40,8 @@ export function getCurrentUser(c: Context): Promise<User | null> {
  * Session middleware that validates the session cookie and injects
  * currentUser and isAuthenticated into the context for page and public API
  * routes. /api/internal/* requests skip this and use getCurrentUser() instead.
+ * Signed-in loads also store the user's cf.timezone (off the response path),
+ * so the timezone write never runs on /api/internal/*.
  *
  * This should be applied early in the middleware chain, after the db is set.
  */
@@ -54,6 +57,7 @@ export const sessionMiddleware = createMiddleware<{
   const user = await getCurrentUser(c);
   c.set('currentUser', user);
   c.set('isAuthenticated', !!user);
+  syncUserTimezone(c, user);
 
   await next();
 });

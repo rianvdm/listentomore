@@ -208,13 +208,13 @@ export const AI_TASKS = {
   userInsightsSummary: {
     provider: 'anthropic',
     model: 'claude-opus-5-5',
-    // 5000 gives headroom for adaptive thinking (thinking tokens count against
-    // max_tokens, display-omitted so invisible) plus the 2-3 paragraph output.
-    // Only tokens actually generated are billed.
+    // The weekly note: two to four sentences as a JSON array with cited fact
+    // ids. 5000 gives headroom for adaptive thinking (thinking tokens count
+    // against max_tokens, display-omitted so invisible); measured output runs
+    // 80 to 540 tokens including thinking. Only tokens generated are billed.
     maxTokens: 5000,
-    // temperature is inert on Claude (the AnthropicClient omits it) — kept only
-    // to satisfy the AITaskConfig shape. Warmth comes from the persona +
-    // few-shot examples.
+    // temperature is inert on Claude (the AnthropicClient omits it) and is kept
+    // only because the AITaskConfig shape requires it.
     temperature: 0.8,
     cacheTtlDays: 1,
     reasoning: 'low',

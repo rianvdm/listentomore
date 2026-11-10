@@ -29,7 +29,6 @@
     {
       "username": "eval-ambient-jazz",
       "listeningData": {
-        "weeklyPlayCount": 142,
         "topArtists": [
           { "name": "Stars of the Lid", "playcount": 38 },
           { "name": "Alice Coltrane", "playcount": 27 },
@@ -75,7 +74,6 @@
     {
       "username": "eval-uk-rap-punk",
       "listeningData": {
-        "weeklyPlayCount": 96,
         "topArtists": [
           { "name": "Little Simz", "playcount": 29 },
           { "name": "Turnstile", "playcount": 18 },

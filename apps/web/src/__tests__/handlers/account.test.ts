@@ -1,9 +1,10 @@
-// ABOUTME: Tests for account deletion handler - verifies CSRF protection (F1 fix).
-// ABOUTME: Ensures deletion only works via POST with correct confirmation value.
+// ABOUTME: Tests for account deletion handler - verifies CSRF protection (F1 fix) and cached-data cleanup.
+// ABOUTME: Ensures deletion only works via POST with DELETE, and clears the user's KV keys before the user row.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { handleAccountDelete } from '../../pages/account';
+import { createMockKV } from '../utils/mocks';
 
 // Mock destroySession to avoid crypto/cookie dependencies in tests
 vi.mock('../../utils/session', () => ({
@@ -13,7 +14,7 @@ vi.mock('../../utils/session', () => ({
 const mockUser = {
   id: 'user-123',
   username: 'testuser',
-  lastfm_username: 'testuser',
+  lastfm_username: 'TestUser',
   display_name: 'Test User',
   bio: null,
   profile_visibility: 'public' as const,
@@ -26,6 +27,12 @@ function createMockDb() {
     deleteUserSessions: vi.fn().mockResolvedValue(undefined),
     deleteUser: vi.fn().mockResolvedValue(undefined),
   };
+}
+
+function deleteRequest(cache: KVNamespace) {
+  const formData = new FormData();
+  formData.append('confirmation', 'DELETE');
+  return [{ method: 'POST', body: formData }, { CACHE: cache }] as const;
 }
 
 type TestVariables = {
@@ -90,18 +97,52 @@ describe('Account Delete Handler', () => {
   });
 
   it('succeeds with POST and confirmation=DELETE', async () => {
-    const formData = new FormData();
-    formData.append('confirmation', 'DELETE');
-    const res = await app.request('/account/delete', {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await app.request('/account/delete', ...deleteRequest(createMockKV()));
 
     // Should redirect to home page after successful deletion
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe('/');
     expect(mockDb.deleteUserSessions).toHaveBeenCalledWith('user-123');
     expect(mockDb.deleteUser).toHaveBeenCalledWith('user-123');
+  });
+
+  it("account deletion clears the user's insights keys before deleting the user", async () => {
+    const cache = createMockKV();
+    await cache.put('insights:facts:testuser', '{}');
+    await cache.put('lastfm:scrobbles:testuser:2026-11-01', '[]');
+    await cache.put('lastfm:topartists:TestUser:7day:5', '[]');
+    await cache.put('insights:facts:testuser2', '{}');
+    let factsAtUserDelete: string | null = 'unread';
+    mockDb.deleteUser.mockImplementation(async () => {
+      factsAtUserDelete = await cache.get('insights:facts:testuser');
+    });
+
+    const res = await app.request('/account/delete', ...deleteRequest(cache));
+
+    expect(res.status).toBe(302);
+    expect(factsAtUserDelete).toBeNull();
+    expect(await cache.get('lastfm:scrobbles:testuser:2026-11-01')).toBeNull();
+    expect(await cache.get('lastfm:topartists:TestUser:7day:5')).toBeNull();
+    expect(await cache.get('insights:facts:testuser2')).toBe('{}');
+    expect(mockDb.deleteUserSessions).toHaveBeenCalledWith('user-123');
+    expect(mockDb.deleteUser).toHaveBeenCalledWith('user-123');
+  });
+
+  it('account deletion still succeeds when KV cleanup throws', async () => {
+    const cache = createMockKV();
+    (cache.list as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('KV down'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await app.request('/account/delete', ...deleteRequest(cache));
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/');
+    expect(mockDb.deleteUser).toHaveBeenCalledWith('user-123');
+    expect(consoleError).toHaveBeenCalledWith(
+      '[DELETE_USER] Cached data cleanup failed, continuing',
+      expect.objectContaining({ user_id: 'user-123', error: 'KV down' }),
+    );
+    consoleError.mockRestore();
   });
 
   it('redirects unauthenticated users to login', async () => {

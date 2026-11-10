@@ -1,5 +1,5 @@
 // ABOUTME: Tests for the privacy policy page copy.
-// ABOUTME: Guards the claims that must stay true: what sign-in and lastfm-mcp links store, the effective date, and deletion.
+// ABOUTME: Guards the claims that must stay true: what sign-in, insights and lastfm-mcp links store, the date, and deletion.
 
 import { describe, it, expect } from 'vitest';
 import { PrivacyPage, PRIVACY_EFFECTIVE_DATE } from '../../pages/legal/privacy';
@@ -82,8 +82,28 @@ describe('PrivacyPage', () => {
   it('explains deletion and links to the account page', () => {
     expect(html).toContain('href="/account"');
     expect(html).toContain('removes your account record and all your sessions');
-    expect(html).toContain('Cached copies expire on their own schedule');
     expect(text).toContain('aren\'t removed when you delete your account');
     expect(text).toContain('The API log doesn\'t point to accounts');
+  });
+
+  it('the privacy page names stored listening history, the timezone and their retention', () => {
+    expect(text).toContain('Your time zone, as Cloudflare works it out from your connection');
+    expect(text).toContain('It stays until you delete your account.');
+    expect(text).toContain('up to 40 days');
+    expect(text).toContain('The facts the insights page works out about your week: 24 hours.');
+    expect(text).toContain('The note about your week: 8 days.');
+    expect(text).not.toContain('The AI summary and album picks on your insights page: 1 day.');
+  });
+
+  it('says the week note goes to Anthropic only for the owner, and what a visitor sees', () => {
+    expect(text).toContain('Anthropic gets only those facts, and only when you open your own insights page');
+    expect(text).toContain('Only you see the note about your week and the question under it.');
+    expect(text).not.toContain('Insights for a public profile are generated when any signed-in visitor opens the page');
+  });
+
+  it('says deletion removes the cached listening data, and names what expires on its own', () => {
+    expect(text).toContain('It also deletes the cached copies of your listening data');
+    expect(text).toContain('A few cached copies aren\'t deleted and expire on their own');
+    expect(text).not.toContain('Cached copies expire on their own schedule, within 30 days at most.');
   });
 });

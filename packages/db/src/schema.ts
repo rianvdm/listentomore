@@ -13,6 +13,7 @@ export interface User {
   bio: string | null;
   profile_visibility: 'public' | 'private';
   signup_ref: string | null;
+  timezone: string | null;
   last_login_at: string | null;
   login_count: number;
   created_at: string;

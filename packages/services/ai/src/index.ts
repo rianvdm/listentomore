@@ -56,9 +56,9 @@ export {
   getRandomCachedFact,
   generateListenAIResponse,
   generateAlbumRecommendations,
-  generateUserInsightsSummary,
-  buildUserInsightsMessages,
-  containsForbiddenConstruction,
+  generateUserInsightsNote,
+  buildUserInsightsNoteMessages,
+  parseNoteSentences,
   USER_INSIGHTS_PROMPT_VERSION,
   generateUserInsightsRecommendations,
   type ArtistSummaryResult,
@@ -68,7 +68,8 @@ export {
   type RandomFactResult,
   type ListenAIResult,
   type AlbumRecommendationsResult,
-  type UserInsightsSummaryResult,
+  type UserInsightsNoteResult,
+  type NoteSentence,
   type UserInsightsRecommendationsResult,
   type AlbumRecommendation,
   type InsightsListeningData,
@@ -257,23 +258,15 @@ export class AIService {
   }
 
   /**
-   * Generate user insights summary (provider determined by config)
+   * Generate the weekly insights note from a prompt view (provider determined
+   * by config). Uncached: the route guards the sentences and owns caching.
    */
-  async getUserInsightsSummary(
-    username: string,
-    listeningData: {
-      topArtists: Array<{ name: string; playcount: number }>;
-      topAlbums: Array<{ name: string; artist: string; playcount: number }>;
-      recentTracks: Array<{ name: string; artist: string }>;
-      weeklyPlayCount: number;
-      historicalArtists: Array<{ name: string }>;
-    }
-  ) {
-    const { generateUserInsightsSummary } = await import(
-      './prompts/user-insights-summary'
+  async getUserInsightsNote(promptView: string) {
+    const { generateUserInsightsNote } = await import(
+      './prompts/user-insights-note'
     );
     const client = this.getClientForTask('userInsightsSummary');
-    return generateUserInsightsSummary(username, listeningData, client, this.cache);
+    return generateUserInsightsNote(promptView, client);
   }
 
   /**

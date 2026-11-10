@@ -6,6 +6,7 @@ import { TopArtists } from './top-artists';
 import { ArtistDetails } from './artist-detail';
 import { LovedTracks } from './loved-tracks';
 import { UserInfo } from './user-info';
+import { LastfmHistory } from './history';
 
 export { RecentTracks } from './recent-tracks';
 export type { RecentTrack } from './recent-tracks';
@@ -25,6 +26,9 @@ export type { LovedTrack } from './loved-tracks';
 export { UserInfo } from './user-info';
 export type { UserInfoData } from './user-info';
 
+export { LastfmHistory, LastfmApiError } from './history';
+export type { HistoryConfig, HistoryPeriod, HistoryScrobble } from './history';
+
 export interface LastfmConfig {
   apiKey: string;
   username: string;
@@ -39,6 +43,7 @@ export class LastfmService {
   public readonly artistDetails: ArtistDetails;
   public readonly lovedTracks: LovedTracks;
   public readonly userInfo: UserInfo;
+  public readonly history: LastfmHistory;
 
   constructor(config: LastfmConfig) {
     this.recentTracks = new RecentTracks(config);
@@ -47,6 +52,7 @@ export class LastfmService {
     this.artistDetails = new ArtistDetails(config, config.cache);
     this.lovedTracks = new LovedTracks(config, config.cache);
     this.userInfo = new UserInfo(config, config.cache);
+    this.history = new LastfmHistory(config);
   }
 
   // Convenience methods

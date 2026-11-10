@@ -1,11 +1,10 @@
-// User insights page - AI-powered listening analysis and recommendations
-// URL: /u/:username/insights
+// ABOUTME: User insights page at /u/:username/insights: the week note (owner) or visitor line, and album picks.
+// ABOUTME: The client script renders the summary response as text only; no HTML from the response is parsed.
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
 import { UserProfileNav } from '../../components/layout/UserProfileNav';
 import { UserProfileHeader } from '../../components/layout/UserProfileHeader';
-import { enrichLinksScript } from '../../utils/client-scripts';
 import type { Database, User } from '@listentomore/db';
 
 interface UserInsightsPageProps {
@@ -29,6 +28,10 @@ export function UserInsightsPage({
   isOwner,
   profileVisibility,
 }: UserInsightsPageProps) {
+  // Matches the route's header (spec section 4): the owner reads "Your week", a visitor the profile's name.
+  const heading = isOwner ? 'Your week' : `${username}'s week`;
+  const loadingText = isOwner ? 'Reading your week...' : `Reading ${username}'s week...`;
+
   return (
     <Layout
       title={`Insights for ${username}`}
@@ -49,7 +52,7 @@ export function UserInsightsPage({
       <main>
         <section id="insights">
           <div class="section-header">
-            <h2>🧠 Your Week in Music</h2>
+            <h2>{heading}</h2>
             {isOwner && (
               <button
                 id="refresh-btn"
@@ -62,9 +65,11 @@ export function UserInsightsPage({
           </div>
           <div id="insights-summary">
             <p class="text-muted">
-              <span class="loading-inline">Analyzing your listening...</span>
+              <span class="loading-inline">{loadingText}</span>
             </p>
           </div>
+          <p id="insights-question" class="insights-question" hidden></p>
+          <p id="insights-meta" class="insights-meta text-muted" hidden></p>
 
           <h2 style={{ marginTop: '3em' }}>💿 Albums to Explore</h2>
           <div id="insights-recommendations">
@@ -79,11 +84,10 @@ export function UserInsightsPage({
       <script
         dangerouslySetInnerHTML={{
           __html: `
-        ${enrichLinksScript}
-
         (function() {
           var username = ${JSON.stringify(username)};
           var isOwner = ${isOwner};
+          var loadingText = ${JSON.stringify(loadingText)};
           var refreshCooldown = 0;
           var refreshInterval = null;
 
@@ -93,12 +97,85 @@ export function UserInsightsPage({
             return div.innerHTML;
           }
 
+          // Replaces the summary with one paragraph of text. Response text only ever goes through textContent.
+          function showSummaryText(text, className, innerClassName) {
+            var summaryEl = document.getElementById('insights-summary');
+            if (!summaryEl) return;
+            var p = document.createElement('p');
+            p.className = className;
+            if (innerClassName) {
+              var span = document.createElement('span');
+              span.className = innerClassName;
+              span.textContent = text;
+              p.appendChild(span);
+            } else {
+              p.textContent = text;
+            }
+            summaryEl.textContent = '';
+            summaryEl.appendChild(p);
+          }
+
+          function hideWeekDetails() {
+            ['insights-question', 'insights-meta'].forEach(function(id) {
+              var el = document.getElementById(id);
+              if (el) {
+                el.hidden = true;
+                el.textContent = '';
+              }
+            });
+          }
+
+          // The pulled time in the viewer's locale and timezone, or '' when the value is not a date.
+          function formatPulledAt(iso) {
+            var date = new Date(iso);
+            if (isNaN(date.getTime())) return '';
+            return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+          }
+
+          function renderWeek(week) {
+            var summaryEl = document.getElementById('insights-summary');
+            if (!summaryEl) return;
+
+            var noteEl = document.createElement('p');
+            noteEl.className = 'insights-note';
+            noteEl.textContent = week.note;
+            if (week.refreshing) {
+              // Another request is generating; this is the note last served.
+              var updatingEl = document.createElement('span');
+              updatingEl.className = 'insights-updating text-muted';
+              updatingEl.textContent = 'Updating...';
+              noteEl.appendChild(document.createTextNode(' '));
+              noteEl.appendChild(updatingEl);
+            }
+            summaryEl.textContent = '';
+            summaryEl.appendChild(noteEl);
+
+            // The route sends a question to the owner only; the page also checks, so a visitor never sees one.
+            var questionEl = document.getElementById('insights-question');
+            if (questionEl) {
+              if (isOwner && week.question) {
+                questionEl.textContent = week.question;
+                questionEl.hidden = false;
+              } else {
+                questionEl.textContent = '';
+                questionEl.hidden = true;
+              }
+            }
+
+            var metaEl = document.getElementById('insights-meta');
+            if (metaEl) {
+              var pulled = formatPulledAt(week.pulledAt);
+              metaEl.textContent = (pulled ? 'Updated ' + pulled + '. ' : '') + 'Counts exclude likely duplicate scrobbles.';
+              metaEl.hidden = false;
+            }
+          }
+
           function loadInsights(refresh) {
             var refreshParam = refresh ? '&refresh=true' : '';
 
             // Show loading states
-            document.getElementById('insights-summary').innerHTML =
-              '<p class="text-muted"><span class="loading-inline">Analyzing your listening...</span></p>';
+            showSummaryText(loadingText, 'text-muted', 'loading-inline');
+            hideWeekDetails();
             document.getElementById('insights-recommendations').innerHTML =
               '<div class="loading-container"><span class="spinner">↻</span><span class="loading-text">Finding recommendations...</span></div>';
 
@@ -106,31 +183,23 @@ export function UserInsightsPage({
             internalFetch('/api/internal/user-insights-summary?username=' + encodeURIComponent(username) + refreshParam)
               .then(function(r) { return r.json(); })
               .then(function(data) {
-                var summaryEl = document.getElementById('insights-summary');
-                if (!summaryEl) return;
-
                 if (data.sparse) {
-                  summaryEl.innerHTML =
-                    '<p class="text-muted fun-message">' + escapeHtml(data.message) + '</p>';
+                  showSummaryText(data.message, 'text-muted fun-message');
                   document.getElementById('insights-recommendations').innerHTML =
                     '<p class="text-muted text-center">Listen to more music to unlock personalized recommendations!</p>';
                   return;
                 }
 
-                if (data.error) {
-                  throw new Error(data.error);
+                if (data.error || !data.data) {
+                  throw new Error(data.error || 'Empty insights response');
                 }
 
-                summaryEl.innerHTML = marked.parse(data.data.content);
-                enrichLinks('insights-summary');
+                renderWeek(data.data);
               })
               .catch(function(err) {
                 console.error('Insights summary error:', err);
-                var el = document.getElementById('insights-summary');
-                if (el) {
-                  el.innerHTML =
-                    '<p class="text-muted">Unable to generate insights right now. Please try again later.</p>';
-                }
+                showSummaryText('Unable to generate insights right now. Please try again later.', 'text-muted');
+                hideWeekDetails();
               });
 
             // Fetch recommendations (parallel)
@@ -274,6 +343,15 @@ export function UserInsightsPage({
 
         .section-header h2 {
           margin: 0;
+        }
+
+        .insights-question {
+          font-style: italic;
+        }
+
+        .insights-meta,
+        .insights-updating {
+          font-size: 14px;
         }
 
         .fun-message {

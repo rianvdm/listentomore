@@ -97,7 +97,7 @@ export class Database {
 
   async updateUser(
     id: string,
-    data: Partial<Pick<User, 'email' | 'lastfm_username' | 'lastfm_session_key' | 'discogs_username' | 'spotify_connected' | 'display_name' | 'avatar_url' | 'bio' | 'profile_visibility' | 'last_login_at' | 'login_count'>>
+    data: Partial<Pick<User, 'email' | 'lastfm_username' | 'lastfm_session_key' | 'discogs_username' | 'spotify_connected' | 'display_name' | 'avatar_url' | 'bio' | 'profile_visibility' | 'timezone' | 'last_login_at' | 'login_count'>>
   ): Promise<void> {
     const fields: string[] = [];
     const values: unknown[] = [];
@@ -137,6 +137,10 @@ export class Database {
     if (data.profile_visibility !== undefined) {
       fields.push('profile_visibility = ?');
       values.push(data.profile_visibility);
+    }
+    if (data.timezone !== undefined) {
+      fields.push('timezone = ?');
+      values.push(data.timezone);
     }
     if (data.last_login_at !== undefined) {
       fields.push('last_login_at = ?');

@@ -26,7 +26,24 @@ export function createMockKV(): KVNamespace {
     delete: vi.fn(async (key: string) => {
       store.delete(key);
     }),
-    list: vi.fn(async () => ({ keys: [], list_complete: true, cacheStatus: null })),
+    // Like KV: keys in name order, filtered by `prefix`, at most `limit` (default 1000) per page. The cursor
+    // is the last name returned, so deleting keys between pages never skips any.
+    list: vi.fn(async (options?: { prefix?: string; cursor?: string; limit?: number }) => {
+      const prefix = options?.prefix ?? '';
+      const limit = options?.limit ?? 1000;
+      const after = options?.cursor;
+      const names = [...store.keys()]
+        .filter((name) => name.startsWith(prefix) && (after === undefined || name > after))
+        .sort();
+      const page = names.slice(0, limit);
+      const complete = names.length <= limit;
+      return {
+        keys: page.map((name) => ({ name })),
+        list_complete: complete,
+        ...(complete ? {} : { cursor: page[page.length - 1] }),
+        cacheStatus: null,
+      };
+    }),
     getWithMetadata: vi.fn(async (key: string) => {
       const entry = store.get(key);
       if (!entry) return { value: null, metadata: null };

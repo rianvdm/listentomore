@@ -1,7 +1,7 @@
 // LastfmService integration tests
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RecentTracks, TopAlbums, TopArtists, LovedTracks } from '@listentomore/lastfm';
+import { ArtistDetails, RecentTracks, TopAlbums, TopArtists, LovedTracks } from '@listentomore/lastfm';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
 
 const mockConfig = { apiKey: 'test-api-key', username: 'testuser' };
@@ -344,6 +344,55 @@ describe('LovedTracks', () => {
 
       expect(result[0].dateLiked).toBe('');
       expect(result[0].image).toBeNull();
+    });
+  });
+});
+
+describe('ArtistDetails', () => {
+  const artistInfo = {
+    artist: {
+      name: 'Sigur Rós',
+      url: 'https://www.last.fm/music/Sigur+R%C3%B3s',
+      image: [],
+      stats: { userplaycount: '42' },
+      tags: { tag: [] },
+      similar: { artist: [] },
+      bio: { content: '' },
+    },
+  };
+
+  describe('getArtistDetail cache keys', () => {
+    it("caches a user's artist detail under its own per-user family, keyed on the lower-cased username", async () => {
+      const kv = createMockKV();
+      setupFetchMock([{ pattern: /artist\.getInfo/, response: artistInfo }]);
+
+      const result = await new ArtistDetails(mockConfig, kv).getArtistDetail('Sigur Rós', 'Alice');
+
+      expect(result.userplaycount).toBe(42);
+      expect(await kv.get('lastfm:userArtistDetail:alice:sigur rós')).not.toBeNull();
+      expect(await kv.get('lastfm:artistDetail:sigur rós')).toBeNull();
+      expect(await kv.get('lastfm:artistDetail:sigur rós:user:alice')).toBeNull();
+    });
+
+    it('reads a per-user artist detail from the per-user key without calling Last.fm', async () => {
+      const kv = createMockKV();
+      await kv.put('lastfm:userArtistDetail:alice:sigur rós', JSON.stringify({ name: 'Sigur Rós', userplaycount: 7 }));
+      const fetchMock = setupFetchMock([{ pattern: /artist\.getInfo/, response: artistInfo }]);
+
+      const result = await new ArtistDetails(mockConfig, kv).getArtistDetail('Sigur Rós', 'ALICE');
+
+      expect(result.userplaycount).toBe(7);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps the global artist detail under lastfm:artistDetail:<artist>', async () => {
+      const kv = createMockKV();
+      setupFetchMock([{ pattern: /artist\.getInfo/, response: artistInfo }]);
+
+      await new ArtistDetails(mockConfig, kv).getArtistDetail('Sigur Rós');
+
+      expect(await kv.get('lastfm:artistDetail:sigur rós')).not.toBeNull();
+      expect(await kv.get('lastfm:userArtistDetail:alice:sigur rós')).toBeNull();
     });
   });
 });

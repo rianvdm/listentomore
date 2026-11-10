@@ -65,7 +65,7 @@ interface EvalRecord {
   inputTokens: number | null;
   outputTokens: number | null;
   ms: number;
-  /** API calls behind this record (userInsightsSummary may add a scrub pass) */
+  /** API calls behind this record */
   calls: number;
   /** The model's text before any post-processing, so --rescore can rerun every check */
   rawContent?: string;
@@ -105,6 +105,8 @@ const TASK_ORDER: AITask[] = [
   'genreSummary',
   'albumRecommendations',
   'listenAi',
+  // No live cases since the weekly note replaced the summary. Kept so
+  // --rescore still reports the rows of runs saved before then.
   'userInsightsSummary',
   'userInsightsRecommendations',
   'randomFact',
@@ -116,7 +118,6 @@ const TASK_ORDER: AITask[] = [
 const TITLE_LINE_TASKS = new Set<AITask>([
   'artistSummary',
   'genreSummary',
-  'userInsightsSummary',
 ]);
 
 // Fewest search links a healthy row produces. A model that writes plain names
@@ -355,16 +356,6 @@ function buildCases(inputs: EvalInputs): EvalCase[] {
 
   for (const { username, listeningData } of inputs.insights) {
     cases.push({
-      task: 'userInsightsSummary',
-      input: { username },
-      run: async (ai) => ({
-        content: (await ai.getUserInsightsSummary(username, listeningData)).content,
-      }),
-    });
-  }
-
-  for (const { username, listeningData } of inputs.insights) {
-    cases.push({
       task: 'userInsightsRecommendations',
       input: { username },
       // The page renders parsed entries, so read the model's raw text and
@@ -580,8 +571,7 @@ async function runCase(evalCase: EvalCase, kv: KVNamespace, keys: { openai: stri
   }
   const ms = Math.round(performance.now() - started);
 
-  // The first call is the generation; a second one (insights scrub pass) is a
-  // rewrite whose truncation the prompt function already guards against.
+  // The first call is the generation, and the one scored.
   const primary = rawCalls[0];
   const metadata: Metadata | undefined = primary?.metadata;
   const raw = primary?.content ?? '';

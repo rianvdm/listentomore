@@ -2,7 +2,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsMessages, generateUserInsightsSummary, containsForbiddenConstruction, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
+import * as aiExports from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsNoteMessages, generateUserInsightsNote, parseNoteSentences, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS, type AITask } from '@listentomore/config';
 import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
@@ -682,148 +683,185 @@ describe('AIService.getClientForTask', () => {
   });
 });
 
-const insightsSample = {
-  weeklyPlayCount: 73,
-  topArtists: [
-    { name: 'Siiga', playcount: 39 },
-    { name: 'Celer', playcount: 39 },
-  ],
-  topAlbums: [{ name: 'Nostalgia Burns', artist: 'Siiga', playcount: 39 }],
-  recentTracks: [{ name: 'Videotape', artist: 'Radiohead' }],
-  historicalArtists: [{ name: 'Celer' }, { name: 'Nils Frahm' }],
-};
+// A prompt view as Task 10 renders it. A$AP Rocky checks that the view is
+// inserted verbatim: a String.replace template would read "$A" as a pattern.
+const notePromptView = [
+  'Facts, most notable first:',
+  '1. You played Eternal Embers by Meltt start to finish 3 times. [entities: Meltt, Eternal Embers]',
+  '2. A$AP Rocky: 14 plays, first plays on record. [entities: A$AP Rocky]',
+  'Top artists this week: Meltt (31), A$AP Rocky (14), Nils Frahm (9)',
+].join('\n');
 
-describe('buildUserInsightsMessages', () => {
-  it('returns a system message and a user message', () => {
-    const msgs = buildUserInsightsMessages(insightsSample);
+const noteJson = '[{"text": "You played Eternal Embers start to finish three times.", "facts": [1]}, {"text": "A$AP Rocky showed up with 14 plays.", "facts": [2]}]';
+
+describe('buildUserInsightsNoteMessages', () => {
+  it('system prompt is the friend-who-follows-scrobbles line', () => {
+    const [system] = buildUserInsightsNoteMessages(notePromptView);
+    expect(system).toEqual({
+      role: 'system',
+      content: "You're a friend who follows someone's scrobbles. Once a week you send them a short note about what they played.",
+    });
+  });
+
+  it('user prompt carries the prompt view, asks for JSON sentences with cited fact ids, and contains no example note', () => {
+    const msgs = buildUserInsightsNoteMessages(notePromptView);
     expect(msgs).toHaveLength(2);
-    expect(msgs[0].role).toBe('system');
     expect(msgs[1].role).toBe('user');
+    const user = msgs[1].content;
+    expect(user).toContain(`It is the only thing you know.\n\n${notePromptView}\n\nWrite the note, in second person.`);
+    expect(user).toContain('"facts"');
+    expect(user).toContain('Return only a JSON array, one object per sentence: [{"text": "...", "facts": [1]}].');
+    expect(user).not.toContain('Boards of Canada immersion');
+    expect(user).not.toContain('Here are a few summaries');
+    expect(user).not.toContain('{PROMPT_VIEW}');
   });
 
-  it('annotates familiar vs new against the 6-month rotation', () => {
-    const user = buildUserInsightsMessages(insightsSample)[1].content;
-    expect(user).toContain('Celer: 39 plays (familiar)');
-    expect(user).toContain('Siiga: 39 plays (new for them)');
+  // The prompt bans questions ("no question."), so the word itself appears.
+  // What must not appear is any instruction to ask one: the code picks it.
+  it('user prompt has no question instruction', () => {
+    const user = buildUserInsightsNoteMessages(notePromptView)[1].content.toLowerCase();
+    for (const ask of ['question to end with', 'end with a question', 'ask them', 'ask the listener']) {
+      expect(user).not.toContain(ask);
+    }
+    expect(user).toContain('no emoji, no question.');
   });
 
-  it('includes the weekly play count and a named album', () => {
-    const user = buildUserInsightsMessages(insightsSample)[1].content;
-    expect(user).toContain('73');
-    expect(user).toContain('Nostalgia Burns by Siiga');
-  });
-});
-
-describe('warmer-voice prompt', () => {
-  it('persona reacts to the music, not the listener', () => {
-    const system = buildUserInsightsMessages(insightsSample)[0].content;
-    expect(system.toLowerCase()).toContain('opinions about');
-    expect(system).not.toContain('pattern they might not have noticed');
+  it('bans "never", "first time" and "first ever" and names the allowed phrase, right after the facts-only rule', () => {
+    const user = buildUserInsightsNoteMessages(notePromptView)[1].content;
+    const rule = '- Never write "never", "first time" or "first ever". For an artist with no earlier plays, say "first plays under this name".';
+    const lines = user.split('\n');
+    const factsOnly = lines.findIndex((line) => line.startsWith('- Use only what is in the facts.'));
+    expect(factsOnly).toBeGreaterThan(-1);
+    expect(lines[factsOnly + 1]).toBe(rule);
   });
 
-  it('bans the not-X-but-Y construction and caps em dashes', () => {
-    const user = buildUserInsightsMessages(insightsSample)[1].content;
-    expect(user).toContain('less like X, more like Y');
-    expect(user.toLowerCase()).toContain('em dash');
-  });
-
-  it('drops the atmosphere-seeding language', () => {
-    const user = buildUserInsightsMessages(insightsSample)[1].content;
-    expect(user).not.toContain('clear temperature');
-  });
-
-  it('exposes a prompt version for cache busting', () => {
-    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v3');
-  });
-
-  it('embeds the hand-authored gold examples', () => {
-    const user = buildUserInsightsMessages(insightsSample)[1].content;
-    expect(user).toContain('When you fall into something, you fall all the way in.');
-    expect(user).toContain('Still the one, no argument.');
-    expect(user).toContain("No notes. That's a healthy week.");
-    expect(user).not.toContain('[PLACEHOLDER');
-  });
-});
-
-describe('generateUserInsightsSummary cache key', () => {
-  it('reads and writes the versioned cache key', async () => {
-    const mockKV = createMockKV();
-    const cache = new AICache(mockKV);
-    setupFetchMock([
-      { pattern: /api\.anthropic\.com/, response: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'warm' }], usage: { input_tokens: 1, output_tokens: 1 } } },
-    ]);
-    await generateUserInsightsSummary('Bordesak', insightsSample, new AnthropicClient('k'), cache);
-    expect(mockKV.get).toHaveBeenCalledWith('ai:userInsightsSummary:bordesak:v3', 'json');
-    expect(mockKV.put).toHaveBeenCalledWith(
-      'ai:userInsightsSummary:bordesak:v3',
-      expect.any(String),
-      expect.any(Object)
+  it('keeps numbers off groups of artists, right after the "never" rule', () => {
+    const lines = buildUserInsightsNoteMessages(notePromptView)[1].content.split('\n');
+    const never = lines.findIndex((line) => line.startsWith('- Never write "never"'));
+    expect(never).toBeGreaterThan(-1);
+    expect(lines[never + 1]).toBe(
+      '- Give a number only for one named artist or album. Don\'t attach a number to a group ("the other three", "both of those").',
     );
   });
-});
 
-describe('containsForbiddenConstruction', () => {
-  it('catches the comma "that\'s not X, that\'s Y" variant', () => {
-    expect(
-      containsForbiddenConstruction(
-        "That's not a stray discovery, that's a whole new wing of the house getting furnished."
-      )
-    ).toBe(true);
-  });
-
-  it('catches "it\'s not X, it\'s Y" and "you\'re not X, you\'re Y"', () => {
-    expect(containsForbiddenConstruction("It's not a phase, it's a full pivot.")).toBe(true);
-    expect(containsForbiddenConstruction("You're not dabbling, you're all in.")).toBe(true);
-  });
-
-  it('catches "not X but Y" and the em-dash dismissal', () => {
-    expect(containsForbiddenConstruction('not a detour but a destination')).toBe(true);
-    expect(containsForbiddenConstruction('not background music — the main event')).toBe(true);
-  });
-
-  it('catches "less like X, more like Y"', () => {
-    expect(containsForbiddenConstruction('It reads less like a week, more like a manifesto.')).toBe(true);
-  });
-
-  it('does not fire on legitimate negations', () => {
-    expect(containsForbiddenConstruction("You didn't settle on one record, you bounced around all week.")).toBe(false);
-    expect(containsForbiddenConstruction('Every Breath You Take live still does the job.')).toBe(false);
-    expect(containsForbiddenConstruction('Still the one, no argument.')).toBe(false);
-    expect(containsForbiddenConstruction('The jazz dig is the story.')).toBe(false);
+  it('exposes a bumped prompt version for cache busting', () => {
+    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v6');
   });
 });
 
-describe('generateUserInsightsSummary — scrub pass', () => {
-  it('rewrites output that contains the banned construction', async () => {
-    const mockKV = createMockKV();
-    const cache = new AICache(mockKV);
-    let call = 0;
-    const client = {
-      chatCompletion: vi.fn(async () => {
-        call += 1;
-        return call === 1
-          ? { content: "That's not a discovery, that's a whole new direction." }
-          : { content: "That's a whole new direction." };
-      }),
-    } as unknown as AnthropicClient;
+describe('parseNoteSentences', () => {
+  const expected = [
+    { text: 'You played Eternal Embers start to finish three times.', facts: [1] },
+    { text: 'A$AP Rocky showed up with 14 plays.', facts: [2] },
+  ];
 
-    const result = await generateUserInsightsSummary('bordesak', insightsSample, client, cache);
-
-    expect(client.chatCompletion).toHaveBeenCalledTimes(2); // generate + scrub
-    expect(result.content).toBe("That's a whole new direction.");
-    expect(containsForbiddenConstruction(result.content)).toBe(false);
+  it('parses a bare JSON array', () => {
+    expect(parseNoteSentences(noteJson)).toEqual(expected);
+    expect(parseNoteSentences(`\n  ${noteJson}\n`)).toEqual(expected);
   });
 
-  it('does not run a scrub pass when the output is clean', async () => {
-    const mockKV = createMockKV();
-    const cache = new AICache(mockKV);
+  it('parses fenced and prefixed JSON', () => {
+    expect(parseNoteSentences('```json\n' + noteJson + '\n```')).toEqual(expected);
+    expect(parseNoteSentences('```\n' + noteJson + '\n```')).toEqual(expected);
+    expect(parseNoteSentences('Here is the note:\n' + noteJson)).toEqual(expected);
+    expect(parseNoteSentences(noteJson + '\nHope that works [1].')).toEqual(expected);
+    expect(parseNoteSentences('Facts cited [1] and [2]:\n' + noteJson)).toEqual(expected);
+  });
+
+  it('keeps only text and facts from each item', () => {
+    expect(parseNoteSentences('[{"text": "One.", "facts": [1, 3], "note": "x"}]')).toEqual([
+      { text: 'One.', facts: [1, 3] },
+    ]);
+  });
+
+  it('returns null for prose, for an empty array, and for items missing text or facts', () => {
+    expect(parseNoteSentences('You played Eternal Embers three times this week.')).toBeNull();
+    expect(parseNoteSentences('')).toBeNull();
+    expect(parseNoteSentences('[]')).toBeNull();
+    expect(parseNoteSentences('[{"facts": [1]}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One.", "facts": []}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One."}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "   ", "facts": [1]}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One.", "facts": [1.5]}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One.", "facts": ["1"]}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": 1, "facts": [1]}]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, null]')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, "Two."]')).toBeNull();
+    expect(parseNoteSentences('{"text": "One.", "facts": [1]}')).toBeNull();
+    expect(parseNoteSentences('[{"text": "One.", "facts": [1]')).toBeNull();
+  });
+});
+
+describe('generateUserInsightsNote', () => {
+  it('requests the configured model, effort and max tokens', async () => {
     const client = {
-      chatCompletion: vi.fn(async () => ({ content: 'The jazz dig is the story.' })),
+      chatCompletion: vi.fn(async () => ({ content: noteJson })),
     } as unknown as AnthropicClient;
 
-    await generateUserInsightsSummary('bordesak', insightsSample, client, cache);
+    await generateUserInsightsNote(notePromptView, client);
 
     expect(client.chatCompletion).toHaveBeenCalledTimes(1);
+    expect(client.chatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-opus-5-5',
+        reasoning: 'low',
+        maxTokens: 5000,
+        messages: buildUserInsightsNoteMessages(notePromptView),
+      })
+    );
+  });
+
+  it('returns the parsed sentences, the raw text and the response metadata', async () => {
+    const metadata = { provider: 'anthropic' as const, model: 'claude-opus-5-5', api: 'messages' as const };
+    const client = {
+      chatCompletion: vi.fn(async () => ({ content: noteJson, metadata })),
+    } as unknown as AnthropicClient;
+
+    const result = await generateUserInsightsNote(notePromptView, client);
+
+    expect(result.sentences).toHaveLength(2);
+    expect(result.sentences?.[0].facts).toEqual([1]);
+    expect(result.raw).toBe(noteJson);
+    expect(result.metadata).toBe(metadata);
+  });
+
+  it('returns null sentences, not a throw, when the model writes prose', async () => {
+    const client = {
+      chatCompletion: vi.fn(async () => ({ content: 'You played a lot of Meltt.' })),
+    } as unknown as AnthropicClient;
+
+    const result = await generateUserInsightsNote(notePromptView, client);
+
+    expect(result.sentences).toBeNull();
+    expect(result.raw).toBe('You played a lot of Meltt.');
+  });
+
+  it('touches no cache: the route owns caching', async () => {
+    const mockKV = createMockKV();
+    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: mockKV });
+    const spy = vi.spyOn(ai, 'getClientForTask');
+    setupFetchMock([
+      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: noteJson }], usage: { input_tokens: 1, output_tokens: 1 } } },
+    ]);
+
+    const result = await ai.getUserInsightsNote(notePromptView);
+
+    expect(spy).toHaveBeenCalledWith('userInsightsSummary');
+    expect(result.sentences).toHaveLength(2);
+    expect(result.metadata?.provider).toBe('anthropic');
+    // The rate limiter keeps its counters in the same KV; nothing else may.
+    const keys = [...vi.mocked(mockKV.get).mock.calls, ...vi.mocked(mockKV.put).mock.calls].map(([key]) => String(key));
+    expect(keys.filter((key) => !key.startsWith('ai:ratelimit:'))).toEqual([]);
+  });
+});
+
+describe('removed insights summary exports', () => {
+  it('no export named containsForbiddenConstruction or buildUserInsightsMessages remains', () => {
+    const exported = Object.keys(aiExports);
+    for (const name of ['containsForbiddenConstruction', 'buildUserInsightsMessages', 'generateUserInsightsSummary']) {
+      expect(exported).not.toContain(name);
+    }
+    expect(AIService.prototype).not.toHaveProperty('getUserInsightsSummary');
   });
 });
 
@@ -1053,23 +1091,18 @@ describe('truncated responses are not cached', () => {
     expect(mockKV.put).not.toHaveBeenCalled();
   });
 
-  it('keeps the original summary when the insights scrub pass truncates', async () => {
-    const mockKV = createMockKV();
-    const cache = new AICache(mockKV);
-    let call = 0;
+  it("passes a truncated note's metadata through so the route refuses to cache it", async () => {
     const client = {
-      chatCompletion: vi.fn(async () => {
-        call += 1;
-        return call === 1
-          ? { content: "That's not a discovery, that's a whole new direction." }
-          : { content: "That's a whole new", metadata: { ...truncatedResponse.metadata } };
-      }),
+      chatCompletion: vi.fn(async () => ({
+        content: '[{"text": "You played Eternal',
+        metadata: { ...truncatedResponse.metadata },
+      })),
     } as unknown as AnthropicClient;
 
-    const result = await generateUserInsightsSummary('bordesak', insightsSample, client, cache);
+    const result = await generateUserInsightsNote('1. A fact.', client);
 
-    expect(client.chatCompletion).toHaveBeenCalledTimes(2);
-    expect(result.content).toBe("That's not a discovery, that's a whole new direction.");
+    expect(result.sentences).toBeNull();
+    expect(isCacheableResponse(result.raw, result.metadata, 'userInsightsSummary', 'bordesak')).toBe(false);
   });
 });
 

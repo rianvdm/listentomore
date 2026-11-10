@@ -29,16 +29,17 @@ export {
 } from './album-recommendations';
 
 export {
-  generateUserInsightsSummary,
-  buildUserInsightsMessages,
-  containsForbiddenConstruction,
+  generateUserInsightsNote,
+  buildUserInsightsNoteMessages,
+  parseNoteSentences,
   USER_INSIGHTS_PROMPT_VERSION,
-  type UserInsightsSummaryResult,
-  type ListeningData as InsightsListeningData,
-} from './user-insights-summary';
+  type UserInsightsNoteResult,
+  type NoteSentence,
+} from './user-insights-note';
 
 export {
   generateUserInsightsRecommendations,
   type UserInsightsRecommendationsResult,
   type AlbumRecommendation,
+  type ListeningData as InsightsListeningData,
 } from './user-insights-recommendations';

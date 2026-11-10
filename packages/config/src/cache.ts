@@ -21,10 +21,23 @@ export const CACHE_CONFIG = {
     userListens: { ttlMinutes: 7 }, // Aggregated recent listens for home page (cron pre-warms every 5 min)
     userRecommendations: { ttlHours: 6 }, // Personalized artist recommendations
     userInfo: { ttlDays: 30 }, // User profile info (avatar, playcount, etc)
+    // Insights history inputs (packages/services/insights/src/collect.ts)
+    scrobbleDay: { ttlDays: 40 }, // One completed UTC day of a user's scrobbles; immutable, the current day is never cached
+    weeklyChart: { ttlDays: 40 }, // One ended weekly artist chart for a user; immutable
+    periodList: { ttlHours: 24 }, // A user's 3, 6 or 12 month top artists
+    overallList: { ttlDays: 7 }, // A user's overall top artists
+    userArtistCount: { ttlHours: 24 }, // A user's lifetime plays of one artist; never under the global artistDetail key
+    albumTracklist: { ttlDays: 30 }, // Global album tracklist, no user data
+    userAlbumCount: { ttlHours: 24 }, // A user's plays of one album, kept apart from the global tracklist
+    artistTopTags: { ttlDays: 30 }, // Global artist top tags
   },
 
   userInsights: {
     refreshCooldown: { ttlMinutes: 5 }, // Rate limit for refresh button
+    weekFacts: { ttlHours: 24 }, // The computed WeekFacts object for a user
+    note: { ttlDays: 8 }, // A guarded note, and the pointer to the note last served to the owner
+    generatingMarker: { ttlMinutes: 1 }, // Marks a generation in progress; KV's minimum TTL is 60 seconds
+    questionState: { ttlDays: 60 }, // The owner's last question, for rotation
   },
 
   discogs: {

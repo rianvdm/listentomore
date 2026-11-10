@@ -43,6 +43,11 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>Whether your profile is public or private.</li>
         <li>When your account was created, when you last signed in, and how many times you have.</li>
         <li>
+          Your time zone, as Cloudflare works it out from your connection when you load a page while
+          signed in. The insights page uses it to show your week in your own days and times. It stays
+          until you delete your account.
+        </li>
+        <li>
           If you created your account with the sign-in button on the page a lastfm-mcp link opened, a
           note saying so. Signing up any other way, including from the Sign In link at the top of the
           page, doesn't add the note.
@@ -50,8 +55,8 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       </ul>
       <p>
         I don't ask for or store your email address. Your listening history stays at Last.fm. The
-        site fetches it when a page needs it and doesn't keep it in my database (see caching below
-        for the short-lived copies).
+        site fetches it when a page needs it and doesn't keep it in my database. The insights page
+        keeps cached copies for up to 40 days (see section 4).
       </p>
       <p>
         When a new account is created, I get a message in my own Discord server with the username
@@ -101,13 +106,23 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       </p>
       <p>
         <strong>Anthropic</strong> writes the text about albums, artists and genres, and answers
-        questions typed into the Ask feature. For the insights page, the site sends Anthropic a
-        week of listening data: total plays, your top 5 artists and top 5 albums with play counts,
-        your 30 most recent tracks, and up to 20 of your top artists from the past six months. It
-        doesn't send your username, display name, bio, IP address or any other account detail.
-        Anthropic's own terms cover what it does with those requests. Insights for a public profile
-        are generated when any signed-in visitor opens the page. Insights for a private profile are
-        generated only when you open it.
+        questions typed into the Ask feature. The insights page sends it two kinds of request.
+      </p>
+      <p>
+        For the note about your week, the site first works out facts about the week from your
+        listening history, such as your play count and the artists and albums you played most, with
+        their play counts. Anthropic gets only those facts, and only when you open your own insights
+        page.
+      </p>
+      <p>
+        For the album picks, the site sends Anthropic your total plays, your top 5 artists and top 5
+        albums of the past week with play counts, your 30 most recent tracks, and up to 20 of your
+        top artists from the past six months. Album picks for a public profile are made when any
+        signed-in visitor opens the page, and for a private profile only when you open it.
+      </p>
+      <p>
+        Neither request includes your username, display name, bio, IP address or any other account
+        detail. Anthropic's own terms cover what it does with those requests.
       </p>
       <p>
         <strong>OpenAI</strong> generates the short random music facts. It gets no information
@@ -141,7 +156,18 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>The home page feed of recent listens from public profiles: 7 minutes.</li>
         <li>Top artists, top albums and loved tracks: 1 hour.</li>
         <li>Artist recommendations on your profile: 6 hours.</li>
-        <li>The AI summary and album picks on your insights page: 1 day.</li>
+        <li>
+          For the insights page, each finished day of your scrobbles (artist, album, track and the time
+          you played it) and your weekly artist charts from Last.fm: up to 40 days.
+        </li>
+        <li>
+          Your top artists for the past 3, 6 and 12 months and of all time, and your play counts for
+          single artists and albums: up to 7 days.
+        </li>
+        <li>The facts the insights page works out about your week: 24 hours.</li>
+        <li>The note about your week: 8 days.</li>
+        <li>The last question the insights page showed you, so the next one can differ: 60 days.</li>
+        <li>The album picks on your insights page: 1 day.</li>
         <li>Your Last.fm profile details and your play count for an artist: 30 days.</li>
         <li>
           The result of a lookup link, such as one from lastfm-mcp: the artist and album names, in
@@ -164,6 +190,11 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         show you for a few minutes, until it refreshes.
       </p>
       <p>
+        On a public profile, a signed-in visitor to your insights page sees a short summary of your
+        week that the site writes from the same facts, without Anthropic, plus the album picks. Only
+        you see the note about your week and the question under it.
+      </p>
+      <p>
         Anyone can still see that a profile with that username exists. When you're signed in,
         artist pages show your own Last.fm play count for that artist. Your privacy settings at
         Last.fm are separate from the ones on this site.
@@ -172,12 +203,17 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       <h2>6. Deleting your account</h2>
       <p>
         You can delete your account from the <a href="/account">account page</a>. It asks you to
-        type DELETE to confirm. That removes your account record and all your sessions.
+        type DELETE to confirm. That removes your account record and all your sessions. It also
+        deletes the cached copies of your listening data: the scrobbles, charts, play counts, facts,
+        notes and last question kept for the insights page, your Last.fm profile details, your top
+        artists, top albums and loved tracks, and your play count on artist pages.
       </p>
       <p>Some things outlast the deletion:</p>
       <ul>
         <li>
-          Cached copies expire on their own schedule, within 30 days at most.
+          A few cached copies aren't deleted and expire on their own: your most recent track within 7
+          days, the album picks within 1 day, and the artist recommendations within 6 hours. Searches
+          and lookups aren't tied to an account and expire within 30 days.
         </li>
         <li>
           Cloudflare log entries that mention your username aren't removed when you delete your

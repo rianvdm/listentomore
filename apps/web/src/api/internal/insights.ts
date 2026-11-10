@@ -3,18 +3,29 @@
 import { Hono, Context } from 'hono';
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { LastfmService } from '@listentomore/lastfm';
-import type { User } from '@listentomore/db';
+import type { Database, User } from '@listentomore/db';
 import type { AIService } from '@listentomore/ai';
-import { USER_INSIGHTS_PROMPT_VERSION } from '@listentomore/ai';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
 import { getCurrentUser } from '../../middleware/session';
+import { getWeekInsights } from './insights-week';
 
 const app = new Hono<InternalAppContext>();
 
-// Minimum plays threshold for generating insights
+// Minimum plays threshold for generating recommendations
 const MIN_PLAYS_THRESHOLD = 5;
+
+// Look up a profile by lastfm_username first (canonical), then fall back to username
+async function findInsightsUser(db: Database, username: string): Promise<User | null> {
+  return (await db.getUserByLastfmUsername(username)) ?? (await db.getUserByUsername(username));
+}
+
+const PRIVATE_PROFILE = 'This profile is private';
+
+// Private profiles show insights, and anything about their refresh state, only to their owner
+const isHiddenFrom = (user: User, viewer: User | null): boolean =>
+  user.profile_visibility === 'private' && viewer?.id !== user.id;
 
 // Helper to get user with privacy check - insights only visible to owner for private profiles
 async function getUserWithInsightsAccess(
@@ -24,11 +35,7 @@ async function getUserWithInsightsAccess(
   const db = c.get('db');
   const currentUser = await getCurrentUser(c);
 
-  // Look up by lastfm_username first (canonical), then fall back to username
-  let user = await db.getUserByLastfmUsername(username);
-  if (!user) {
-    user = await db.getUserByUsername(username);
-  }
+  const user = await findInsightsUser(db, username);
 
   if (!user || !user.lastfm_username) {
     return { error: 'User not found', status: 404 };
@@ -36,9 +43,8 @@ async function getUserWithInsightsAccess(
 
   const isOwner = currentUser?.id === user.id;
 
-  // Check privacy - private profiles only show insights to owner
-  if (user.profile_visibility === 'private' && !isOwner) {
-    return { error: 'This profile is private', status: 403 };
+  if (isHiddenFrom(user, currentUser)) {
+    return { error: PRIVATE_PROFILE, status: 403 };
   }
 
   const lastfm = new LastfmService({
@@ -50,13 +56,23 @@ async function getUserWithInsightsAccess(
   return { user, lastfm, isOwner };
 }
 
-// Check and enforce refresh rate limit
+// The refresh cooldown is keyed on the resolved Last.fm username, so a profile's site
+// username and Last.fm name share one cooldown
+const refreshKey = (lastfmUsername: string): string => `insights-refresh:${lastfmUsername.toLowerCase()}`;
+
+// Check and enforce refresh rate limit. A failed read allows the refresh rather than failing the request
 async function checkRefreshRateLimit(
   c: Context<InternalAppContext>,
-  username: string
+  lastfmUsername: string
 ): Promise<{ allowed: boolean; cooldownSeconds?: number }> {
-  const cacheKey = `insights-refresh:${username.toLowerCase()}`;
-  const lastRefresh = await c.env.CACHE.get(cacheKey);
+  const cacheKey = refreshKey(lastfmUsername);
+  let lastRefresh: string | null;
+  try {
+    lastRefresh = await c.env.CACHE.get(cacheKey);
+  } catch (error) {
+    console.error('[Insights] Refresh cooldown read failed:', error instanceof Error ? error.message : String(error));
+    return { allowed: true };
+  }
 
   if (lastRefresh) {
     const elapsed = Date.now() - parseInt(lastRefresh);
@@ -73,14 +89,18 @@ async function checkRefreshRateLimit(
   return { allowed: true };
 }
 
-// Set refresh timestamp
+// Set refresh timestamp. A failed write is logged and the refresh goes ahead without a cooldown
 async function setRefreshTimestamp(
   c: Context<InternalAppContext>,
-  username: string
+  lastfmUsername: string
 ): Promise<void> {
-  const cacheKey = `insights-refresh:${username.toLowerCase()}`;
+  const cacheKey = refreshKey(lastfmUsername);
   const ttl = getTtlSeconds(CACHE_CONFIG.userInsights.refreshCooldown);
-  await c.env.CACHE.put(cacheKey, Date.now().toString(), { expirationTtl: ttl });
+  try {
+    await c.env.CACHE.put(cacheKey, Date.now().toString(), { expirationTtl: ttl });
+  } catch (error) {
+    console.error('[Insights] Refresh cooldown write failed:', error instanceof Error ? error.message : String(error));
+  }
 }
 
 app.get('/user-insights-summary', requireSessionAuth, async (c) => {
@@ -91,7 +111,7 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
     return c.json({ error: 'Missing username parameter' }, 400);
   }
 
-  // Check access
+  // Check access before any cache read, on every request
   const accessResult = await getUserWithInsightsAccess(c, username);
   if ('error' in accessResult) {
     return c.json({ error: accessResult.error }, accessResult.status as 403 | 404);
@@ -105,7 +125,8 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
       return c.json({ error: 'Only the profile owner can refresh insights' }, 403);
     }
 
-    const rateLimit = await checkRefreshRateLimit(c, username);
+    const lastfmUsername = user.lastfm_username!;
+    const rateLimit = await checkRefreshRateLimit(c, lastfmUsername);
     if (!rateLimit.allowed) {
       return c.json(
         {
@@ -116,28 +137,12 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
       );
     }
 
-    // Clear cache for this user
-    const ai = c.get('ai') as AIService;
-    await ai.cache.delete(
-      'userInsightsSummary',
-      username.toLowerCase(),
-      USER_INSIGHTS_PROMPT_VERSION
-    );
-    await setRefreshTimestamp(c, username);
+    await setRefreshTimestamp(c, lastfmUsername);
   }
 
   try {
-    // Fetch listening data — historical artists fetched in parallel for context
-    const [topArtists, topAlbums, recentTracks, historicalArtists] = await Promise.all([
-      lastfm.getTopArtists('7day', 5).catch(() => []),
-      lastfm.getTopAlbums('7day', 5).catch(() => []),
-      lastfm.recentTracks.getRecentTracks(30).catch(() => []),
-      lastfm.getTopArtists('6month', 20).catch(() => []),
-    ]);
-
-    // Check for sparse listening data
-    const totalPlays = topArtists.reduce((sum, a) => sum + a.playcount, 0);
-    if (totalPlays < MIN_PLAYS_THRESHOLD) {
+    const week = await getWeekInsights(c, { user, isOwner, refresh, history: lastfm.history });
+    if (!week) {
       return c.json({
         data: null,
         sparse: true,
@@ -145,25 +150,10 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
           "Looks like you've been taking a break from music lately! 🎧 Get back to listening and check back soon for personalized insights.",
       });
     }
-
-    // Generate summary (cache check happens inside getUserInsightsSummary)
-    console.log(`[Insights Summary] Generating summary for ${user.lastfm_username}...`);
-    const ai = c.get('ai') as AIService;
-    const summary = await ai.getUserInsightsSummary(user.lastfm_username!, {
-      topArtists: topArtists.map((a) => ({ name: a.name, playcount: a.playcount })),
-      topAlbums: topAlbums.map((a) => ({
-        name: a.name,
-        artist: a.artist,
-        playcount: a.playcount,
-      })),
-      recentTracks: recentTracks.map((t) => ({ name: t.name, artist: t.artist })),
-      weeklyPlayCount: totalPlays,
-      historicalArtists: historicalArtists.map((a) => ({ name: a.name })),
-    });
-
-    return c.json({ data: summary });
+    return c.json({ data: week });
   } catch (error) {
-    console.error('Internal user-insights-summary error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Internal user-insights-summary error:', errorMessage, error);
     return c.json({ error: 'Failed to generate insights' }, 500);
   }
 });
@@ -301,7 +291,18 @@ app.get('/user-insights-cooldown', async (c) => {
     return c.json({ error: 'Missing username parameter' }, 400);
   }
 
-  const rateLimit = await checkRefreshRateLimit(c, username);
+  // Read the same key the summary route writes: the resolved Last.fm username
+  const user = await findInsightsUser(c.get('db'), username);
+  if (!user || !user.lastfm_username) {
+    return c.json({ canRefresh: true, cooldownSeconds: 0 });
+  }
+
+  // Visibility before any cache read. Only a private profile needs the session, so public ones skip the lookup
+  if (user.profile_visibility === 'private' && isHiddenFrom(user, await getCurrentUser(c))) {
+    return c.json({ error: PRIVATE_PROFILE }, 403);
+  }
+
+  const rateLimit = await checkRefreshRateLimit(c, user.lastfm_username);
 
   return c.json({
     canRefresh: rateLimit.allowed,
