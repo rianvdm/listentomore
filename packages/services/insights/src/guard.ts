@@ -4,7 +4,8 @@
 import { FIRST_UNDER_THIS_NAME } from './facts-shared';
 import { PROMPT_FACTS } from './render';
 import { norm } from './text';
-import type { Fact, Unit, WeekFacts } from './types';
+import { albumKey } from './types';
+import type { Fact, Quantity, Unit, WeekFacts } from './types';
 import { dayLabel } from './window';
 
 /** One sentence of the model's note and the ids of the facts it draws on. */
@@ -12,9 +13,15 @@ export interface NoteSentence { text: string; facts: number[] }
 export interface GuardResult { ok: boolean; failures: string[] }
 
 const MIN_SENTENCES = 2;
-const MAX_SENTENCES = 4;
+const MAX_SENTENCES = 6;
 const LEAD_FACT_ID = 1;
 const MONTHS_PER_YEAR = 12;
+/**
+ * The counts of the cited facts' albums or artists a sentence may state ("three new albums", "two detours"): up to six
+ * (owner ruling), and from two, so a bare 1 never passes as the count of a one-name fact.
+ */
+const MIN_NAMED_COUNT = 2;
+const MAX_NAMED_COUNT = 6;
 
 /** Number words the guard reads, with the unit they imply when they carry one ("twice" is 2 times). */
 const NUMBER_WORDS: Record<string, { value: number; unit?: Unit }> = {
@@ -51,9 +58,26 @@ const UNIT_PHRASE = [...Object.keys(UNIT_WORDS), ...YEAR_WORDS].sort((a, b) => b
 const HALF_A_YEAR = /\bhalf an? year\b/g;
 // "a" or "an" directly before a unit word is 1 of that unit; "a year" is 12 months. Anywhere else it is no number.
 // Artists, albums, songs and spins are left out: "an artist you know well" and "gave it a spin" describe, they do
-// not count.
+// not count. Nor does "a <unit> of ..." ("a week of returns", "a day of Boards of Canada"), with up to two words
+// between ("a week already full of returns", "a day made up of"): it names a stretch of time by what filled it.
 const ARTICLE_PHRASE = UNIT_PHRASE.split('|').filter((w) => !/^(?:artists?|albums?|songs?|spins?)$/.test(w)).join('|');
-const ARTICLE_UNIT = new RegExp(`\\b(?:a|an) (${ARTICLE_PHRASE})\\b`, 'g');
+const ARTICLE_UNIT = new RegExp(
+  `\\b(?:a|an) (${ARTICLE_PHRASE})\\b(?! (?:(?:already|so|completely|mostly|full|made|up) ){0,2}of\\b)`,
+  'g',
+);
+/**
+ * After "after", "for", "in" or "within", "a <unit>" is a duration whatever follows: "after a week full of silence"
+ * is 1 week. Read before ARTICLE_UNIT so its "of" exemption covers only a description of the stretch itself.
+ */
+const DURATION_ARTICLE = new RegExp(`(?<=\\b(?:after|for|in|within) )(?:a|an) (${ARTICLE_PHRASE})\\b`, 'g');
+/** "at once" means together, not 1 time. */
+const AT_ONCE = /\bat once\b/g;
+/**
+ * "in one day", "in a single day", "in one sitting" and "in one go" restate a day the sentence names ("Friday
+ * belonged to Boards of Canada, all 41 plays in one day"). Beside a cited weekday or date they are no number;
+ * without one they are 1, of days when they say "day".
+ */
+const IN_ONE_SITTING = /\bin (?:one|a single) (day|sitting|go)\b/g;
 /**
  * Words that end a number's phrase rather than describe its unit: '39 this week', '6 per week', '5 of them' and '8
  * after months away' have no unit, where '6 long months' and '8 brand-new tracks' do. Determiners, prepositions,
@@ -79,6 +103,16 @@ const UNIT_AFTER = new RegExp(
   `^\\+?(?:(%)|-(${UNIT_PHRASE})\\b|[\\s-](?:${MODIFIER} ){0,${MAX_MODIFIERS}}(${UNIT_PHRASE})\\b)`,
 );
 /**
+ * Words that point back or pick one out, not count (owner ruling): "around those two", "these two", "the two of
+ * them", "both", "one of your widest weeks", "either of them". Before a unit, "those two" and "these two" still count
+ * ("those two days"), and a number after any of them is read as usual ("both got 9 plays").
+ */
+const NOT_A_COUNT = new RegExp(
+  '\\b(?:the two of them|both|one of|either of'
+  + `|(?:those|these) two(?![\\s-](?:${MODIFIER} ){0,${MAX_MODIFIERS}}(?:${UNIT_PHRASE})\\b))\\b`,
+  'g',
+);
+/**
  * "a day", "a week", "a month" or "a year" right after a number, or after a number and its plays, tracks or times, is
  * a rate ("under 1 a week", "6 plays a week", "twice a week"), not 1 of that unit. Only the article is matched.
  */
@@ -98,6 +132,8 @@ const WORD_CHAR = /[\p{L}\p{N}]/u;
 const keepCase = (s: string): string => s.normalize('NFKC').replace(/‐/g, '-').replace(/\s+/g, ' ').trim();
 const MASK = '#';
 const ALLOWED_FIRST_PLAYS = [FIRST_UNDER_THIS_NAME, 'first plays on record'];
+/** The plural forms, allowed when the cited facts mark two or more artists as first under this name. */
+const PLURAL_FIRST_PLAYS = ['first plays under these names', 'first plays under those names'];
 
 /** What the guard reads once per note: the facts the model saw, and every name in the week, longest first. */
 interface GuardContext {
@@ -106,6 +142,11 @@ interface GuardContext {
   oneWordSpellings: Map<string, Set<string>>; // normalised one-word name -> its spellings as given ('is' -> 'Is')
   owners: Map<string, number>;        // normalised name -> id of the first fact that names it
   timezone: string | null;
+  /**
+   * The prompt view's top-artists line, which has no fact id and so counts as cited by every sentence (owner ruling):
+   * its artists, normalised, and each one's plays this week keyed by the normalised name. Tier labels give no quantity.
+   */
+  topArtists: { names: string[]; plays: Map<string, Quantity> };
 }
 
 function guardContext(wf: WeekFacts): GuardContext {
@@ -123,20 +164,24 @@ function guardContext(wf: WeekFacts): GuardContext {
     oneWordSpellings.set(name, (oneWordSpellings.get(name) ?? new Set()).add(spelling));
   }
   const view = new Map([wf.windowFact, ...wf.facts.slice(0, PROMPT_FACTS)].map((f) => [f.id, f]));
-  return { view, names, oneWordSpellings, owners, timezone: wf.timezone };
+  const topArtists = {
+    names: wf.topArtists.map((a) => norm(a.artist)),
+    plays: new Map(wf.topArtists.map((a): [string, Quantity] => [norm(a.artist), { value: a.plays, unit: 'plays', entity: a.artist }])),
+  };
+  return { view, names, oneWordSpellings, owners, timezone: wf.timezone, topArtists };
 }
 
 /**
- * Checks a whole note: rule 4's shape (two to four sentences, the first citing fact 1), then rules 1 to 3 and the
- * punctuation ban on each sentence. Failure codes are prefixed with the sentence number ('s2:quantity:41:plays').
+ * Checks a whole note: rule 4's shape (two to six sentences, some sentence citing fact 1), then rules 1 to 3 and the
+ * punctuation ban on each sentence. Sentence failure codes are prefixed with the sentence number
+ * ('s2:quantity:41:plays'); note-wide shape codes are not ('shape:lead').
  */
 export function guardNote(sentences: NoteSentence[], wf: WeekFacts): GuardResult {
   const ctx = guardContext(wf);
   const failures: string[] = [];
   if (sentences.length < MIN_SENTENCES || sentences.length > MAX_SENTENCES) failures.push(`shape:count:${sentences.length}`);
-  if (sentences.length > 0 && !(ctx.view.has(LEAD_FACT_ID) && sentences[0].facts.includes(LEAD_FACT_ID))) {
-    failures.push('s1:shape:lead');
-  }
+  const citesLead = ctx.view.has(LEAD_FACT_ID) && sentences.some((s) => s.facts.includes(LEAD_FACT_ID));
+  if (sentences.length > 0 && !citesLead) failures.push('shape:lead');
   sentences.forEach((s, i) => {
     const checked = checkSentence(s, ctx);
     // One entry, one sentence: a terminator followed by more text packs two in (names, which may hold "Vol." or
@@ -177,37 +222,58 @@ function checkSentence(sentence: NoteSentence, ctx: GuardContext): { failures: s
     cased = cased.slice(0, start) + fill + cased.slice(end);
   };
 
-  // Rule 1: every name from the week must be in the cited facts' entities. Names of two or more words match in any
-  // case. A one-word name counts only when spelt as given, so the week's "Is" and "Day" are not named by "the week
-  // is" or "on 1 day"; when the sentence's case was lost in normalisation, every match counts.
+  // Rule 1: every name from the week must be in the cited facts' entities or the top-artists line. Names of two or
+  // more words match in any case. A one-word name counts only when spelt as given, so the week's "Is" and "Day" are
+  // not named by "the week is" or "on 1 day"; when the sentence's case was lost in normalisation, every match counts.
   const isProse = (name: string, start: number, end: number): boolean => {
     const given = ctx.oneWordSpellings.get(name);
     return caseKnown && given !== undefined && !given.has(cased.slice(start, end));
   };
-  const entities = new Set(cited.flatMap((f) => f.entities.map(norm)));
+  const entities = new Set([...cited.flatMap((f) => f.entities.map(norm)), ...ctx.topArtists.names]);
   const named: string[] = [];
+  /** Where each name stands in the sentence, for reading a top artist's plays after its name. */
+  const mentions: Array<{ name: string; end: number }> = [];
   for (const name of ctx.names) {
     for (let at = folded.indexOf(name); at !== -1; at = folded.indexOf(name, at + 1)) {
       if (!isWholeWord(folded, at, at + name.length) || isProse(name, at, at + name.length)) continue;
       mask(at, at + name.length);
+      mentions.push({ name, end: at + name.length });
       if (!named.includes(name)) named.push(name);
     }
   }
   for (const name of named) if (!entities.has(name)) failures.add(`name:${nameOwner(ctx, name)}`);
 
   // Day and month names must be days the cited facts carry, as dayLabel renders them ('Fri May 29').
-  for (const failure of checkDays(cited, ctx.timezone, cased, caseKnown, mask)) failures.add(failure);
+  const days = checkDays(cited, ctx.timezone, cased, caseKnown, mask);
+  for (const failure of days.failures) failures.add(failure);
 
-  // Rule 2: every number must equal a cited quantity. When the sentence names exactly one entity from its cited facts,
-  // every number must equal a quantity tied to that entity or to none, whatever the punctuation, clause or word order.
-  // Collective claims about its peers ("the other three for 3+ months") are not read, so they fail.
+  // Rule 2: every number must equal a cited quantity, a top artist's plays or a count of the cited facts' albums or
+  // artists. When the sentence names exactly one entity from its cited facts or the top artists, every number must
+  // equal a quantity tied to that entity or to none, whatever the punctuation, clause or word order. Collective claims
+  // about its peers ("the other three for 3+ months") are not read, so they fail.
   const quantities = cited.flatMap((f) => f.quantities);
   const namedCited = named.filter((n) => entities.has(n));
   const tie = namedCited.length === 1 ? namedCited[0] : null;
-  // A number the sentence gives a unit for must match in unit too; without one, the value alone must match.
-  for (const { value, unit } of readQuantities(folded, failures)) {
+  const counts = namedCounts(cited);
+  // A count of the cited albums or artists is never attributed to a single entity (review rulings). It is unavailable
+  // when the sentence names exactly one entity in all, from the cited facts or the top-artists line, or exactly one of
+  // the names that make the count up: "Seasurfer got two albums" and "Depeche Mode got two albums" cannot borrow the
+  // count of Seasurfer's and Def Leppard's albums, and "Seasurfer was on 2" is a claim about Seasurfer, while "two
+  // detours" beside four names is a count. A number the sentence gives a unit for must match in unit too; without
+  // one, the value alone must match.
+  const countsUnavailable = tie !== null || named.filter((n) => counts.names.has(n)).length === 1;
+  // A top artist's plays count only for a number after that artist's name with no other name in between (review
+  // ruling), so "Sisters of Mercy had 6 and Depeche Mode had 17" cannot swap them and "You had 38 plays" names nobody.
+  for (const { value, unit, at } of readQuantities(folded, failures, days.namesCitedDay)) {
     const code = `${value}${unit ? `:${unit}` : ''}`;
-    const same = quantities.filter((q) => q.value === value);
+    const before = mentions.filter((m) => m.end <= at).sort((a, b) => b.end - a.end)[0];
+    const top = before === undefined ? undefined : ctx.topArtists.plays.get(before.name);
+    const pool = [
+      ...quantities,
+      ...(top ? [top] : []),
+      ...(countsUnavailable ? [] : counts.quantities),
+    ];
+    const same = pool.filter((q) => q.value === value);
     const fits = unit === undefined ? same : same.filter((q) => q.unit === unit);
     if (same.length === 0) failures.add(`quantity:${code}`);
     else if (fits.length === 0) failures.add(`quantity-unit:${code}`);
@@ -216,14 +282,17 @@ function checkSentence(sentence: NoteSentence, ctx: GuardContext): { failures: s
     }
   }
 
-  // Rule 3: banned claims. "First plays" is allowed only in its two exact forms, citing an under-this-name fact.
+  // Rule 3: banned claims. "First plays" is allowed only in its exact forms, citing an under-this-name fact; the
+  // plural forms need two or more artists marked first under this name across the cited facts.
   if (/\bfirst[- ]time\b/.test(folded)) failures.add('banned:first-time');
   if (/\bfirst[- ]ever\b/.test(folded)) failures.add('banned:first-ever');
   if (/\bnever\b/.test(folded)) failures.add('banned:never');
-  const firstAllowed = cited.some(isFirstUnderThisName);
+  const firstMarks = cited.filter(isFirstUnderThisName)
+    .reduce((n, f) => n + f.statement.split(FIRST_UNDER_THIS_NAME).length - 1, 0);
+  const allowedFirstPlays = [...ALLOWED_FIRST_PLAYS, ...(firstMarks >= 2 ? PLURAL_FIRST_PLAYS : [])];
   for (const m of folded.matchAll(/\bfirst plays?\b/g)) {
     const rest = folded.slice(m.index);
-    if (!firstAllowed || !ALLOWED_FIRST_PLAYS.some((phrase) => rest.startsWith(phrase))) failures.add('banned:first-plays');
+    if (firstMarks === 0 || !allowedFirstPlays.some((phrase) => rest.startsWith(phrase))) failures.add('banned:first-plays');
   }
 
   // No em or en dashes, and no questions: the question is code's, appended after the note.
@@ -231,6 +300,36 @@ function checkSentence(sentence: NoteSentence, ctx: GuardContext): { failures: s
   if (folded.includes('–')) failures.add('punctuation:en-dash');
   if (folded.includes('?')) failures.add('punctuation:question-mark');
   return { failures: [...failures], masked: folded };
+}
+
+/**
+ * How many distinct albums, and how many distinct artists, the cited facts name, as untied quantities a sentence may
+ * state (owner ruling): each from MIN_NAMED_COUNT to MAX_NAMED_COUNT. A fact's artists are its entities other than its
+ * album titles, plus the artist of each album, so a self-titled album counts once as each. Albums count by artist and
+ * title; `names` holds every album title and artist counted, normalised, as a sentence would name them.
+ */
+function namedCounts(cited: Fact[]): { quantities: Quantity[]; names: Set<string> } {
+  const albums = new Set<string>();   // albumKey(artist, album): two artists' "Greatest Hits" are two albums
+  const artists = new Set<string>();
+  const names = new Set<string>();    // album titles and artists, as a sentence names them
+  for (const f of cited) {
+    const titles = new Set(f.albums.map((a) => norm(a.album)));
+    for (const title of titles) names.add(title);
+    for (const a of f.albums) {
+      albums.add(albumKey(a.artist, a.album));
+      artists.add(norm(a.artist));
+    }
+    for (const e of f.entities) if (!titles.has(norm(e))) artists.add(norm(e));
+  }
+  for (const artist of artists) names.add(artist);
+  const inRange = (n: number): boolean => n >= MIN_NAMED_COUNT && n <= MAX_NAMED_COUNT;
+  return {
+    quantities: [
+      ...(inRange(albums.size) ? [{ value: albums.size, unit: 'albums' as const }] : []),
+      ...(inRange(artists.size) ? [{ value: artists.size, unit: 'artists' as const }] : []),
+    ],
+    names,
+  };
 }
 
 /** A match counts only as a whole name: no letter or digit runs on from either end of it. */
@@ -253,41 +352,50 @@ const isFirstUnderThisName = (f: Fact): boolean =>
 /**
  * Full dates ('Fri May 29', 'Friday, May 29') must equal a cited day and are masked so their day number is not read
  * as a quantity; a weekday or month on its own must be one a cited day has. Matching needs the capital letter, so
- * "may" the verb is not a month, unless the sentence's case was lost in normalisation.
+ * "may" the verb is not a month, unless the sentence's case was lost in normalisation. `namesCitedDay` is true when
+ * the sentence names at least one weekday or full date that a cited fact carries.
  */
 function checkDays(
   cited: Fact[], timezone: string | null, cased: string, caseKnown: boolean, mask: (start: number, end: number) => void,
-): string[] {
+): { failures: string[]; namesCitedDay: boolean } {
   const days = cited.flatMap((f) => f.dates.map((ts) => dayLabel(ts, timezone).toLowerCase().split(' ')));
   const flags = caseKnown ? 'g' : 'gi';
   const failures: string[] = [];
+  let namesCitedDay = false;
   const dates = new RegExp(`\\b(?:(${WEEKDAYS}),? )?(${MONTHS}) (\\d{1,2})(?:st|nd|rd|th)?\\b`, flags);
   for (const m of [...cased.matchAll(dates)]) {
     const [weekday, month, day] = [m[1] === undefined ? null : keyOf(m[1]), keyOf(m[2]), String(Number(m[3]))];
-    if (!days.some(([w, mo, d]) => (weekday === null || w === weekday) && mo === month && d === day)) {
-      failures.push(`date:${[weekday, month, day].filter((p) => p !== null).join('-')}`);
-    }
+    if (days.some(([w, mo, d]) => (weekday === null || w === weekday) && mo === month && d === day)) namesCitedDay = true;
+    else failures.push(`date:${[weekday, month, day].filter((p) => p !== null).join('-')}`);
     mask(m.index, m.index + m[0].length);
   }
   // Re-read after masking: the dates above are gone, so these are weekdays and months on their own.
   const text = cased.replace(dates, (d) => MASK.repeat(d.length));
   for (const m of text.matchAll(new RegExp(`\\b(${WEEKDAYS})\\b`, flags))) {
-    if (!days.some(([w]) => w === keyOf(m[1]))) failures.push(`day:${keyOf(m[1])}`);
+    if (days.some(([w]) => w === keyOf(m[1]))) namesCitedDay = true;
+    else failures.push(`day:${keyOf(m[1])}`);
   }
   for (const m of text.matchAll(new RegExp(`\\b(${MONTHS})\\b`, flags))) {
     if (!days.some(([, mo]) => mo === keyOf(m[1]))) failures.push(`month:${keyOf(m[1])}`);
   }
-  return failures;
+  return { failures, namesCitedDay };
 }
 
-/** Every number the masked, normalised sentence states; an unreadable number word is added to `failures`. */
-function readQuantities(text: string, failures: Set<string>): Array<{ value: number; unit?: Unit }> {
-  const found: Array<{ value: number; unit?: Unit }> = [];
-  // Each pass masks what it read, so a later pass cannot read it again; masks keep the text's length.
+/**
+ * Every number the masked, normalised sentence states, with where it starts; an unreadable number word is added to
+ * `failures`.
+ * `namesCitedDay` (from checkDays) lets "in one day" and its kin restate that day rather than count 1.
+ */
+function readQuantities(
+  text: string, failures: Set<string>, namesCitedDay: boolean,
+): Array<{ value: number; unit?: Unit; at: number }> {
+  const found: Array<{ value: number; unit?: Unit; at: number }> = [];
+  // Each pass masks what it read, so a later pass cannot read it again; masks keep the text's length, so `at` is
+  // the number's index in the sentence as given to checkSentence.
   const take = (re: RegExp, read: (m: RegExpExecArray, rest: string) => { value: number; unit?: Unit }): void => {
     for (const m of [...text.matchAll(re)]) {
       const end = m.index + m[0].length;
-      found.push(read(m, text.slice(end)));
+      found.push({ ...read(m, text.slice(end)), at: m.index });
       text = text.slice(0, m.index) + MASK.repeat(m[0].length) + text.slice(end);
     }
   };
@@ -302,7 +410,12 @@ function readQuantities(text: string, failures: Set<string>): Array<{ value: num
     return m ? m[1] ?? m[2] ?? m[3] : undefined;
   };
   text = text.replace(RATE_ARTICLE, (rate) => MASK.repeat(rate.length));
+  text = text.replace(AT_ONCE, (idiom) => MASK.repeat(idiom.length));
+  text = text.replace(NOT_A_COUNT, (idiom) => MASK.repeat(idiom.length));
+  if (namesCitedDay) text = text.replace(IN_ONE_SITTING, (idiom) => MASK.repeat(idiom.length));
+  else take(IN_ONE_SITTING, (m) => (m[1] === 'day' ? { value: 1, unit: 'days' } : { value: 1 }));
   take(HALF_A_YEAR, () => ({ value: MONTHS_PER_YEAR / 2, unit: 'months' }));
+  take(DURATION_ARTICLE, (m) => inUnit(1, m[1]));
   take(ARTICLE_UNIT, (m) => inUnit(1, m[1]));
   take(DIGITS, (m, rest) => inUnit(Number(m[0].replace(/,/g, '')), wordAfter(rest)));
   take(NUMBER_WORD, (m, rest) => {

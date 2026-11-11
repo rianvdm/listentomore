@@ -5,7 +5,7 @@ import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, ChatMessage, AIResponseMetadata } from '../types';
 
 /** Bump when the prompt changes so cached notes don't linger. */
-export const USER_INSIGHTS_PROMPT_VERSION = 'v6';
+export const USER_INSIGHTS_PROMPT_VERSION = 'v7';
 
 /**
  * One sentence of the note and the ids of the facts it draws on.
@@ -33,18 +33,20 @@ const SYSTEM_PROMPT =
  * The prompt view is the only listening data the model sees.
  */
 export function buildUserInsightsNoteMessages(promptView: string): ChatMessage[] {
-  const userPrompt = `Here is this week's listening, already measured and ranked. It is the only thing you know.
+  const userPrompt = `Here is this week's listening, already measured and ranked. It is the only thing you know about it.
 
 ${promptView}
 
-Write the note, in second person. Two to four sentences. Lead with the most notable item (fact 1). If two or three of the top items connect in a way the facts themselves show, say so in one sentence; if they don't connect, say only the top one or two things. Under 90 words. No greeting, no sign-off, no emoji, no question.
+Write the note in second person, the way a friend who follows your scrobbles would. Four to six sentences, under 150 words.
+
+Decide what the story of the week is: the one or two facts that matter most, and how they relate. Say it plainly and early ("The jazz was the story this week"). Then use the other facts to back it up, or to show what sat alongside it. Make calls about the week from what the facts show: what it centred on, what crowded out what, what was new, what came back, what dropped away, how the days split. If nothing connects, say so in your own words and name the two or three things that stood out. Find your own framing for each week; don't reuse stock phrases. No greeting, no sign-off, no emoji, no question.
 
 Rules:
 - Use only what is in the facts. If something is not listed, it did not happen. Quote no number that is not there, and do no arithmetic beyond what the facts state.
 - Never write "never", "first time" or "first ever". For an artist with no earlier plays, say "first plays under this name".
 - Give a number only for one named artist or album. Don't attach a number to a group ("the other three", "both of those").
-- Say nothing about how the music sounds. No adjectives for music, records or songs. You have not heard these records.
-- Do not guess at reasons, moods, taste or personality, and do not say what a choice "says" about them.
+- Say nothing about how the music sounds. No adjectives for music, records or songs. Don't guess why something happened or what mood it reflects.
+- Don't repeat the fact wording; say it the way a friend would. One or two numbers per sentence at most, and only when the number makes the point.
 - Do not contrast by negation ("not X, it's Y", "rather than", "less X, more Y"). No em dashes. No cliches.
 - Plain words. Mix short and long sentences. Use artist and album names exactly as given.
 
@@ -58,7 +60,8 @@ Return only a JSON array, one object per sentence: [{"text": "...", "facts": [1]
 
 /**
  * Validate one parsed value as a non-empty list of sentences, each with
- * non-empty text and at least one integer fact id. Extra keys are dropped.
+ * non-empty text and a list of integer fact ids. Extra keys are dropped. An
+ * empty fact list is kept: the guard fails that sentence, not the whole note.
  */
 function toNoteSentences(value: unknown): NoteSentence[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
@@ -68,7 +71,7 @@ function toNoteSentences(value: unknown): NoteSentence[] | null {
     if (typeof item !== 'object' || item === null) return null;
     const { text, facts } = item as { text?: unknown; facts?: unknown };
     if (typeof text !== 'string' || text.trim() === '') return null;
-    if (!Array.isArray(facts) || facts.length === 0) return null;
+    if (!Array.isArray(facts)) return null;
     if (!facts.every((id) => Number.isInteger(id))) return null;
     sentences.push({ text: text.trim(), facts: facts as number[] });
   }
@@ -128,6 +131,8 @@ export async function generateUserInsightsNote(
     temperature: config.temperature,
     reasoning: config.reasoning,
     verbosity: config.verbosity,
+    // An error body can quote the prompt view, so a failed call logs its status alone.
+    quietErrors: true,
   });
 
   // The prompt view and the note stay out of logs; the model name is enough.

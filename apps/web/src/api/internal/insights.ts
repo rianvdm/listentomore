@@ -9,7 +9,9 @@ import type { SpotifyService } from '@listentomore/spotify';
 import type { InternalAppContext } from '../../types';
 import { requireSessionAuth } from '../../middleware/require-session-auth';
 import { getCurrentUser } from '../../middleware/session';
+import { errorKind } from '../../utils/error-kind';
 import { getWeekInsights } from './insights-week';
+import { getTriviaCard } from './insights-card-route';
 
 const app = new Hono<InternalAppContext>();
 
@@ -155,6 +157,30 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Internal user-insights-summary error:', errorMessage, error);
     return c.json({ error: 'Failed to generate insights' }, 500);
+  }
+});
+
+// The "Did you know" card. Reads the cached week facts only; the owner's view alone can generate a card.
+app.get('/user-insights-trivia', requireSessionAuth, async (c) => {
+  const username = c.req.query('username');
+
+  if (!username) {
+    return c.json({ error: 'Missing username parameter' }, 400);
+  }
+
+  // Check access before any cache read, on every request
+  const accessResult = await getUserWithInsightsAccess(c, username);
+  if ('error' in accessResult) {
+    return c.json({ error: accessResult.error }, accessResult.status as 403 | 404);
+  }
+
+  try {
+    const data = await getTriviaCard(c, { user: accessResult.user, isOwner: accessResult.isOwner });
+    return c.json({ data });
+  } catch (error) {
+    // A known error class only: a message from the card path can carry an album, artist or MusicBrainz path.
+    console.error(`[Insights] card-route:error kind=${errorKind(error)}`);
+    return c.json({ error: 'Failed to load the card' }, 500);
   }
 });
 

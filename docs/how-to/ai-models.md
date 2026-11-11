@@ -4,7 +4,7 @@ This guide covers how to configure AI tasks, switch between providers, and use w
 
 ## Overview
 
-ListenToMore runs eight of its nine AI tasks on **Anthropic Claude**. `randomFact` stays on **OpenAI**. Both clients are live: switching a task between providers is a config edit, with no code change.
+ListenToMore runs nine of its ten AI tasks on **Anthropic Claude**. `randomFact` stays on **OpenAI**. Both clients are live: switching a task between providers is a config edit, with no code change.
 
 | Provider | Models | Used for |
 |----------|--------|----------|
@@ -34,7 +34,8 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 | `albumDetail` | `claude-opus-5-5` | low | Long-form with web search, cached 120 days |
 | `genreSummary` | `claude-opus-5-5` | low | Long-form, cached 180 days |
 | `albumRecommendations` | `claude-opus-5-5` | low | Web search plus judgement about what to recommend |
-| `userInsightsSummary` | `claude-opus-5-5` | low | The weekly note: two to four sentences, returned as JSON with the ids of the ranked week facts each one cites, then checked by the guard. Uncached here; the insights route caches only a note that passes |
+| `userInsightsSummary` | `claude-opus-5-5` | low | The weekly note: four to six sentences, returned as JSON with the ids of the ranked week facts each one cites, then checked by the guard. Uncached here; the insights route caches only a note that passes |
+| `albumTrivia` | `claude-opus-5-5` | low | The making-of card on the insights page: one fact about an album, with web search capped at 2 searches. Uncached here; the insights route keeps a cited fact that passes the copy rubric for 120 days per album, and a NONE, a missing citation or two rubric failures for 30 days |
 | `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
 | `artistSentence` | `claude-opus-5-5` | low | Short output with web search, cached 180 days. Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval rows (64-74 words against the 38-word cap) |
 | `listenAi` | `claude-sonnet-5-5` | low | Chat; the user waits on it |
@@ -52,17 +53,20 @@ The weekly note has its own eval, `apps/web/scripts/insights-eval.ts`. Run it be
 cd apps/web
 pnpm dlx tsx scripts/insights-eval.ts --label <name> --dry-run      # call count and projected cost, no API calls
 pnpm dlx tsx scripts/insights-eval.ts --label <name> [--extra <dir>]
+pnpm dlx tsx scripts/insights-eval.ts --label <name> --trivia [--extra <dir>]   # also the Did you know card
 ```
 
 For every `WeekInputs` fixture in `packages/services/insights/__fixtures__` (and in `--extra <dir>`), it builds the week's facts and asks the model for the note twice. Each note goes through the production guard (`guardNote`) and a rubric of banned words and constructions (`apps/web/scripts/insights-rubric.ts`), which reads the note with the week's artist and album names masked. `--extra` is for weeks that must stay out of the repository, such as another listener's; their output is labelled `extra-1`, `extra-2` and so on. Everything goes to `apps/web/eval-output/<label>/insights/` (gitignored): one JSON per fixture with the prompt view, both replies, guard results, rubric hits, tokens and cost, plus a `summary.md` with the table, every note and an opener-overlap figure.
 
+`--trivia` runs each week the way the owner's view does. Spotify release dates (`SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from `.dev.vars`) go into the facts first, so the `release_week` fact can fire; the notes keep the note rubric. Then the card is generated with the MusicBrainz cap lifted and every candidate album checked, so each week's final card shows, rendered as the owner sees it and checked with the copy rubric (`checkCopyRubric`). One local limiter keeps every MusicBrainz request 1.1 seconds apart and the weeks take turns on MusicBrainz, so a run takes several minutes. `summary.md` adds each `release_week` fact with its salience, each card with its MusicBrainz calls and rubric hits, a report on the known tie-backs from the recon, and a fact-check list of every making-of fact with its source URL to spot-check before merging. A card that trips the copy rubric fails its week. `--dry-run --trivia` projects two `albumTrivia` calls per week at the search cap, so the figure errs high.
+
 Exit codes:
 
 - `0`: every week got at least one note past the guard, and no note tripped the rubric.
-- `1`: a week failed the guard on both runs, so the page would show the code-written line instead of a note, or a note used a banned word or construction. Read the failure codes in `summary.md` before changing anything. A code can come from a guard false positive as well as from a model miss, and the fix for each is different.
+- `1`: a week failed the guard on both runs, so the page would show the code-written line instead of a note, or a note (or, with `--trivia`, a card) used a banned word or construction. With `--trivia`, a card cut by MusicBrainz or a making-of failure, or a card run that threw, also fails its week: the card is unknown, so an outage cannot pass as a week without a card. Read the failure codes in `summary.md` before changing anything. A code can come from a guard false positive as well as from a model miss, and the fix for each is different.
 - `2`: the run could not start (a missing key or a bad label).
 
-Each fixture costs two calls. The first full run (8 fixtures, 16 calls) cost $0.16. The eval calls the live API and spends real money, so it never runs in CI; run it by hand. `ANTHROPIC_API_KEY` comes from `apps/web/.dev.vars` first.
+Each fixture costs two calls. The first full run (8 fixtures, 16 calls) cost $0.16. The eval calls the live API and spends real money, so it never runs in CI; run it by hand. Keys come from `apps/web/.dev.vars` only (never `process.env`): `ANTHROPIC_API_KEY`, plus `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` with `--trivia`. A missing key stops the run before any live call.
 
 ---
 
@@ -94,6 +98,7 @@ Each API key is needed only by the tasks routed to its provider: `ANTHROPIC_API_
 | Config field | Anthropic (Messages API) | OpenAI (Responses API, `gpt-5.x`) |
 |--------------|--------------------------|-----------------------------------|
 | `webSearch` | Server-side `web_search_20250305` tool, `max_uses: 5` | `web_search` tool |
+| `webSearchMaxUses` | The tool's `max_uses`, when a task needs fewer than 5 | Ignored |
 | `reasoning` | `output_config.effort`; `none`, `minimal`, or unset map to `low` | `reasoning.effort` |
 | `temperature` | Never sent | Only sent when reasoning is `none` |
 | `verbosity` | Ignored | `text.verbosity` |
@@ -103,7 +108,10 @@ Anthropic client behavior worth knowing:
 
 - `stop_reason: max_tokens` and `refusal` both mark the response uncacheable.
 - A `pause_turn` stop is resumed once automatically. Usage covers both requests; a second `pause_turn` marks the response uncacheable.
-- When a response contains search results, only text after the last result is kept, so narration such as "I'll search for..." never reaches the page or the cache.
+- When a response contains search results, only text after the last result is kept, so narration such as "I'll search for..." never reaches the page or the cache. The client logs how many text blocks it dropped.
+- The web search citations on the kept text come back as `citations` (URL and title, once per URL).
+- A search that fails inside a 200 response (`too_many_requests`, `unavailable`, `max_uses_exceeded` and so on) is reported in `metadata.features.webSearchErrors`, across both requests of a resumed turn. The model often answers anyway. The making-of fact still keeps a cited fact, but a NONE, missing citation or double rubric failure after a transient error (anything except `max_uses_exceeded`, `invalid_input` and `query_too_long`) is an error that caches nothing.
+- A call with `quietErrors: true` logs and throws a non-2xx response with its status alone, never the body. `albumTrivia`, `userInsightsSummary` and `userInsightsRecommendations` use it because their prompts carry album, artist or listening data.
 - Requests with web search use the 60-second timeout tier.
 - `max_uses: 5` allows album recommendations to verify the seed album plus three picks (four searches). The newer `web_search_20260209` tool was tried first; its model-written filter scripts crashed while still consuming searches, which produced empty summaries.
 

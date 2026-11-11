@@ -1,14 +1,24 @@
-// ABOUTME: MusicBrainz service for ISRC/UPC enrichment.
-// ABOUTME: Provides album UPC and track ISRC lookups to replace Spotify external_ids.
+// ABOUTME: MusicBrainz service for ISRC/UPC enrichment, plus the budgeted credits client.
+// ABOUTME: Provides album UPC and track ISRC lookups, and release credits and band links for insights.
 
 import { lookupAlbumUpc } from './release-lookup';
 import { lookupTrackIsrc } from './recording-lookup';
 import type { MusicBrainzRateLimiter } from './rate-limit';
 
 export type { MusicBrainzRelease, MusicBrainzRecording } from './types';
-export { MusicBrainzRateLimitError } from './errors';
+export { MusicBrainzRateLimitError, MusicBrainzApiError } from './errors';
 export { reserveSlot, MUSICBRAINZ_INTERVAL_MS, MUSICBRAINZ_MAX_WAIT_MS } from './rate-limit';
 export type { MusicBrainzRateLimiter, SlotReservation } from './rate-limit';
+export { MusicBrainzCredits, CreditsCapReached, creditsKeys } from './credits';
+export { pickReleaseGroup, pickEarliestOfficial, parseReleaseCredits, parseArtistBands } from './credits-parse';
+export type {
+  CreditArtist,
+  Credit,
+  ReleaseCredits,
+  ArtistBands,
+  ReleaseRef,
+  CreditsClient,
+} from './credits-types';
 
 export class MusicBrainzService {
   constructor(private cache: KVNamespace, private limiter: MusicBrainzRateLimiter) {}

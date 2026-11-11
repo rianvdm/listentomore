@@ -3,7 +3,7 @@
 
 import type { Context } from 'hono';
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
-import { USER_INSIGHTS_PROMPT_VERSION, isCacheableResponse } from '@listentomore/ai';
+import { USER_INSIGHTS_PROMPT_VERSION, aiCacheKey, isCacheableResponse } from '@listentomore/ai';
 import type { AIService, UserInsightsNoteResult } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import {
@@ -17,9 +17,11 @@ import {
   renderLine,
   renderPromptView,
 } from '@listentomore/insights';
-import type { LastfmHistoryClient, NoteSentence, QuestionKind, WeekFacts } from '@listentomore/insights';
+import type { LastfmHistoryClient, NoteSentence, QuestionKind, ReleaseLookup, WeekFacts } from '@listentomore/insights';
 import { createServiceDefer } from '@listentomore/shared';
+import type { SpotifyService } from '@listentomore/spotify';
 import type { InternalAppContext } from '../../types';
+import { errorKind } from '../../utils/error-kind';
 import { getWaitUntil } from '../../utils/wait-until';
 
 /** Under this many deduplicated plays this week, the route keeps its sparse message (spec section 2, "Quiet week"). */
@@ -58,9 +60,8 @@ interface LastNote { signature: string; pulledAt: string }
  */
 interface StoredQuestion { kind: QuestionKind; subject: string; signature?: string }
 
-const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-/** Guard failure types that end in a fixed word, kept for the log ('s1:shape:lead', 's2:banned:never'). */
+/** Guard failure types that end in a fixed word, kept for the log ('shape:lead', 's2:banned:never'). */
 const NAMED_FAILURES: ReadonlySet<string> = new Set(['shape', 'banned', 'punctuation']);
 /** Guard failure types whose payload is a value, unit, date or fact id, logged as the type alone. */
 const VALUED_FAILURES: ReadonlySet<string> = new Set(['quantity', 'quantity-unit', 'quantity-entity', 'name', 'date', 'day', 'month']);
@@ -80,32 +81,53 @@ export function logSafeFailures(failures: readonly string[]): string[] {
   });
 }
 
-/** A KV JSON read where a failed read is a miss: every cache here is an optimisation. */
-async function readJson<T>(kv: KVNamespace, key: string): Promise<T | null> {
+/**
+ * A key's family, its first two segments ('insights:card', 'lastfm:toplist'), for log lines: the rest of a key holds
+ * a username or a name.
+ */
+const keyFamily = (key: string): string => key.split(':').slice(0, 2).join(':');
+
+/**
+ * A KV JSON read where a failed read is a miss: every cache here is an optimisation. Logs a fixed code and the key
+ * family only: a JSON parse error quotes the stored value, and a KV error can quote the key.
+ */
+export async function readJson<T>(kv: KVNamespace, key: string): Promise<T | null> {
   try {
     return (await kv.get(key, 'json')) as T | null;
   } catch (error) {
-    console.error('[Insights] Cache read failed:', errorMessage(error));
+    const code = error instanceof SyntaxError ? 'cache-read:parse' : 'cache-read:error';
+    console.error(`[Insights] ${code} ${keyFamily(key)}`);
     return null;
   }
 }
 
-/** An awaited KV write that logs instead of failing the request. */
-async function writeJson(kv: KVNamespace, key: string, value: unknown, ttlSeconds: number): Promise<void> {
+/** An awaited KV write that logs a fixed code and the key family instead of failing the request. */
+export async function writeJson(kv: KVNamespace, key: string, value: unknown, ttlSeconds: number): Promise<void> {
   try {
     await kv.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds });
-  } catch (error) {
-    console.error('[Insights] Cache write failed:', errorMessage(error));
+  } catch {
+    console.error(`[Insights] cache-write:error ${keyFamily(key)}`);
   }
 }
 
-/** The cached note for a signature, where a failed read is a miss. */
-async function readNote(ai: AIService, user: string, signature: string): Promise<CachedNote | null> {
+/**
+ * The note cache key, `ai:userInsightsSummary:<user>:<signature>`. The note is read and written through readJson and
+ * writeJson, not AICache, whose log lines carry the key and so the username.
+ */
+const noteKey = (user: string, signature: string): string => aiCacheKey('userInsightsSummary', user, signature);
+
+/** The cached note for a signature, where a failed or malformed read is a miss. */
+async function readNote(kv: KVNamespace, user: string, signature: string): Promise<CachedNote | null> {
+  const cached = await readJson<CachedNote>(kv, noteKey(user, signature));
+  return cached && typeof cached.note === 'string' ? cached : null;
+}
+
+/** A best-effort KV delete that logs a fixed code and the key family. */
+async function deleteKey(kv: KVNamespace, key: string): Promise<void> {
   try {
-    return await ai.cache.get<CachedNote>('userInsightsSummary', user, signature);
-  } catch (error) {
-    console.error('[Insights] Note cache read failed:', errorMessage(error));
-    return null;
+    await kv.delete(key);
+  } catch {
+    console.error(`[Insights] cache-delete:error ${keyFamily(key)}`);
   }
 }
 
@@ -135,17 +157,19 @@ function countingClient(client: LastfmHistoryClient): { client: LastfmHistoryCli
  * While another request generates, the note last served to the owner, if it is still cached. Best effort: any
  * failure reads as "no previous note" and this request generates too.
  */
-async function previousNote(kv: KVNamespace, ai: AIService, user: string): Promise<(CachedNote & LastNote) | null> {
+async function previousNote(kv: KVNamespace, user: string): Promise<(CachedNote & LastNote) | null> {
+  let generating: string | null;
   try {
-    if ((await kv.get(keys.generating(user))) === null) return null;
-    const last = await readJson<LastNote>(kv, keys.last(user));
-    if (!last) return null;
-    const cached = await ai.cache.get<CachedNote>('userInsightsSummary', user, last.signature);
-    return cached && typeof cached.note === 'string' ? { note: cached.note, ...last } : null;
-  } catch (error) {
-    console.error('[Insights] Previous note lookup failed:', errorMessage(error));
+    generating = await kv.get(keys.generating(user));
+  } catch {
+    console.error(`[Insights] cache-read:error ${keyFamily(keys.generating(user))}`);
     return null;
   }
+  if (generating === null) return null;
+  const last = await readJson<LastNote>(kv, keys.last(user));
+  if (!last || typeof last.signature !== 'string') return null;
+  const cached = await readNote(kv, user, last.signature);
+  return cached ? { note: cached.note, ...last } : null;
 }
 
 /**
@@ -165,8 +189,26 @@ function ownerQuestion(wf: WeekFacts, stored: StoredQuestion | null, signature: 
 }
 
 /** Cached facts are reused only when this code computed them: a rule change recomputes instead of serving old facts. */
-const isCurrentFacts = (wf: WeekFacts | null): wf is WeekFacts =>
+export const isCurrentFacts = (wf: WeekFacts | null): wf is WeekFacts =>
   wf !== null && wf.schema === 'week-facts/v1' && wf.ruleVersion === RULE_VERSION;
+
+/**
+ * Whether this viewer can serve the cached facts. The owner also needs facts computed with release lookups: facts a
+ * visitor computed have none, so the owner's next load recomputes them once, mostly from cached Last.fm data.
+ */
+const isUsableFacts = (wf: WeekFacts | null, isOwner: boolean): wf is WeekFacts =>
+  isCurrentFacts(wf) && (!isOwner || wf.releasesChecked === true);
+
+/**
+ * The release_week lookup: Spotify's album search, quiet so no log line carries the names, mapped to the title,
+ * artists and release date as Spotify gives them. Only the owner's view passes it to the collector.
+ */
+export function spotifyReleaseLookup(spotify: SpotifyService): ReleaseLookup {
+  return async (artist, album) => {
+    const result = await spotify.searchAlbumByArtist(artist, album, { quiet: true });
+    return result ? { title: result.name, artist: result.artist, date: result.releaseDate } : null;
+  };
+}
 
 /**
  * Calls the model up to twice and returns the first note that passes the guard, or null. A thrown call, an
@@ -175,7 +217,6 @@ const isCurrentFacts = (wf: WeekFacts | null): wf is WeekFacts =>
 async function guardedNote(
   ai: AIService,
   wf: WeekFacts,
-  user: string,
 ): Promise<{ sentences: NoteSentence[]; result: UserInsightsNoteResult } | null> {
   const promptView = renderPromptView(wf);
   for (let attempt = 1; attempt <= NOTE_ATTEMPTS; attempt++) {
@@ -183,16 +224,16 @@ async function guardedNote(
     try {
       result = await ai.getUserInsightsNote(promptView);
     } catch (error) {
-      console.error(`[Insights] ${user} note attempt ${attempt} failed:`, errorMessage(error));
+      console.error(`[Insights] note-attempt:${attempt} call-failed kind=${errorKind(error)}`);
       continue;
     }
     if (result.sentences === null) {
-      console.log(`[Insights] ${user} note attempt ${attempt}: unparseable reply`);
+      console.log(`[Insights] note-attempt:${attempt} unparseable`);
       continue;
     }
     const verdict = guardNote(result.sentences, wf);
     if (verdict.ok) return { sentences: result.sentences, result };
-    console.log(`[Insights] ${user} note attempt ${attempt} failed the guard: ${logSafeFailures(verdict.failures).join(', ')}`);
+    console.log(`[Insights] note-attempt:${attempt} guard-failed ${logSafeFailures(verdict.failures).join(', ')}`);
   }
   return null;
 }
@@ -226,22 +267,16 @@ export async function getWeekInsights(
 
   // Refresh discards the cached facts. The delete is best effort: this request skips them whether or not it worked,
   // and the recomputed facts overwrite them below.
-  if (refresh) {
-    try {
-      await kv.delete(keys.facts(lastfmUser));
-    } catch (error) {
-      console.error('[Insights] Could not discard the cached facts:', errorMessage(error));
-    }
-  }
+  if (refresh) await deleteKey(kv, keys.facts(lastfmUser));
 
   let markerSet = false;
   try {
     let wf = refresh ? null : await readJson<WeekFacts>(kv, keys.facts(lastfmUser));
 
-    if (!isCurrentFacts(wf)) {
+    if (!isUsableFacts(wf, isOwner)) {
       // Another request is generating: the owner gets the note last served, flagged, instead of a duplicate run.
       // Visitors never get the note, so they carry on.
-      const previous = isOwner ? await previousNote(kv, ai, lastfmUser) : null;
+      const previous = isOwner ? await previousNote(kv, lastfmUser) : null;
       if (previous) {
         return { note: previous.note, question: null, header, pulledAt: previous.pulledAt, mode: 'note', refreshing: true };
       }
@@ -252,8 +287,8 @@ export async function getWeekInsights(
           expirationTtl: getTtlSeconds(CACHE_CONFIG.userInsights.generatingMarker),
         });
         markerSet = true;
-      } catch (error) {
-        console.error('[Insights] Could not set the generating marker:', errorMessage(error));
+      } catch {
+        console.error(`[Insights] cache-write:error ${keyFamily(keys.generating(lastfmUser))}`);
       }
 
       const waitUntil = getWaitUntil(c);
@@ -267,6 +302,8 @@ export async function getWeekInsights(
         now: Math.floor(Date.now() / 1000),
         // Without an ExecutionContext the collector awaits its own writes instead.
         defer: waitUntil ? (write) => deferWrite(write, 'insights cache write') : undefined,
+        // Only the owner's view starts Spotify lookups; a visitor's facts carry no release dates.
+        releases: isOwner ? spotifyReleaseLookup(c.get('spotify') as SpotifyService) : undefined,
       });
       wf = buildWeekFacts(inputs, { lastQuestion: await lastQuestion() });
       await writeJson(kv, keys.facts(lastfmUser), wf, getTtlSeconds(CACHE_CONFIG.userInsights.weekFacts));
@@ -274,7 +311,7 @@ export async function getWeekInsights(
       // Kinds, saliences and call counts only: never statements, the prompt view, names or listening counts.
       const facts = wf.facts.slice(0, LOGGED_FACTS).map((f) => `${f.kind}:${f.salience}`).join(' ');
       const calls = Object.entries(counted.calls).map(([method, n]) => `${method}=${n}`).join(' ');
-      console.log(`[Insights] ${lastfmUser} facts: quiet=${wf.quiet} [${facts}] lastfm calls: ${calls || 'none'}`);
+      console.log(`[Insights] facts: quiet=${wf.quiet} [${facts}] lastfm calls: ${calls || 'none'}`);
     }
 
     if (wf.plays.deduped < MIN_WEEK_PLAYS) return null;
@@ -292,27 +329,22 @@ export async function getWeekInsights(
     }
 
     const signature = await noteSignature(wf, USER_INSIGHTS_PROMPT_VERSION);
-    const cached = await readNote(ai, lastfmUser, signature);
+    const cached = await readNote(kv, lastfmUser, signature);
 
     let note: string;
     let mode: 'note' | 'line';
-    if (cached && typeof cached.note === 'string') {
+    if (cached) {
       note = cached.note;
       mode = 'note';
     } else {
-      const generated = await guardedNote(ai, wf, lastfmUser);
+      const generated = await guardedNote(ai, wf);
       if (generated) {
         note = generated.sentences.map((s) => s.text.trim()).join(' ');
         mode = 'note';
         const { raw, metadata } = generated.result;
-        if (isCacheableResponse(raw, metadata, 'userInsightsSummary', lastfmUser, signature)) {
-          try {
-            await ai.cache.set<CachedNote>('userInsightsSummary', [lastfmUser, signature], { note }, {
-              ttlSeconds: getTtlSeconds(CACHE_CONFIG.userInsights.note),
-            });
-          } catch (error) {
-            console.error('[Insights] Note cache write failed:', errorMessage(error));
-          }
+        // No key params: isCacheableResponse puts them in its log line, and they hold the username.
+        if (isCacheableResponse(raw, metadata, 'userInsightsSummary')) {
+          await writeJson(kv, noteKey(lastfmUser, signature), { note } satisfies CachedNote, getTtlSeconds(CACHE_CONFIG.userInsights.note));
         }
       } else {
         note = renderLine(wf, 'second');
@@ -344,10 +376,6 @@ export async function getWeekInsights(
 
     return { note, question: question?.text ?? null, header, pulledAt, mode };
   } finally {
-    if (markerSet) {
-      await kv.delete(keys.generating(lastfmUser)).catch((error: unknown) => {
-        console.error('[Insights] Could not clear the generating marker:', errorMessage(error));
-      });
-    }
+    if (markerSet) await deleteKey(kv, keys.generating(lastfmUser));
   }
 }

@@ -5,13 +5,17 @@ import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { dedupe } from './dedupe';
 import { artistWeeks } from './history';
 import { keys } from './keys';
+import { hasEditionMarker } from './match';
 import { albumRuns, runsToLookUp } from './runs';
 import { norm } from './text';
 import { albumKey } from './types';
-import type { AlbumInfo, CountList, LastfmHistoryClient, Scrobble, WeekInputs } from './types';
+import type { AlbumInfo, CountList, LastfmHistoryClient, ReleaseInfo, ReleaseLookup, Scrobble, WeekInputs } from './types';
 import { utcDays, weekWindow } from './window';
 
-/** Per-generation bounds (spec section 1, "Caps and degraded behaviour"). Fetches count client calls; retries inside a call do not. */
+/**
+ * Per-generation bounds (spec section 1, "Caps and degraded behaviour"). Fetches count Last.fm client calls; retries
+ * inside a call do not. Release lookups go to Spotify, so they have their own cap and stay outside totalFetches.
+ */
 export const CAPS = {
   currentWeekPages: 15,
   historyPages: 20,
@@ -19,6 +23,7 @@ export const CAPS = {
   artistLookups: 25,
   tagLookups: 45,
   totalFetches: 150,
+  releaseLookups: 6,
 } as const;
 export type Caps = { [K in keyof typeof CAPS]: number };
 
@@ -40,6 +45,8 @@ export interface CollectArgs {
   defer?: (p: Promise<unknown>) => void;
   /** Overrides CAPS; for tests. */
   caps?: Caps;
+  /** Finds albums' Spotify releases for the release_week fact. The owner's view only; without it, none are looked up. */
+  releases?: ReleaseLookup;
 }
 
 const DAY = 86400;
@@ -436,13 +443,64 @@ async function collectTags(args: CollectArgs, store: Store, budget: Budget, arti
   return out;
 }
 
+/** Release lookups for one week, and how many of them threw. */
+interface ReleaseResult { releases: Record<string, ReleaseInfo>; failures: number }
+
+/**
+ * Looks up the releases of this week's start_to_finish and most_of albums, each once, most played this week first,
+ * then by name. Titles with an edition marker are dropped before the cap without a call: release_week skips them.
+ * A lookup that throws or finds nothing leaves its album out.
+ */
+async function lookUpReleases(inputs: WeekInputs, lookup: ReleaseLookup, limit: number): Promise<ReleaseResult> {
+  const { from, to } = weekWindow(inputs.now);
+  const week = dedupe(inputs.scrobbles.filter((s) => s.ts >= from && s.ts < to)).kept;
+  const plays = new Map<string, number>();
+  for (const s of week) plays.set(albumKey(s.artist, s.album), (plays.get(albumKey(s.artist, s.album)) ?? 0) + 1);
+
+  // An album played in two runs is looked up once, under the spelling of its longest run.
+  const targets = new Map<string, { artist: string; album: string }>();
+  for (const run of albumRuns(week, inputs.albums)) {
+    const key = albumKey(run.artist, run.album);
+    if ((run.verdict === 'start_to_finish' || run.verdict === 'most_of') && !targets.has(key)) targets.set(key, run);
+  }
+  const ordered = [...targets.entries()]
+    .filter(([, target]) => !hasEditionMarker(target.album))
+    .sort(([k1, a], [k2, b]) => (plays.get(k2) ?? 0) - (plays.get(k1) ?? 0)
+      || a.album.localeCompare(b.album) || a.artist.localeCompare(b.artist))
+    .slice(0, limit);
+
+  const result: ReleaseResult = { releases: {}, failures: 0 };
+  await mapLimit(ordered, CONCURRENCY, async ([key, { artist, album }]) => {
+    try {
+      const release = await lookup(artist, album);
+      if (release) result.releases[key] = release;
+    } catch {
+      result.failures++;
+    }
+  });
+  return result;
+}
+
+/**
+ * Release dates for the week's album runs (spec section 2, "Release-week fact"), keyed by albumKey: at most `limit`
+ * lookups, 4 at a time. A lookup that throws is skipped.
+ */
+export async function collectReleases(
+  inputs: WeekInputs,
+  lookup: ReleaseLookup,
+  limit: number = CAPS.releaseLookups,
+): Promise<Record<string, ReleaseInfo>> {
+  return (await lookUpReleases(inputs, lookup, limit)).releases;
+}
+
 /**
  * Fetches everything buildWeekFacts reads for `username` at `now`, through KV.
  *
  * Order: the current week, then uncached history days, newest first; the chart list and 8 chart weeks; the
  * period and overall lists; lifetime counts for this week's top artists; album lookups for its longest runs;
- * tags for the artists the tag rules read. Each stage runs at most 4 calls at a time. Hitting a cap or a
- * failed lookup degrades the inputs (spec section 1); only a current week that cannot be read throws.
+ * tags for the artists the tag rules read, alongside release lookups when `releases` is given. Each stage runs at
+ * most 4 calls at a time. Hitting a cap or a failed lookup degrades the inputs (spec section 1); only a current
+ * week that cannot be read throws.
  */
 export async function collectWeekInputs(args: CollectArgs): Promise<WeekInputs> {
   const { username, timezone, now } = args;
@@ -495,10 +553,17 @@ export async function collectWeekInputs(args: CollectArgs): Promise<WeekInputs> 
   const runArtists = albumRuns(week, albums).map((r) => r.artist);
   const topArtists = byPlays.slice(0, TAG_TOP_ARTISTS).filter((a) => (plays.get(a) ?? 0) >= TAG_MIN_PLAYS);
   const tagArtists = [...new Set([...newOrLapsed, ...runArtists, ...topArtists])].slice(0, caps.tagLookups);
-  const tags = await collectTags(args, store, budget, tagArtists);
+  // Release lookups read Spotify, not Last.fm, so they run beside the tag lookups.
+  const [tags, looked] = await Promise.all([
+    collectTags(args, store, budget, tagArtists),
+    args.releases ? lookUpReleases({ ...partial, scrobbles }, args.releases, caps.releaseLookups) : null,
+  ]);
 
   // Counts only: never names, scrobbles or inputs.
-  if (budget.failures > 0) console.warn('Insights collect skipped failed Last.fm calls:', budget.failures);
+  const releaseFailures = looked?.failures ?? 0;
+  if (budget.failures > 0 || releaseFailures > 0) {
+    console.warn('Insights collect skipped failed calls:', { lastfm: budget.failures, releases: releaseFailures });
+  }
   if (!args.defer) await store.flush();
-  return { ...partial, scrobbles, tags };
+  return { ...partial, scrobbles, tags, ...(looked ? { releases: looked.releases } : {}) };
 }

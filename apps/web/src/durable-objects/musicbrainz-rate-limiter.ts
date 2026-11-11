@@ -3,7 +3,6 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { reserveSlot, MUSICBRAINZ_INTERVAL_MS } from '@listentomore/musicbrainz';
-import type { MusicBrainzRateLimiter } from '@listentomore/musicbrainz';
 
 export class MusicBrainzRateLimiterDO extends DurableObject {
   // Resets to 0 on eviction. Callers already holding reservations (up to ~5,
@@ -20,14 +19,3 @@ export class MusicBrainzRateLimiterDO extends DurableObject {
   }
 }
 
-/**
- * Adapt the global limiter instance to the musicbrainz package's interface.
- */
-export function getMusicBrainzLimiter(
-  namespace: DurableObjectNamespace<MusicBrainzRateLimiterDO>
-): MusicBrainzRateLimiter {
-  const stub = namespace.get(namespace.idFromName('global'));
-  return {
-    reserve: async (maxWaitMs: number) => stub.reserve(maxWaitMs),
-  };
-}

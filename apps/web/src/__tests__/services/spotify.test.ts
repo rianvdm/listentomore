@@ -428,6 +428,54 @@ describe('SpotifySearch', () => {
     });
   });
 
+  describe('quiet search', () => {
+    it('quiet search logs no query, artist or album, even on a 429 or a rejected cache write', async () => {
+      const spies = (['log', 'warn', 'error'] as const).map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
+      const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+      globalThis.fetch = vi.fn(async () => new Response('{}', {
+        status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '0' },
+      })) as typeof fetch;
+      await expect(search.searchAlbumByArtist('Sentinel Artist', 'Sentinel Album', { quiet: true })).rejects.toThrow('429');
+      await flush();
+      // The 429 line keeps its status and Retry-After.
+      expect(JSON.stringify(spies[2].mock.calls)).toContain('Retry-After: 0');
+
+      setupFetchMock([{
+        pattern: /api\.spotify\.com\/v1\/search/,
+        response: { albums: { items: [{
+          name: 'Sentinel Album', id: 'a1', artists: [{ name: 'Sentinel Artist', id: 'r1' }], release_date: '2026-11-02',
+          total_tracks: 10, album_type: 'album', external_urls: { spotify: 'https://open.spotify.com/album/a1' }, images: [],
+        }] } },
+      }]);
+      vi.mocked(mockKV.put).mockRejectedValueOnce(new Error('put failed for spotify:search:album:Sentinel Album'));
+      const result = await search.searchAlbumByArtist('Sentinel Artist', 'Sentinel Album', { quiet: true });
+      await flush();
+
+      expect(result).toMatchObject({ name: 'Sentinel Album', artist: 'Sentinel Artist', releaseDate: '2026-11-02' });
+      expect(spies[2]).toHaveBeenCalledWith(expect.stringContaining('Deferred cache write spotify:search failed'), 'KV write rejected', expect.any(Error));
+      for (const spy of spies) {
+        for (const args of spy.mock.calls) {
+          for (const arg of args) {
+            const text = arg instanceof Error ? `${arg.message} ${arg.stack ?? ''}` : typeof arg === 'string' ? arg : JSON.stringify(arg);
+            expect(text).not.toContain('Sentinel');
+          }
+        }
+        spy.mockRestore();
+      }
+    });
+
+    it('a search without quiet still logs its query', async () => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      setupFetchMock([{ pattern: /api\.spotify\.com\/v1\/search/, response: spotifyFixtures.searchAlbums }]);
+
+      await search.searchAlbumByArtist('Radiohead', 'In Rainbows');
+
+      expect(JSON.stringify(log.mock.calls)).toContain('In Rainbows');
+      log.mockRestore();
+    });
+  });
+
   describe('searchTrack', () => {
     it('searches for tracks and returns first result', async () => {
       const trackSearchResponse = {

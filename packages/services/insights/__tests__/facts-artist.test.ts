@@ -223,17 +223,18 @@ describe('volume against normal', () => {
     expectGrounded(d);
   });
 
-  it('no "stop" edge unless plays span 2+ days and end 36+ hours before the window end', () => {
+  it('no "after" edge unless plays span 2+ days and end 72+ hours before the window end', () => {
     const { prior, chartWeeks } = history({ Meltt: 2 });
     const meltt = artist({ artist: 'Meltt', tier: 'regular', plays: 24 });
     const edgesFor = (week: Scrobble[]) =>
       only(artistFacts(context({ week, artists: [meltt], prior, inputs: { chartWeeks } })), 'volume_vs_normal').edges;
 
-    const monWed = [...plays('Meltt', 12, ts('2026-11-02T10:00:00')), ...plays('Meltt', 12, ts('2026-11-04T10:00:00'))];
-    expect(edgesFor(monWed)).toEqual([{ kind: 'after', text: 'What happened with Meltt after Wed Nov 4?' }]);
+    const monThu = [...plays('Meltt', 12, ts('2026-11-02T10:00:00')), ...plays('Meltt', 12, ts('2026-11-05T10:00:00'))];
+    // Last play Thu 10:44, 82.5 h before Sun 21:17.
+    expect(edgesFor(monThu)).toEqual([{ kind: 'after', text: 'What happened with Meltt after Thu Nov 5?' }]);
 
-    const endsLate = [...plays('Meltt', 12, ts('2026-11-02T10:00:00')), ...plays('Meltt', 12, ts('2026-11-07T10:00:00'))];
-    expect(edgesFor(endsLate)).toEqual([]); // last play Sat 10:44, under 36 h before Sun 21:17
+    const monFri = [...plays('Meltt', 12, ts('2026-11-02T10:00:00')), ...plays('Meltt', 12, ts('2026-11-06T10:00:00'))];
+    expect(edgesFor(monFri)).toEqual([]); // last play Fri 10:44, 58.5 h before Sun 21:17: an edge under the old 36 h rule
 
     expect(edgesFor(plays('Meltt', 24, ts('2026-11-04T10:00:00')))).toEqual([]); // one day only
   });

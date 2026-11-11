@@ -1,7 +1,7 @@
 // ABOUTME: Spotify search functionality for tracks, albums, and artists.
 // ABOUTME: Includes caching, prefers full albums over singles/EPs, and rate limiting.
 
-import { CACHE_CONFIG } from '@listentomore/config';
+import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import type { SpotifyAuth } from './auth';
 import type { SpotifyRateLimiter } from './rate-limit';
 import { createDefer } from './defer';
@@ -11,6 +11,14 @@ import { spotifyFetch } from './fetch';
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
 export type SearchType = 'track' | 'album' | 'artist';
+
+/**
+ * `quiet` keeps the query, artist and album out of every log line, the deferred cache write's label and its error,
+ * for callers whose names must not be logged (the insights path).
+ */
+export interface SearchOptions {
+  quiet?: boolean;
+}
 
 export interface TrackSearchResult {
   title: string;
@@ -124,7 +132,8 @@ export class SpotifySearch {
   async search<T extends SearchType>(
     query: string,
     type: T,
-    limit: number = 1
+    limit: number = 1,
+    options: SearchOptions = {}
   ): Promise<T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[]> {
     const cacheKey = `spotify:search:${type}:${query}`;
 
@@ -137,8 +146,8 @@ export class SpotifySearch {
       return cached as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
     }
 
-    console.log(`[Spotify] Cache miss, searching API: ${type} "${query}"`);
-    const data = await this.requestSearch(query, type, limit, await getAccessToken());
+    if (!options.quiet) console.log(`[Spotify] Cache miss, searching API: ${type} "${query}"`);
+    const data = await this.requestSearch(query, type, limit, await getAccessToken(), options);
     let results: SearchResult[];
 
     if (type === 'track' && data.tracks) {
@@ -179,13 +188,21 @@ export class SpotifySearch {
       results = [];
     }
 
-    // Cache results without blocking the response on the KV write
-    this.defer(
-      this.cache.put(cacheKey, JSON.stringify(results), {
-        expirationTtl: CACHE_CONFIG.spotify.search.ttlDays * 24 * 60 * 60,
-      }),
-      `cache write ${cacheKey}`
-    );
+    // Cache results without blocking the response on the KV write. A quiet write logs a categorical label, and its
+    // rejection is replaced, since a KV error message can carry the key and so the query.
+    const put = this.cache.put(cacheKey, JSON.stringify(results), {
+      expirationTtl: getTtlSeconds(CACHE_CONFIG.spotify.search),
+    });
+    if (options.quiet) {
+      this.defer(
+        put.catch(() => {
+          throw new Error('KV write rejected');
+        }),
+        'cache write spotify:search'
+      );
+    } else {
+      this.defer(put, `cache write ${cacheKey}`);
+    }
 
     return results as T extends 'track' ? TrackSearchResult[] : T extends 'album' ? AlbumSearchResult[] : ArtistSearchResult[];
   }
@@ -220,7 +237,8 @@ export class SpotifySearch {
     query: string,
     type: SearchType,
     limit: number,
-    accessToken: string
+    accessToken: string,
+    options: SearchOptions = {}
   ): Promise<SpotifySearchResponse> {
     const url = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`;
     const response = await spotifyFetch(
@@ -229,13 +247,15 @@ export class SpotifySearch {
         headers: { Authorization: `Bearer ${accessToken}` },
         timeout: 'fast',
       },
-      this.rateLimiter
+      this.rateLimiter,
+      { quiet: options.quiet }
     );
 
     if (!response.ok) {
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After') || 'unknown';
-        console.error(`[Spotify] 429 Rate Limited for search "${query}", Retry-After: ${retryAfter}s`);
+        const subject = options.quiet ? 'search' : `search "${query}"`;
+        console.error(`[Spotify] 429 Rate Limited for ${subject}, Retry-After: ${retryAfter}s`);
       }
       throw new Error(`Spotify search failed: ${response.status} ${response.statusText}`);
     }
@@ -258,12 +278,16 @@ export class SpotifySearch {
    * Use this when you have structured artist/album data (e.g., from Last.fm).
    * Fetches multiple results and picks the best match by album name similarity.
    * Falls back to natural query if field filters don't find a good match.
+   * With `quiet`, no log line carries the artist, the album or a query built from them.
    */
-  async searchAlbumByArtist(artist: string, album: string): Promise<AlbumSearchResult | null> {
+  async searchAlbumByArtist(artist: string, album: string, options: SearchOptions = {}): Promise<AlbumSearchResult | null> {
+    const log = (message: string): void => {
+      if (!options.quiet) console.log(message);
+    };
     // Use Spotify's field filters for precise matching
     const query = `artist:"${artist}" album:"${album}"`;
-    console.log(`[Spotify] Searching with field filters: ${query}`);
-    const results = await this.search(query, 'album', 5);
+    log(`[Spotify] Searching with field filters: ${query}`);
+    const results = await this.search(query, 'album', 5, options);
     
     // Try to find a good match from field filter results
     const fieldFilterMatch = results.length > 0 
@@ -283,8 +307,8 @@ export class SpotifySearch {
     const strippedAlbum = album.replace(/\s*\(.*\)\s*$/, '').trim();
     if (strippedAlbum && strippedAlbum !== album) {
       const strippedQuery = `artist:"${artist}" album:"${strippedAlbum}"`;
-      console.log(`[Spotify] Retrying with stripped album name: ${strippedQuery}`);
-      const strippedResults = await this.search(strippedQuery, 'album', 5);
+      log(`[Spotify] Retrying with stripped album name: ${strippedQuery}`);
+      const strippedResults = await this.search(strippedQuery, 'album', 5, options);
       const strippedMatch = strippedResults.length > 0
         ? this.pickBestAlbumMatch(strippedResults, strippedAlbum, artist)
         : null;
@@ -296,8 +320,8 @@ export class SpotifySearch {
     // Field filter didn't find a good match, try natural query
     // This works better for albums with special characters like "i, i"
     const fallbackQuery = `${artist} ${album}`;
-    console.log(`[Spotify] Field filter ${results.length ? 'no good match' : 'failed'}, trying natural query: ${fallbackQuery}`);
-    const fallbackResults = await this.search(fallbackQuery, 'album', 5);
+    log(`[Spotify] Field filter ${results.length ? 'no good match' : 'failed'}, trying natural query: ${fallbackQuery}`);
+    const fallbackResults = await this.search(fallbackQuery, 'album', 5, options);
 
     const naturalMatch = this.pickBestAlbumMatch(fallbackResults, album, artist);
 

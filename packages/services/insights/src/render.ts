@@ -53,7 +53,7 @@ export function renderPromptView(wf: WeekFacts): string {
  * day labels, the window timestamps and pulledAt are left out, so a moving window with the same facts reuses the note.
  */
 export async function noteSignature(wf: WeekFacts, promptVersion: string): Promise<string> {
-  const payload = JSON.stringify([
+  return hashSignature([
     wf.ruleVersion,
     promptVersion,
     // Fact 0's values and units (the week's plays and the usual week), not its day labels, which move daily.
@@ -62,7 +62,11 @@ export async function noteSignature(wf: WeekFacts, promptVersion: string): Promi
     topArtistsLine(wf),
     wf.caveats,
   ]);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+}
+
+/** The first 16 hex characters of SHA-256 over `payload` as JSON: the cache signature of the note and the card. */
+export async function hashSignature(payload: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, SIGNATURE_HEX);
 }
 
@@ -188,6 +192,19 @@ function factLine(wf: WeekFacts, f: Fact, v: Voice): string | null {
       const artists = values(f, 'artists')[0];
       return n !== undefined && artists !== undefined && day !== undefined && f.entities[0] !== undefined
         ? `${v.subject} played ${n} tracks from ${artists} artists in one stretch on ${day}, led by ${f.entities[0]}.` : null;
+    }
+    case 'release_week': {
+      const album = f.entities[0];
+      // One date when the run was on the release day; otherwise the release day, then the run's day.
+      const runDay = f.dates.length > 0 ? dayLabel(f.dates[f.dates.length - 1], wf.timezone) : undefined;
+      if (!f.subject || album === undefined || runDay === undefined) return null;
+      // A most_of run states its tracks played, then the tracklist (one value when the two are equal).
+      const [covered, length = covered] = values(f, 'tracks', album);
+      const played = covered === undefined
+        ? `${album} by ${f.subject} start to finish`
+        : `${covered} of ${length} tracks of ${album} by ${f.subject}`;
+      const when = f.dates.length === 1 ? 'the day it came out' : 'in the week it came out';
+      return `${v.subject} played ${played} on ${runDay}, ${when}.`;
     }
     case 'volume': {
       const [plays, usual] = values(f, 'plays');

@@ -38,6 +38,14 @@ export const CACHE_CONFIG = {
     note: { ttlDays: 8 }, // A guarded note, and the pointer to the note last served to the owner
     generatingMarker: { ttlMinutes: 1 }, // Marks a generation in progress; KV's minimum TTL is 60 seconds
     questionState: { ttlDays: 60 }, // The owner's last question, for rotation
+    card: { ttlDays: 8 }, // The profile's card result for its facts signature; lives as long as the note
+  },
+
+  // The insights making-of fact, global per album (apps/web/src/api/internal/insights-making-of.ts). The one AI
+  // result kept here: it has two TTLs, and the route caches it only after the copy rubric passes.
+  albumTrivia: {
+    fact: { ttlDays: 120 }, // A cited fact that passed the rubric
+    none: { ttlDays: 30 }, // NONE, no citation, or two rubric failures
   },
 
   discogs: {
@@ -55,6 +63,9 @@ export const CACHE_CONFIG = {
 
   musicbrainz: {
     lookup: { ttlDays: 30 }, // ISRCs/UPCs never change once assigned
+    // Global release-group refs, release credits and artist band links (credits.ts)
+    credits: { ttlDays: 30 },
+    creditsMiss: { ttlDays: 7 }, // No release group, no official release or an unreadable entity
   },
 
   // /lookup name → Spotify ID results. Misses expire sooner so new releases resolve within a day.

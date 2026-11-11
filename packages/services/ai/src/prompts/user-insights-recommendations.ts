@@ -131,6 +131,8 @@ Just the 4 formatted recommendations, one per line.`;
     reasoning: config.reasoning,
     verbosity: config.verbosity,
     webSearch: config.webSearch,
+    // An error body can quote the listening data, so a failed call logs its status alone.
+    quietErrors: true,
   });
 
   console.log(

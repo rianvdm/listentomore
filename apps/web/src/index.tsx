@@ -50,7 +50,7 @@ import { PrivacyPage } from './pages/legal/privacy';
 import { TermsPage } from './pages/legal/terms';
 import { AboutPage } from './pages/about';
 import { DiscordPage } from './pages/discord';
-import { getMusicBrainzLimiter } from './durable-objects/musicbrainz-rate-limiter';
+import { getMusicBrainzLimiter } from './utils/musicbrainz-limiter';
 import { enrichLinksScript } from './utils/client-scripts';
 import { loadCachedRecentTrack, recentTrackKey } from './utils/recent-track-cache';
 import type { RecentTrackData } from './utils/recent-track-cache';

@@ -5,7 +5,7 @@ import type { User } from '@listentomore/db';
 import { Layout } from '../../components/layout';
 import { SITE_CONFIG } from '@listentomore/config';
 
-export const PRIVACY_EFFECTIVE_DATE = 'November 9, 2026';
+export const PRIVACY_EFFECTIVE_DATE = 'November 10, 2026';
 
 interface PrivacyPageProps {
   currentUser?: User | null;
@@ -106,7 +106,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
       </p>
       <p>
         <strong>Anthropic</strong> writes the text about albums, artists and genres, and answers
-        questions typed into the Ask feature. The insights page sends it two kinds of request.
+        questions typed into the Ask feature. The insights page sends it three kinds of request.
       </p>
       <p>
         For the note about your week, the site first works out facts about the week from your
@@ -121,8 +121,20 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         signed-in visitor opens the page, and for a private profile only when you open it.
       </p>
       <p>
-        Neither request includes your username, display name, bio, IP address or any other account
-        detail. Anthropic's own terms cover what it does with those requests.
+        Under the note, your insights page can show a card about an album from your week. The card
+        names someone who played on or produced the album and a band they've been in (or the
+        person's own name) that you've played, with your play count for it. When no such link turns
+        up, the card gives a fact about one of your week's albums, found by Anthropic, with a link to
+        the web page the fact came from.
+      </p>
+      <p>
+        For that album fact, Anthropic gets only the artist and album name, and searches the web for
+        a fact about the album. The site asks only when you open your own insights page. The fact is
+        kept for everyone, so a card that names the same album later shows it without asking again.
+      </p>
+      <p>
+        None of these requests includes your username, display name, bio, IP address or any other
+        account detail. Anthropic's own terms cover what it does with those requests.
       </p>
       <p>
         <strong>OpenAI</strong> generates the short random music facts. It gets no information
@@ -137,6 +149,17 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         and Last.fm profile pictures directly from the servers of those services, and it loads one
         script (a Markdown renderer) from the jsDelivr content network. Those hosts see your IP
         address the way any server does when you load a file from it.
+      </p>
+      <p>
+        When you open your own insights page, the site also sends Spotify and MusicBrainz artist and
+        album names from your week. Spotify gets up to six albums, to find their release dates, and
+        the card's album, to find its cover. MusicBrainz gets up to six albums, to find who played on
+        and produced them and which bands those people have been in.
+      </p>
+      <p>
+        The album fact's source link points to whatever site the fact came from. Your browser
+        contacts that site only if you click the link. That site then sees your IP address, like any
+        site you visit, and your browser doesn't tell it which page you came from.
       </p>
       <p>
         <strong>Cloudflare</strong> hosts the site and sees every request. I have Cloudflare's
@@ -166,6 +189,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         </li>
         <li>The facts the insights page works out about your week: 24 hours.</li>
         <li>The note about your week: 8 days.</li>
+        <li>The card under the note about your week: 8 days.</li>
         <li>The last question the insights page showed you, so the next one can differ: 60 days.</li>
         <li>The album picks on your insights page: 1 day.</li>
         <li>Your Last.fm profile details and your play count for an artist: 30 days.</li>
@@ -178,6 +202,18 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>
           Text searched on the album or artist search page, exactly as entered, with the results: 30
           days, even when nothing was found.
+        </li>
+        <li>
+          Spotify's results for the album lookups behind your insights page, under the artist and
+          album names: 30 days.
+        </li>
+        <li>
+          Album facts for the card, with their source links: 120 days, or 30 days when no usable
+          fact was found. They aren't tied to an account.
+        </li>
+        <li>
+          Credits and band memberships from MusicBrainz: 30 days, or 7 days when MusicBrainz had
+          nothing. They aren't tied to an account either.
         </li>
       </ul>
 
@@ -195,6 +231,11 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         you see the note about your week and the question under it.
       </p>
       <p>
+        That visitor also sees the card, including any play count it names, with your username
+        where you see "you". A visit from someone else never starts the lookups behind the card, so
+        they see it only after your own visit has made it.
+      </p>
+      <p>
         Anyone can still see that a profile with that username exists. When you're signed in,
         artist pages show your own Last.fm play count for that artist. Your privacy settings at
         Last.fm are separate from the ones on this site.
@@ -205,7 +246,7 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         You can delete your account from the <a href="/account">account page</a>. It asks you to
         type DELETE to confirm. That removes your account record and all your sessions. It also
         deletes the cached copies of your listening data: the scrobbles, charts, play counts, facts,
-        notes and last question kept for the insights page, your Last.fm profile details, your top
+        notes, card and last question kept for the insights page, your Last.fm profile details, your top
         artists, top albums and loved tracks, and your play count on artist pages.
       </p>
       <p>Some things outlast the deletion:</p>
@@ -213,7 +254,8 @@ export function PrivacyPage({ currentUser }: PrivacyPageProps) {
         <li>
           A few cached copies aren't deleted and expire on their own: your most recent track within 7
           days, the album picks within 1 day, and the artist recommendations within 6 hours. Searches
-          and lookups aren't tied to an account and expire within 30 days.
+          and lookups aren't tied to an account and expire within 30 days. Album facts and MusicBrainz
+          credits aren't tied to an account either, and expire within 120 days.
         </li>
         <li>
           Cloudflare log entries that mention your username aren't removed when you delete your

@@ -1,5 +1,5 @@
-// ABOUTME: User insights page at /u/:username/insights: the week note (owner) or visitor line, and album picks.
-// ABOUTME: The client script renders the summary response as text only; no HTML from the response is parsed.
+// ABOUTME: User insights page at /u/:username/insights: the week note (owner) or visitor line, the Did you know card,
+// ABOUTME: and album picks. The client script renders the summary and card as text only; no response HTML is parsed.
 
 import type { Context } from 'hono';
 import { Layout } from '../../components/layout';
@@ -70,6 +70,7 @@ export function UserInsightsPage({
           </div>
           <p id="insights-question" class="insights-question" hidden></p>
           <p id="insights-meta" class="insights-meta text-muted" hidden></p>
+          <aside id="insights-card" class="insights-card" hidden></aside>
 
           <h2 style={{ marginTop: '3em' }}>💿 Albums to Explore</h2>
           <div id="insights-recommendations">
@@ -90,6 +91,9 @@ export function UserInsightsPage({
           var loadingText = ${JSON.stringify(loadingText)};
           var refreshCooldown = 0;
           var refreshInterval = null;
+          // Bumped by each load. Summary and card callbacks from an earlier load are ignored, so after a Refresh
+          // only the newest load can show or hide the note and the card.
+          var loadGeneration = 0;
 
           function escapeHtml(str) {
             var div = document.createElement('div');
@@ -125,6 +129,86 @@ export function UserInsightsPage({
             });
           }
 
+          function hideCard() {
+            var cardEl = document.getElementById('insights-card');
+            if (cardEl) {
+              cardEl.hidden = true;
+              cardEl.textContent = '';
+            }
+          }
+
+          function isHttpsUrl(value) {
+            if (typeof value !== 'string') return false;
+            try {
+              return new URL(value).protocol === 'https:';
+            } catch (e) {
+              return false;
+            }
+          }
+
+          function isFilled(value) {
+            return typeof value === 'string' && value.length > 0;
+          }
+
+          function appendText(parent, tagName, className, text) {
+            var el = document.createElement(tagName);
+            el.className = className;
+            el.textContent = text;
+            parent.appendChild(el);
+            return el;
+          }
+
+          // Fills the card from the response through textContent and setAttribute only. Art and the source link
+          // appear only for https URLs; art that fails to load is removed.
+          function renderCard(card) {
+            var cardEl = document.getElementById('insights-card');
+            if (!cardEl) return;
+            cardEl.textContent = '';
+
+            if (isHttpsUrl(card.imageUrl)) {
+              var img = document.createElement('img');
+              img.className = 'insights-card-art';
+              img.setAttribute('src', card.imageUrl);
+              img.setAttribute('alt', '');
+              img.setAttribute('loading', 'lazy');
+              img.addEventListener('error', function() { img.remove(); });
+              cardEl.appendChild(img);
+            }
+
+            var bodyEl = document.createElement('div');
+            bodyEl.className = 'insights-card-body';
+            appendText(bodyEl, 'p', 'insights-card-label text-muted', 'Did you know');
+            appendText(bodyEl, 'p', 'insights-card-album', card.album + ' by ' + card.artist);
+            appendText(bodyEl, 'p', 'insights-card-text', card.text);
+            if (isHttpsUrl(card.sourceUrl)) {
+              var sourceEl = appendText(bodyEl, 'a', 'insights-card-source', 'Source');
+              sourceEl.setAttribute('href', card.sourceUrl);
+              sourceEl.setAttribute('target', '_blank');
+              sourceEl.setAttribute('rel', 'noopener noreferrer');
+            }
+            cardEl.appendChild(bodyEl);
+            cardEl.hidden = false;
+          }
+
+          // Requests the card for one load once its note is on the page. No card or an error leaves it hidden; a
+          // response for an older load is dropped. The failure log is a fixed code: the error can carry response text.
+          function loadCard(generation) {
+            internalFetch('/api/internal/user-insights-trivia?username=' + encodeURIComponent(username))
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (generation !== loadGeneration) return;
+                var card = data && data.data;
+                if (card && isFilled(card.album) && isFilled(card.artist) && isFilled(card.text)) {
+                  renderCard(card);
+                }
+              })
+              .catch(function() {
+                if (generation !== loadGeneration) return;
+                console.error('[Insights] card load failed');
+                hideCard();
+              });
+          }
+
           // The pulled time in the viewer's locale and timezone, or '' when the value is not a date.
           function formatPulledAt(iso) {
             var date = new Date(iso);
@@ -132,7 +216,7 @@ export function UserInsightsPage({
             return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
           }
 
-          function renderWeek(week) {
+          function renderWeek(week, generation) {
             var summaryEl = document.getElementById('insights-summary');
             if (!summaryEl) return;
 
@@ -168,14 +252,18 @@ export function UserInsightsPage({
               metaEl.textContent = (pulled ? 'Updated ' + pulled + '. ' : '') + 'Counts exclude likely duplicate scrobbles.';
               metaEl.hidden = false;
             }
+
+            loadCard(generation);
           }
 
           function loadInsights(refresh) {
             var refreshParam = refresh ? '&refresh=true' : '';
+            var generation = ++loadGeneration;
 
             // Show loading states
             showSummaryText(loadingText, 'text-muted', 'loading-inline');
             hideWeekDetails();
+            hideCard();
             document.getElementById('insights-recommendations').innerHTML =
               '<div class="loading-container"><span class="spinner">↻</span><span class="loading-text">Finding recommendations...</span></div>';
 
@@ -183,6 +271,7 @@ export function UserInsightsPage({
             internalFetch('/api/internal/user-insights-summary?username=' + encodeURIComponent(username) + refreshParam)
               .then(function(r) { return r.json(); })
               .then(function(data) {
+                if (generation !== loadGeneration) return;
                 if (data.sparse) {
                   showSummaryText(data.message, 'text-muted fun-message');
                   document.getElementById('insights-recommendations').innerHTML =
@@ -194,12 +283,15 @@ export function UserInsightsPage({
                   throw new Error(data.error || 'Empty insights response');
                 }
 
-                renderWeek(data.data);
+                renderWeek(data.data, generation);
               })
-              .catch(function(err) {
-                console.error('Insights summary error:', err);
+              .catch(function() {
+                if (generation !== loadGeneration) return;
+                // A fixed code only: the error can carry response text.
+                console.error('[Insights] summary load failed');
                 showSummaryText('Unable to generate insights right now. Please try again later.', 'text-muted');
                 hideWeekDetails();
+                hideCard();
               });
 
             // Fetch recommendations (parallel)
@@ -352,6 +444,46 @@ export function UserInsightsPage({
         .insights-meta,
         .insights-updating {
           font-size: 14px;
+        }
+
+        .insights-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 1rem;
+          max-width: 800px;
+          margin: 1.5rem auto 0;
+          padding: 1rem;
+          border-radius: 8px;
+          border-left: 3px solid var(--c-accent);
+          background: rgba(var(--c-base-rgb), 0.05);
+        }
+
+        .insights-card[hidden] { display: none; }
+
+        .insights-card-art {
+          flex-shrink: 0;
+          width: 64px;
+          height: 64px;
+          border-radius: 4px;
+          object-fit: cover;
+        }
+
+        .insights-card-body {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .insights-card-body p {
+          margin: 0 0 0.25rem;
+        }
+
+        .insights-card-label,
+        .insights-card-source {
+          font-size: 14px;
+        }
+
+        .insights-card-album {
+          font-weight: 600;
         }
 
         .fun-message {

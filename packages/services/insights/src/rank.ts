@@ -41,7 +41,7 @@ function covers(host: Draft, artist: string): boolean {
  * Appends a single listen to a volume fact, as build.py lines 469-480 do: "<volume statement minus its final
  * period>; includes <run and reasons>." The listen's statement is "<artist> on <day>: <run and reasons>."; its run
  * phrase never repeats the artist, so there is no " by <artist>" to remove. The host takes on the listen's entities,
- * quantities and dates. When the host does not already name the listen's day, the day is written in
+ * albums, quantities and dates. When the host does not already name the listen's day, the day is written in
  * ("; includes, on <day>, <run and reasons>"), so every date the host carries is in its statement.
  */
 function foldInto(host: Draft, single: Draft): Draft {
@@ -56,6 +56,7 @@ function foldInto(host: Draft, single: Draft): Draft {
     ...host,
     statement: `${host.statement.replace(/\.$/, '')}; ${includes}`,
     entities: unique([...host.entities, ...single.entities], (a, b) => a === b),
+    albums: unique([...host.albums, ...single.albums], (a, b) => a.artist === b.artist && a.album === b.album),
     quantities: unique([...host.quantities, ...single.quantities],
       (a, b) => a.value === b.value && a.unit === b.unit && a.entity === b.entity),
     dates: unique([...host.dates, ...single.dates], (a, b) => a === b),

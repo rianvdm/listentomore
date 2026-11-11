@@ -11,14 +11,17 @@ import type { SpotifyRateLimiter } from './rate-limit';
  * @param url - The Spotify API URL to fetch
  * @param options - Fetch options including timeout
  * @param rateLimiter - The shared rate limiter instance
+ * @param logOptions - `quiet` logs the URL's path only, so a query string that holds names never reaches a log line
  * @returns The fetch Response
  */
 export async function spotifyFetch(
   url: string,
   options: FetchWithTimeoutOptions,
-  rateLimiter: SpotifyRateLimiter
+  rateLimiter: SpotifyRateLimiter,
+  logOptions: { quiet?: boolean } = {}
 ): Promise<Response> {
   const maxRetries = RATE_LIMITS.spotify.maxRetries;
+  const logUrl = logOptions.quiet ? new URL(url).pathname : url;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     // Acquire rate limit token before request
@@ -37,13 +40,13 @@ export async function spotifyFetch(
       await rateLimiter.recordRateLimitResponse(retryAfter);
 
       if (attempt === maxRetries) {
-        console.error(`[Spotify] Max retries (${maxRetries}) exceeded for ${url} - 429 Rate Limited`);
+        console.error(`[Spotify] Max retries (${maxRetries}) exceeded for ${logUrl} - 429 Rate Limited`);
         return response; // Return 429 to caller
       }
 
       // Wait before retry (capped at 10 seconds to avoid blocking too long)
       const waitMs = Math.min(retryAfter * 1000, 10000);
-      console.log(`[Spotify] 429 retry ${attempt + 1}/${maxRetries} after ${waitMs}ms for ${url}`);
+      console.log(`[Spotify] 429 retry ${attempt + 1}/${maxRetries} after ${waitMs}ms for ${logUrl}`);
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       continue;
     }
@@ -51,7 +54,7 @@ export async function spotifyFetch(
     // Handle 502/503 (Bad Gateway / Service Unavailable) - transient errors
     if (response.status === 502 || response.status === 503) {
       if (attempt === maxRetries) {
-        console.error(`[Spotify] Max retries (${maxRetries}) exceeded for ${url} - ${response.status} ${response.statusText}`);
+        console.error(`[Spotify] Max retries (${maxRetries}) exceeded for ${logUrl} - ${response.status} ${response.statusText}`);
         return response;
       }
 
@@ -60,7 +63,7 @@ export async function spotifyFetch(
       const jitter = Math.random() * 1000; // 0-1s jitter
       const waitMs = baseDelay + jitter;
 
-      console.log(`[Spotify] ${response.status} retry ${attempt + 1}/${maxRetries} after ${Math.round(waitMs)}ms for ${url}`);
+      console.log(`[Spotify] ${response.status} retry ${attempt + 1}/${maxRetries} after ${Math.round(waitMs)}ms for ${logUrl}`);
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       continue;
     }

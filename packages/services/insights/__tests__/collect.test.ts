@@ -2,9 +2,11 @@
 // ABOUTME: global cache entries, KV keys and the KV operation budget (spec section 1, "Data", "Caps", "Provenance").
 
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
-import { CAPS, InsightsFetchError, albumKey, collectWeekInputs, keys, userExactKeys, userKeyPrefixes, utcDays } from '../src';
-import type { LastfmHistoryClient, Scrobble, WeekInputs } from '../src';
-import { NOW, createMockKV, loadFixture } from './helpers';
+import {
+  CAPS, InsightsFetchError, albumKey, collectReleases, collectWeekInputs, keys, userExactKeys, userKeyPrefixes, utcDays,
+} from '../src';
+import type { AlbumInfo, LastfmHistoryClient, ReleaseLookup, Scrobble, WeekInputs } from '../src';
+import { NOW, createMockKV, loadFixture, makeInputs } from './helpers';
 
 const DAY = 86400;
 const WEEK = 7 * DAY;
@@ -137,7 +139,30 @@ describe('keys', () => {
       'lastfm:userartist:alice:', 'lastfm:useralbum:alice:', 'ai:userInsightsSummary:alice:',
     ]);
     expect(prefixes.some((p) => keys.scrobbleDay('alice2', '2026-11-08').startsWith(p))).toBe(false);
-    expect(userExactKeys('Alice')).toEqual(['insights:facts:alice', 'insights:question:alice', 'insights:generating:alice', 'insights:last:alice']);
+    expect(userExactKeys('Alice')).toEqual([
+      'insights:facts:alice', 'insights:question:alice', 'insights:generating:alice', 'insights:last:alice', 'insights:card:alice',
+    ]);
+  });
+
+  it('userExactKeys includes insights:card', () => {
+    expect(keys.card('Alice')).toBe('insights:card:alice');
+    expect(userExactKeys('Alice')).toContain(keys.card('Alice'));
+    // One user's card key is never another's: exact keys only, no prefix.
+    expect(userKeyPrefixes('alice').some((p) => keys.card('alice2').startsWith(p))).toBe(false);
+  });
+
+  it('trivia keys are global: no user segment, not in userKeyPrefixes', () => {
+    const key = keys.trivia('Boards of Canada', 'Inferno');
+    expect(key).toBe('insights:trivia:boards%20of%20canada:inferno');
+    expect(keys.trivia('A:B', 'C')).not.toBe(keys.trivia('A', 'B:C'));
+    // The key is the original record's: every edition of an album shares it.
+    expect(keys.trivia('Boards of Canada', 'Inferno (Deluxe Edition)')).toBe(key);
+    expect(keys.trivia('Celer', 'Capri (Remastered 2026)')).toBe(keys.trivia('Celer', 'Capri'));
+    // A user named like the artist still owns nothing under the trivia family.
+    for (const user of ['alice', 'boards of canada']) {
+      expect(userKeyPrefixes(user).some((p) => key.startsWith(p))).toBe(false);
+      expect(userExactKeys(user)).not.toContain(key);
+    }
   });
 });
 
@@ -559,6 +584,86 @@ describe('collectWeekInputs', () => {
 
     expect(deferred.length).toBe(vi.mocked(kv.put).mock.calls.length);
     expect(deferred.length).toBeGreaterThan(0);
+  });
+});
+
+describe('collectReleases', () => {
+  /** Album i played start to finish once, with 6 + i tracks, so later albums have more plays this week. */
+  const titles = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'X (Deluxe Edition)'];
+  function weekOfAlbums(): WeekInputs {
+    const scrobbles = titles.flatMap((album, i) => run('Band', album, 6 + i, NOW - 6 * DAY + i * 3 * 3600));
+    const albums: Record<string, AlbumInfo> = Object.fromEntries(titles.map((album, i) =>
+      [albumKey('Band', album), { tracklist: Array.from({ length: 6 + i }, (_, n) => `${album} ${n + 1}`), userPlaycount: 0, fetchedAt: NOW }]));
+    return makeInputs({ scrobbles, albums });
+  }
+
+  it('looks up at most 6 run albums, most played first, skipping edition-marked titles without a call', async () => {
+    const lookup = vi.fn<ReleaseLookup>(async (artist, album) => ({ title: album, artist, date: '2026-11-02' }));
+
+    const releases = await collectReleases(weekOfAlbums(), lookup);
+
+    expect(CAPS.releaseLookups).toBe(6);
+    expect(lookup.mock.calls).toEqual(['A7', 'A6', 'A5', 'A4', 'A3', 'A2'].map((album) => ['Band', album]));
+    expect(Object.keys(releases)).toEqual(expect.arrayContaining(['A7', 'A2'].map((album) => albumKey('Band', album))));
+    expect(Object.keys(releases)).toHaveLength(6);
+    expect(releases[albumKey('Band', 'A7')]).toEqual({ title: 'A7', artist: 'Band', date: '2026-11-02' });
+  });
+
+  it('keeps an album played in two runs once, and leaves out runs that are not start_to_finish or most_of', async () => {
+    const inputs = weekOfAlbums();
+    const shuffled = run('Band', 'Shuffled', 6, NOW - DAY).reverse().map((s, i) => ({ ...s, ts: NOW - DAY + i * 240 }));
+    const twice = run('Band', 'A1', 6, NOW - 2 * DAY);
+    const albums = { ...inputs.albums, [albumKey('Band', 'Shuffled')]: { tracklist: run('Band', 'Shuffled', 6, 0).map((s) => s.track), userPlaycount: 0, fetchedAt: NOW } };
+    const lookup = vi.fn<ReleaseLookup>(async () => null);
+
+    await collectReleases({ ...inputs, scrobbles: [...inputs.scrobbles, ...twice, ...shuffled].sort((a, b) => a.ts - b.ts), albums }, lookup, 20);
+
+    expect(lookup.mock.calls.map(([, album]) => album)).toEqual(['A1', 'A7', 'A6', 'A5', 'A4', 'A3', 'A2']);
+  });
+
+  it('skips a lookup that throws and keeps the other entries', async () => {
+    const lookup = vi.fn<ReleaseLookup>(async (artist, album) => {
+      if (album === 'A5') throw new Error('Spotify search failed: 429');
+      return album === 'A4' ? null : { title: album, artist, date: '2026-11-02' };
+    });
+
+    const releases = await collectReleases(weekOfAlbums(), lookup);
+
+    expect(Object.keys(releases).sort()).toEqual(['A2', 'A3', 'A6', 'A7'].map((album) => albumKey('Band', album)).sort());
+  });
+});
+
+describe('collectWeekInputs release lookups', () => {
+  const week = (): Scrobble[] => run('Hammock', 'Universalis', 6, NOW - DAY);
+  const tracklist = { [albumKey('Hammock', 'Universalis')]: { tracklist: week().map((s) => s.track), userPlaycount: 6 } };
+
+  it('makes no release lookup without a releases client', async () => {
+    const result = await collect(new FakeClient({ scrobbles: week(), albums: tracklist }), createMockKV());
+
+    expect(result.releases).toBeUndefined();
+  });
+
+  it('looks up the week\'s run albums outside the Last.fm budget, and logs only the failure count', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const client = new FakeClient({ scrobbles: week(), albums: tracklist });
+    const lookup = vi.fn<ReleaseLookup>(async (artist, album) => ({ title: album, artist, date: '2026-11-07' }));
+
+    const result = await collect(client, createMockKV(), NOW, { releases: lookup });
+
+    expect(lookup.mock.calls).toEqual([['Hammock', 'Universalis']]);
+    expect(result.releases).toEqual({ [albumKey('Hammock', 'Universalis')]: { title: 'Universalis', artist: 'Hammock', date: '2026-11-07' } });
+    expect(warn).not.toHaveBeenCalled();
+
+    // A lookup that throws leaves the album out and adds its count to the log line, with no name in it.
+    const failing = vi.fn<ReleaseLookup>(async () => {
+      throw new Error('Spotify search failed for Universalis');
+    });
+    const degraded = await collect(new FakeClient({ scrobbles: week(), albums: tracklist }), createMockKV(), NOW, { releases: failing });
+    expect(degraded.releases).toEqual({});
+    expect(warn).toHaveBeenCalledTimes(1);
+    const text = JSON.stringify(warn.mock.calls);
+    for (const word of ['Hammock', 'Universalis']) expect(text).not.toContain(word);
+    warn.mockRestore();
   });
 });
 

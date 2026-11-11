@@ -8,7 +8,7 @@ import type { FactContext, Scrobble } from './types';
 import { dayLabel } from './window';
 
 const BASELINE_RAW_WEEKS = 4;
-const QUIET_GAP_SECONDS = 36 * 3600;
+const QUIET_GAP_SECONDS = 72 * 3600;
 
 /** Clamped to 0..100 and rounded to one decimal. */
 export const score = (x: number): number => Math.round(Math.min(100, Math.max(0, x)) * 10) / 10;
@@ -21,13 +21,13 @@ export const FIRST_UNDER_THIS_NAME = 'first plays under this name';
 /** Writes a run as runs.ts phrases it, with its album and track counts typed. Callers never pass a mislabelled run. */
 export function writeRun(b: StatementBuilder, run: AlbumRun): void {
   if (run.verdict === 'start_to_finish') {
-    b.name(run.album).add(' start to finish');
+    b.album(run.artist, run.album).add(' start to finish');
   } else if (run.verdict === 'most_of' && run.coverage !== null && run.tracklistLength !== null) {
     const covered = Math.round(run.coverage * run.tracklistLength);
     b.number(covered, 'tracks', run.album).add(' of ').number(run.tracklistLength, 'tracks', run.album)
-      .add(' tracks of ').name(run.album).add(', in order');
+      .add(' tracks of ').album(run.artist, run.album).add(', in order');
   } else {
-    b.number(run.tracksPlayed, 'tracks', run.album).add(' tracks in a row from ').name(run.album);
+    b.number(run.tracksPlayed, 'tracks', run.album).add(' tracks in a row from ').album(run.artist, run.album);
   }
 }
 
@@ -49,7 +49,7 @@ export function baselineWeeks(ctx: FactContext): Array<Record<string, number>> |
 
 /**
  * The last play of a subject that has the "after" edge (spec section 2, "Question"): plays on 2+ days this week,
- * then none recorded for 36+ hours before the window end. `played` is the subject's plays this week, ascending.
+ * then none recorded for 72+ hours before the window end. `played` is the subject's plays this week, ascending.
  */
 export function quietAfter(ctx: FactContext, played: Scrobble[]): number | null {
   if (played.length === 0) return null;

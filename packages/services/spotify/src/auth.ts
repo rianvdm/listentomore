@@ -54,8 +54,8 @@ export class SpotifyAuth {
   }
 
   private async fetchAccessToken(): Promise<string> {
-    const clientIdPrefix = this.config.clientId.substring(0, 8);
-    console.log(`[Spotify] Fetching client-credentials token for app ${clientIdPrefix}...`);
+    // No part of the client ID: credentials never reach a log line.
+    console.log('[Spotify] Fetching client-credentials token');
 
     const credentials = btoa(`${this.config.clientId}:${this.config.clientSecret}`);
 

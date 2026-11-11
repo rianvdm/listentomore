@@ -81,6 +81,9 @@ function createServices(sessionUser: User | null, profile: User) {
       getUserInsightsNote: vi.fn().mockResolvedValue(GOOD),
       cache: new AICache(kv),
     },
+    spotify: {
+      searchAlbumByArtist: vi.fn().mockResolvedValue(null),
+    },
   };
 }
 
@@ -91,6 +94,7 @@ function buildApp(services: Services) {
   app.use('*', async (c, next) => {
     c.set('db', services.db as unknown as Database);
     c.set('ai', services.ai as never);
+    c.set('spotify', services.spotify as never);
     await next();
   });
   app.route('/api/internal', insightsInternalRoutes);
@@ -101,6 +105,10 @@ function buildApp(services: Services) {
 const readKeys = (kv: KVNamespace): string[] => vi.mocked(kv.get).mock.calls.map(([key]) => String(key));
 const writtenKeys = (kv: KVNamespace): string[] => vi.mocked(kv.put).mock.calls.map(([key]) => key);
 
+/** What the real collector returns: release dates, here none found, only when it was handed a release lookup. */
+const collected = (inputs: WeekInputs) =>
+  async (args: Parameters<typeof insights.collectWeekInputs>[0]): Promise<WeekInputs> => (args.releases ? { ...inputs, releases: {} } : inputs);
+
 async function factsOf(inputs: WeekInputs): Promise<WeekFacts> {
   const actual = await vi.importActual<typeof import('@listentomore/insights')>('@listentomore/insights');
   return actual.buildWeekFacts(inputs);
@@ -108,7 +116,7 @@ async function factsOf(inputs: WeekInputs): Promise<WeekFacts> {
 
 describe('/user-insights-summary', () => {
   beforeEach(() => {
-    collectWeekInputs.mockResolvedValue(MAY24);
+    collectWeekInputs.mockImplementation(collected(MAY24));
   });
 
   describe('visibility', () => {
@@ -269,7 +277,10 @@ describe('/user-insights-summary', () => {
       // No committed week has edges on both of its top two facts, so fact 2 gets one here.
       const real = await factsOf(MAY24);
       const [lead, second, ...rest] = real.facts;
-      const wf = { ...real, facts: [lead, { ...second, edges: [{ kind: 'after' as const, text: 'What came after?' }] }, ...rest] };
+      // releasesChecked as the owner's own generation sets it, so the reload reuses these facts.
+      const wf = {
+        ...real, releasesChecked: true, facts: [lead, { ...second, edges: [{ kind: 'after' as const, text: 'What came after?' }] }, ...rest],
+      };
       vi.mocked(insights.buildWeekFacts).mockReturnValueOnce(wf);
       const services = createServices(OWNER, OWNER);
       await services.kv.put('insights:question:bordesak', JSON.stringify({ kind: 'started', subject: 'Some Other Artist' }));
@@ -547,8 +558,45 @@ describe('/user-insights-summary', () => {
       await owner.kv.put('insights:question:bordesak', JSON.stringify(stored));
 
       const { data } = await (await buildApp(owner)(URL_SUMMARY)).json() as { data: { question: string | null } };
-      expect(collectWeekInputs).toHaveBeenCalledTimes(1);
+      // The visitor's facts carry no release dates, so the owner recomputes them once.
+      expect(collectWeekInputs).toHaveBeenCalledTimes(2);
       expect(data.question).toBe(rotated?.text ?? null);
+    });
+
+    it('passes a release lookup to the collector for the owner and none for a visitor', async () => {
+      const owner = createServices(OWNER, OWNER);
+      await buildApp(owner)(URL_SUMMARY);
+      const lookup = collectWeekInputs.mock.calls[0][0].releases;
+      expect(lookup).toBeTypeOf('function');
+      // The lookup reads Spotify quietly and maps a hit to the release fields.
+      owner.spotify.searchAlbumByArtist.mockResolvedValueOnce({ name: 'Eternal Embers', artist: 'Meltt', releaseDate: '2026-11-02' });
+      expect(await lookup?.('Meltt', 'Eternal Embers')).toEqual({ title: 'Eternal Embers', artist: 'Meltt', date: '2026-11-02' });
+      expect(owner.spotify.searchAlbumByArtist).toHaveBeenCalledWith('Meltt', 'Eternal Embers', { quiet: true });
+      expect(await lookup?.('Meltt', 'Nothing')).toBeNull();
+
+      const visitor = createServices(VISITOR, OWNER);
+      await buildApp(visitor)(URL_SUMMARY);
+      expect(collectWeekInputs.mock.calls[1][0].releases).toBeUndefined();
+    });
+
+    it('the owner recomputes facts a visitor computed without release dates', async () => {
+      const visitor = createServices(VISITOR, OWNER);
+      await buildApp(visitor)(URL_SUMMARY);
+      expect(await visitor.kv.get('insights:facts:bordesak', 'json')).toMatchObject({ releasesChecked: false });
+      collectWeekInputs.mockClear();
+
+      const owner = createServices(OWNER, OWNER);
+      owner.kv = visitor.kv;
+      owner.ai.cache = new AICache(visitor.kv);
+      await buildApp(owner)(URL_SUMMARY);
+      expect(collectWeekInputs).toHaveBeenCalledTimes(1);
+      expect(await owner.kv.get('insights:facts:bordesak', 'json')).toMatchObject({ releasesChecked: true });
+
+      // A visitor reads the owner's facts as they are.
+      const again = createServices(VISITOR, OWNER);
+      again.kv = visitor.kv;
+      await buildApp(again)(URL_SUMMARY);
+      expect(collectWeekInputs).toHaveBeenCalledTimes(1);
     });
 
     it('a visitor never gets the owner\'s previous note while the marker is set', async () => {
@@ -586,7 +634,8 @@ describe('/user-insights-summary', () => {
     it('logs no statement, prompt-view line, note sentence, name, value or date over a full owner generation', async () => {
       const services = createServices(OWNER, OWNER);
       // Fails on a count, then on a name and a day outside the cited fact (Fri May 29 is the Boards of Canada fact's).
-      const badName = { ...BAD, sentences: [S1, { text: 'Boards of Canada came up too, on Fri May 29.', facts: [1] }] };
+      // Slow Crush is in the shoegaze fact and not a top artist, whose names count as cited by every sentence.
+      const badName = { ...BAD, sentences: [S1, { text: 'Slow Crush came up too, on Fri May 29.', facts: [1] }] };
       services.ai.getUserInsightsNote.mockResolvedValueOnce(BAD).mockResolvedValueOnce(badName);
       const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((level) =>
         vi.spyOn(console, level).mockImplementation(() => {}));
@@ -612,6 +661,7 @@ describe('/user-insights-summary', () => {
       ];
       for (const line of logged) {
         for (const text of forbidden) expect(line).not.toContain(text);
+        expect(line).not.toContain('bordesak');
       }
       // Names again without case, so a normalised (lower-cased) name is caught too. Six or more characters:
       // shorter names ("Quiet") collide with the log's own words.
@@ -641,17 +691,139 @@ describe('/user-insights-summary', () => {
     });
   });
 
+  describe('log hygiene on failures', () => {
+    const SENTINEL = 'Quillon Varga';
+    const consoleSpies = () =>
+      (['log', 'info', 'warn', 'error', 'debug'] as const).map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
+    const loggedLines = (spies: ReturnType<typeof consoleSpies>): string[] =>
+      spies.flatMap((spy) => spy.mock.calls.map((args) => args.map((a) =>
+        typeof a === 'string' ? a : a instanceof Error ? `${a.message} ${a.stack}` : JSON.stringify(a)).join(' ')));
+    const noteKey = async (): Promise<string> => {
+      const { USER_INSIGHTS_PROMPT_VERSION } = await import('@listentomore/ai');
+      return `ai:userInsightsSummary:bordesak:${await insights.noteSignature(await factsOf(MAY24), USER_INSIGHTS_PROMPT_VERSION)}`;
+    };
+    /** Not JSON, and holds the note text and a sentinel name, as a parser error message would quote them. */
+    const CORRUPT = `{"note": "${NOTE} ${SENTINEL}`;
+    const expectClean = (logged: string[]): void => {
+      for (const line of logged) {
+        for (const text of [SENTINEL, NOTE, S1.text, S2.text, 'bordesak', 'JSON', 'KV failed']) expect(line).not.toContain(text);
+      }
+    };
+
+    it('a corrupt note-cache entry is a miss and logs no note text, name, key or parser message', async () => {
+      const services = createServices(OWNER, OWNER);
+      await services.kv.put(await noteKey(), CORRUPT);
+      const spies = consoleSpies();
+
+      const { data } = await (await buildApp(services)(URL_SUMMARY)).json() as { data: { note: string; mode: string } };
+      expect(data).toMatchObject({ note: NOTE, mode: 'note' });
+      expect(services.ai.getUserInsightsNote).toHaveBeenCalledTimes(1);
+
+      const logged = loggedLines(spies);
+      expect(logged).toContain('[Insights] cache-read:parse ai:userInsightsSummary');
+      expectClean(logged);
+    });
+
+    it('a corrupt previous note while another request generates is a miss and logs no note text', async () => {
+      const services = createServices(OWNER, OWNER);
+      const request = buildApp(services);
+      await request(URL_SUMMARY);
+      await services.kv.delete('insights:facts:bordesak');
+      await services.kv.put('insights:generating:bordesak', '1');
+      await services.kv.put(await noteKey(), CORRUPT);
+      const spies = consoleSpies();
+
+      const { data } = await (await request(URL_SUMMARY)).json() as { data: { note: string; refreshing?: boolean } };
+      expect(data.refreshing).toBeUndefined();
+      expect(data.note).toBe(NOTE);
+
+      const logged = loggedLines(spies);
+      // Once in the previous-note lookup, once in the note read after the facts are recomputed.
+      expect(logged.filter((l) => l === '[Insights] cache-read:parse ai:userInsightsSummary')).toHaveLength(2);
+      expectClean(logged);
+    });
+
+    it('a model-call rejection that names someone logs the attempt and error class only', async () => {
+      const services = createServices(OWNER, OWNER);
+      services.ai.getUserInsightsNote.mockRejectedValue(new Error(`Anthropic API error about ${SENTINEL}: ${NOTE}`));
+      const spies = consoleSpies();
+
+      const { data } = await (await buildApp(services)(URL_SUMMARY)).json() as { data: { mode: string } };
+      expect(data.mode).toBe('line');
+
+      const logged = loggedLines(spies);
+      expect(logged).toContain('[Insights] note-attempt:1 call-failed kind=Error');
+      expect(logged).toContain('[Insights] note-attempt:2 call-failed kind=Error');
+      expectClean(logged);
+    });
+
+    it('a model-call rejection with a made-up error name logs kind=other', async () => {
+      const services = createServices(OWNER, OWNER);
+      const error = new Error(`about ${SENTINEL}`);
+      error.name = 'QuillonVarga';
+      services.ai.getUserInsightsNote.mockRejectedValue(error);
+      const spies = consoleSpies();
+
+      expect((await buildApp(services)(URL_SUMMARY)).status).toBe(200);
+      const logged = loggedLines(spies);
+      expect(logged).toContain('[Insights] note-attempt:1 call-failed kind=other');
+      for (const line of logged) expect(line).not.toContain('QuillonVarga');
+      expectClean(logged);
+    });
+
+    it('KV failures on the marker, the facts discard and the note write log fixed codes and key families only', async () => {
+      const services = createServices(OWNER, OWNER);
+      const fail = (key: string) => Promise.reject(new Error(`KV failed for ${key} (${SENTINEL})`));
+      const fails = (key: string, prefixes: string[]) => prefixes.some((p) => key.startsWith(p));
+      const kvGet = vi.mocked(services.kv.get) as unknown as Mock<(key: string, ...rest: unknown[]) => Promise<unknown>>;
+      const kvPut = vi.mocked(services.kv.put) as unknown as Mock<(key: string, ...rest: unknown[]) => Promise<void>>;
+      const kvDelete = vi.mocked(services.kv.delete) as unknown as Mock<(key: string) => Promise<void>>;
+      const [realGet, realPut, realDelete] = [kvGet, kvPut, kvDelete].map((m) => m.getMockImplementation()!) as [
+        (key: string, ...rest: unknown[]) => Promise<unknown>, (key: string, ...rest: unknown[]) => Promise<void>, (key: string) => Promise<void>,
+      ];
+      let failingGets: string[] = [];
+      let failingPuts: string[] = [];
+      let failingDeletes: string[] = [];
+      kvGet.mockImplementation((key, ...rest) => (fails(key, failingGets) ? fail(key) : realGet(key, ...rest)));
+      kvPut.mockImplementation((key, ...rest) => (fails(key, failingPuts) ? fail(key) : realPut(key, ...rest)));
+      kvDelete.mockImplementation((key) => (fails(key, failingDeletes) ? fail(key) : realDelete(key)));
+      const spies = consoleSpies();
+      const request = buildApp(services);
+
+      // First load: the previous-note marker read, the marker write and the note write fail.
+      failingGets = ['insights:generating:'];
+      failingPuts = ['insights:generating:', 'ai:userInsightsSummary:'];
+      expect((await request(URL_SUMMARY)).status).toBe(200);
+
+      // A refresh: the facts discard and the marker clear fail.
+      failingGets = [];
+      failingPuts = [];
+      failingDeletes = ['insights:facts:', 'insights:generating:'];
+      expect((await request(URL_REFRESH)).status).toBe(200);
+
+      const logged = loggedLines(spies);
+      for (const code of [
+        '[Insights] cache-read:error insights:generating',
+        '[Insights] cache-write:error insights:generating',
+        '[Insights] cache-write:error ai:userInsightsSummary',
+        '[Insights] cache-delete:error insights:facts',
+        '[Insights] cache-delete:error insights:generating',
+      ]) expect(logged).toContain(code);
+      expectClean(logged);
+    });
+  });
+
   describe('logSafeFailures', () => {
     it('keeps the sentence and the failure type, and drops every value, unit, date and fact id', () => {
       expect(logSafeFailures([
         's2:quantity-entity:41:plays', 's2:quantity:9', 's3:quantity-unit:6:months', 's2:quantity:word:twenty',
         's2:quantity:fraction:half', 's2:date:fri-may-30', 's2:day:tue', 's2:month:jun', 's2:name:fact4', 's4:name:week',
-        'shape:count:5', 's1:shape:lead', 's2:shape:unknown-fact:99', 's2:shape:multiple-sentences', 's2:shape:uncited',
+        'shape:count:5', 'shape:lead', 's2:shape:unknown-fact:99', 's2:shape:multiple-sentences', 's2:shape:uncited',
         's2:banned:first-time', 's1:punctuation:em-dash', 's2:something-new:41', 'odd:41:plays',
       ])).toEqual([
         's2:quantity-entity', 's2:quantity', 's3:quantity-unit', 's2:quantity',
         's2:quantity', 's2:date', 's2:day', 's2:month', 's2:name', 's4:name',
-        'shape:count', 's1:shape:lead', 's2:shape:unknown-fact', 's2:shape:multiple-sentences', 's2:shape:uncited',
+        'shape:count', 'shape:lead', 's2:shape:unknown-fact', 's2:shape:multiple-sentences', 's2:shape:uncited',
         's2:banned:first-time', 's1:punctuation:em-dash', 's2:other', 'other',
       ]);
     });

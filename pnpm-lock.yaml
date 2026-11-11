@@ -147,6 +147,9 @@ importers:
       '@listentomore/config':
         specifier: workspace:*
         version: link:../../config
+      '@listentomore/musicbrainz':
+        specifier: workspace:*
+        version: link:../musicbrainz
       '@listentomore/shared':
         specifier: workspace:*
         version: link:../../shared

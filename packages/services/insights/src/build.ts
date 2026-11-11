@@ -1,9 +1,11 @@
 // ABOUTME: buildWeekFacts - turns one WeekInputs into the ranked WeekFacts object: weeks, dedupe, baseline,
-// ABOUTME: the fact rules, ranking, the question, the window line, top artists, caveats and the week's names.
+// ABOUTME: the fact rules, ranking, the question, the window line, top artists, caveats, names and card albums.
 
+import { cardAlbums } from './card-albums';
 import { dedupe } from './dedupe';
 import { albumFacts } from './facts-album';
 import { artistFacts } from './facts-artist';
+import { releaseWeekFacts } from './facts-release';
 import { plural } from './facts-shared';
 import { weekFacts } from './facts-week';
 import { artistWeeks } from './history';
@@ -93,7 +95,7 @@ export function buildWeekFacts(
   const artists = artistWeeks(inputs, weeks, rawWeeks);
   const ctx: FactContext = { inputs, artists, runs: albumRuns(weeks[0], inputs.albums), week: weeks[0], rawWeeks, weeks, baseline };
 
-  const drafts = [...artistFacts(ctx), ...albumFacts(ctx), ...weekFacts(ctx)]
+  const drafts = [...artistFacts(ctx), ...albumFacts(ctx), ...releaseWeekFacts(ctx), ...weekFacts(ctx)]
     .filter((d) => !(inputs.currentWeekTruncated && SHARE_KINDS.has(d.kind)));
   const facts = rankFacts(drafts, new Map([...artists.values()].map((a) => [a.artist, a.plays])));
   const quiet = facts.length === 0 || facts[0].salience < QUIET_THRESHOLD;
@@ -125,5 +127,7 @@ export function buildWeekFacts(
     // A quiet week gets the code sentence and no note, so nothing for a question to follow.
     question: quiet ? null : chooseQuestion(facts, opts.lastQuestion ?? null),
     names: [...names].sort((a, b) => a.localeCompare(b)),
+    releasesChecked: inputs.releases !== undefined,
+    cardAlbums: cardAlbums(facts, ctx.runs, weeks[0]),
   };
 }

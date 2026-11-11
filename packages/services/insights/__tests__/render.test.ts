@@ -37,7 +37,8 @@ const withoutNames = (text: string, wf: WeekFacts): string =>
   [...wf.names].sort((a, b) => b.length - a.length).reduce((t, name) => t.split(name).join('#'), text);
 
 const sample = (kind: FactKind, over: Partial<Fact>): Fact => ({
-  id: 1, kind, salience: 70, subject: null, statement: 'Unused by the line.', entities: [], quantities: [], dates: [], edges: [], ...over,
+  id: 1, kind, salience: 70, subject: null, statement: 'Unused by the line.', entities: [], albums: [], quantities: [], dates: [], edges: [],
+  ...over,
 });
 
 /** One fact per kind, typed the way the fact rules type them (entities and quantities in statement order). */
@@ -129,6 +130,10 @@ const SAMPLES: Record<FactKind, { fact: Fact; second: string }> = {
       quantities: [{ value: 14, unit: 'plays' }, { value: 5, unit: 'artists' }, { value: 12, unit: 'percent' }],
     }),
     second: 'You played 14 tracks from 5 artists in one stretch on Sat May 30, led by W.',
+  },
+  release_week: {
+    fact: sample('release_week', { subject: 'Meltt', entities: ['Eternal Embers', 'Meltt'], dates: [MON] }),
+    second: 'You played Eternal Embers by Meltt start to finish on Mon Nov 2, the day it came out.',
   },
   volume: {
     fact: sample('volume', {
@@ -230,7 +235,8 @@ describe('noteSignature', () => {
   it('signature changes with the rule version and the prompt version', async () => {
     const sig = await noteSignature(wf, 'v1');
     expect(await noteSignature(wf, 'v2')).not.toBe(sig);
-    expect(await noteSignature({ ...wf, ruleVersion: 'r2' }, 'v1')).not.toBe(sig);
+    // Any other rule version, so the case survives the next RULE_VERSION bump.
+    expect(await noteSignature({ ...wf, ruleVersion: `${wf.ruleVersion}-next` }, 'v1')).not.toBe(sig);
   });
 });
 
@@ -336,6 +342,25 @@ describe('renderLine', () => {
         }
       }
     }
+  });
+
+  it('renders the release-week line in both persons', () => {
+    const base = melttWeek();
+    expect(renderLine(leading(base, SAMPLES.release_week.fact), 'second'))
+      .toBe('You played Eternal Embers by Meltt start to finish on Mon Nov 2, the day it came out.');
+    const later = sample('release_week', {
+      subject: 'Meltt', entities: ['Eternal Embers', 'Meltt'], dates: [ts('2026-11-02T00:00:00'), WED],
+      quantities: [{ value: 8, unit: 'tracks', entity: 'Eternal Embers' }, { value: 10, unit: 'tracks', entity: 'Eternal Embers' }],
+    });
+    const rian = { ...leading(base, later), username: 'rian' };
+    expect(renderLine(rian, 'third')).toBe('rian played 8 of 10 tracks of Eternal Embers by Meltt on Wed Nov 4, in the week it came out.');
+    expect(renderLine(rian, 'second')).toBe('You played 8 of 10 tracks of Eternal Embers by Meltt on Wed Nov 4, in the week it came out.');
+    const onTheDay = { ...later, dates: [MON] };
+    expect(renderLine(leading(base, onTheDay), 'third'))
+      .toBe('bordesak played 8 of 10 tracks of Eternal Embers by Meltt on Mon Nov 2, the day it came out.');
+    const fullLater = sample('release_week', { subject: 'Meltt', entities: ['Eternal Embers', 'Meltt'], dates: [MON, WED] });
+    expect(renderLine(leading(base, fullLater), 'second'))
+      .toBe('You played Eternal Embers by Meltt start to finish on Wed Nov 4, in the week it came out.');
   });
 
   it('a fact missing the values its template needs falls back to the volume sentence', () => {

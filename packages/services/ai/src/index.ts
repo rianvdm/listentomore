@@ -10,16 +10,19 @@ import type { ChatClient } from './types';
 import type { AlbumDetailResult } from './prompts/album-detail';
 import type { AlbumRecommendationsResult } from './prompts/album-recommendations';
 import type { ArtistSummaryResult } from './prompts/artist-summary';
+import type { AlbumTriviaResult } from './prompts/album-trivia';
 import type { GenreSummaryResult } from './prompts/genre-summary';
 
 // Re-export common types from types.ts
 export type {
+  AIResponseMetadata,
   ChatClient,
   ChatMessage,
   ChatCompletionOptions as CommonChatOptions,
   ChatCompletionResponse as CommonChatResponse,
   ReasoningEffort,
   Verbosity,
+  WebCitation,
 } from './types';
 
 // Re-export clients and cache for direct use
@@ -61,6 +64,11 @@ export {
   parseNoteSentences,
   USER_INSIGHTS_PROMPT_VERSION,
   generateUserInsightsRecommendations,
+  generateAlbumTrivia,
+  buildAlbumTriviaMessages,
+  parseAlbumTrivia,
+  ALBUM_TRIVIA_NONE,
+  type AlbumTriviaResult,
   type ArtistSummaryResult,
   type AlbumDetailResult,
   type GenreSummaryResult,
@@ -267,6 +275,17 @@ export class AIService {
     );
     const client = this.getClientForTask('userInsightsSummary');
     return generateUserInsightsNote(promptView, client);
+  }
+
+  /**
+   * One verifiable fact about an album, from web search, with its cited source,
+   * for the insights making-of card. Uncached: the insights route checks the
+   * copy and owns caching, globally per album.
+   */
+  async getAlbumTrivia(artistName: string, albumName: string): Promise<AlbumTriviaResult> {
+    const { generateAlbumTrivia } = await import('./prompts/album-trivia');
+    const client = this.getClientForTask('albumTrivia');
+    return generateAlbumTrivia(artistName, albumName, client);
   }
 
   /**

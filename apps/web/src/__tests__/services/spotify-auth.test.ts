@@ -1,5 +1,5 @@
 // ABOUTME: Tests for SpotifyAuth - client-credentials token requests, caching,
-// ABOUTME: token prefetch (KV-only until needed), and deferred token cache writes.
+// ABOUTME: token prefetch (KV-only until needed), deferred token cache writes, and logs free of credentials.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SpotifyAuth, createDefer } from '@listentomore/spotify';
 import { createMockKV, setupFetchMock } from '../utils/mocks';
@@ -49,6 +49,33 @@ describe('SpotifyAuth (Client Credentials)', () => {
     await auth.getAccessToken();
 
     expect(mockFetch).toHaveBeenCalledTimes(1); // second call served from KV cache
+  });
+});
+
+describe('SpotifyAuth logging', () => {
+  it('logs no part of the client ID or secret when it fetches a token', async () => {
+    setupFetchMock([
+      {
+        pattern: 'accounts.spotify.com/api/token',
+        response: { access_token: 'cc-token', expires_in: 3600 },
+      },
+    ]);
+    const levels = ['log', 'info', 'warn', 'error', 'debug'] as const;
+    const spies = levels.map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
+    try {
+      const clientId = 'SENTINELID0123456789';
+      const auth = new SpotifyAuth({ clientId, clientSecret: 'SENTINELSECRET' }, createMockKV());
+      await auth.getAccessToken();
+
+      const logged = spies.flatMap((spy) => spy.mock.calls.flat()).map(String);
+      expect(logged.length).toBeGreaterThan(0);
+      for (const text of logged) {
+        expect(text).not.toContain('SENTINEL');
+        expect(text).not.toContain(clientId.slice(0, 8));
+      }
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
   });
 });
 

@@ -3,7 +3,9 @@
 
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { PROMPT_FACTS, albumFacts, albumKey, albumRuns, artistFacts, buildWeekFacts, guardNote, guardSentence, weekFacts } from '../src';
+import {
+  PROMPT_FACTS, albumFacts, albumKey, albumRuns, artistFacts, buildWeekFacts, guardNote, guardSentence, releaseWeekFacts, weekFacts,
+} from '../src';
 import type { AlbumInfo, AlbumRun, ArtistWeek, Draft, Fact, FactKind, NoteSentence, Scrobble, WeekFacts } from '../src';
 import { artist, context, history, loadFixture, only, plays, ts } from './helpers';
 import type { Setup } from './helpers';
@@ -37,10 +39,12 @@ const S2: NoteSentence = { text: 'Boards of Canada took over Friday with 41 play
 const say = (text: string, ...facts: number[]): NoteSentence => ({ text, facts });
 
 /** `wf` with fact 1 replaced by `lead` and `names` added to the week's names. */
-function withLead(wf: WeekFacts, lead: Omit<Fact, 'id' | 'salience' | 'edges'>, names: string[] = []): WeekFacts {
+function withLead(
+  wf: WeekFacts, lead: Omit<Fact, 'id' | 'salience' | 'edges' | 'albums'> & Partial<Pick<Fact, 'albums'>>, names: string[] = [],
+): WeekFacts {
   return {
     ...wf,
-    facts: [{ ...lead, id: 1, salience: 100, edges: [] }, ...wf.facts.slice(1)],
+    facts: [{ albums: [], ...lead, id: 1, salience: 100, edges: [] }, ...wf.facts.slice(1)],
     names: [...wf.names, ...names],
   };
 }
@@ -185,6 +189,20 @@ const SYNTHETIC: Record<FactKind, () => Draft[]> = {
       prior: [weekWith(weekStart(1), 8, 24), weekWith(weekStart(2), 0, 20), weekWith(weekStart(3), 8, 12), weekWith(weekStart(4), 2, 18)],
     })), 'album_mode')];
   },
+  release_week: () => [
+    only(releaseWeekFacts(graded({
+      week: listen('Meltt', 'Eternal Embers', TEN, MON),
+      artists: [regular('Meltt', 10)],
+      albums: albums(['Meltt', 'Eternal Embers', TEN, 10]),
+      inputs: { releases: { [albumKey('Meltt', 'Eternal Embers')]: { title: 'Eternal Embers', artist: 'Meltt', date: '2026-11-02' } } },
+    })), 'release_week'),
+    only(releaseWeekFacts(graded({
+      week: listen('Meltt', 'Eternal Embers', TEN.slice(0, 8), WED),
+      artists: [regular('Meltt', 8)],
+      albums: albums(['Meltt', 'Eternal Embers', TEN, 8]),
+      inputs: { releases: { [albumKey('Meltt', 'Eternal Embers')]: { title: 'Eternal Embers', artist: 'Meltt', date: '2026-11-02' } } },
+    })), 'release_week'),
+  ],
   last_week_faded: () => {
     const before = Object.entries({ 'Boards of Canada': 40, Hammock: 30, Grouper: 20, Moby: 10, Low: 5 })
       .flatMap(([name, n], i) => plays(name, n, MON - 7 * 86400 + i * 7200));
@@ -250,8 +268,10 @@ describe('guardNote', () => {
   });
 
   it('rejects a name from the week that is not in the cited facts', () => {
-    const result = guardNote([S1, say('Wes Montgomery and Tracy Chapman both came back.', jazz)], may24);
+    // Cat Stevens is in the returns fact and not a top artist; Tracy Chapman, a top artist, counts as cited anywhere.
+    const result = guardNote([S1, say('Wes Montgomery and Cat Stevens both came back.', jazz)], may24);
     expect(result).toEqual({ ok: false, failures: [`s2:name:fact${returns}`] });
+    expect(guardNote([S1, say('Wes Montgomery and Tracy Chapman both came back.', jazz)], may24).ok).toBe(true);
     // A name in no fact at all is reported against the week.
     const wf = { ...may24, names: [...may24.names, 'Nobody Cited'] };
     expect(guardNote([S1, say('Nobody Cited came back too.', jazz)], wf).failures).toEqual(['s2:name:week']);
@@ -393,18 +413,37 @@ describe('guardNote', () => {
       .toEqual(['s2:banned:first-plays']);
   });
 
-  it('rejects one sentence, five sentences, a sentence citing nothing, and a first sentence that does not cite fact 1', () => {
+  it('accepts the plural first-plays phrases only for two or more first-under-this-name artists', () => {
+    expect(guardNote([S1, say('Slow Crush, NRTHRN and Spotlight Kid got their first plays under these names.', shoegaze)], may24))
+      .toEqual({ ok: true, failures: [] });
+    expect(guardNote([S1, say('Slow Crush, NRTHRN and Spotlight Kid got first plays under those names.', shoegaze)], may24))
+      .toEqual({ ok: true, failures: [] });
+    expect(guardNote([S1, say('Grant Green got his first plays under these names.', jazz)], may24).failures)
+      .toEqual(['s2:banned:first-plays']);
+  });
+
+  it('rejects one sentence, seven sentences and a sentence citing nothing', () => {
     expect(guardNote([S1], may24).failures).toEqual(['shape:count:1']);
-    expect(guardNote([S1, S2, S2, S2, S2], may24).failures).toEqual(['shape:count:5']);
+    expect(guardNote([S1, S2, S2, S2, S2, S2, S2], may24).failures).toEqual(['shape:count:7']);
     // Citing nothing, the sentence's names and numbers fail too.
     expect(guardNote([S1, { ...S2, facts: [] }], may24).failures).toContain('s2:shape:uncited');
-    expect(guardNote([S2, S1], may24).failures).toEqual(['s1:shape:lead']);
     expect(guardNote([S1, { ...S2, facts: [boc, 99] }], may24).failures).toEqual(['s2:shape:unknown-fact:99']);
     // May 31 has a fact 7, outside the prompt view: the model never saw it, so it cannot cite it.
     const hidden = PROMPT_FACTS + 1;
     expect(may31.facts.some((f) => f.id === hidden)).toBe(true);
     expect(guardNote([say('Death Cab for Cutie had 44 plays.', 1), say('Boards of Canada had 37 plays.', hidden)], may31).failures)
       .toContain(`s2:shape:unknown-fact:${hidden}`);
+  });
+
+  it('accepts fact 1 cited by any sentence, and fails a note where no sentence cites it', () => {
+    expect(guardNote([S2, S1], may24)).toEqual({ ok: true, failures: [] });
+    expect(guardNote([S2, say('Tracy Chapman came back too.', returns)], may24).failures).toEqual(['shape:lead']);
+  });
+
+  it('fails only the uncited sentence when one sentence cites nothing', () => {
+    const { failures } = guardNote([S1, { ...S2, facts: [] }], may24);
+    expect(failures).toContain('s2:shape:uncited');
+    expect(failures.every((code) => code.startsWith('s2:'))).toBe(true);
   });
 
   it('rejects an entry that packs in more than one sentence', () => {
@@ -480,7 +519,7 @@ describe('guardNote', () => {
       .toEqual({ ok: true, failures: [] });
     expect(guardNote([S1, say('Day came back too.', jazz)], may24).failures).toEqual(['s2:name:week']);
     // Names of two or more words are matched whatever the case, so a lower-cased name outside the cited facts fails.
-    expect(guardNote([S1, say('Wes Montgomery and tracy chapman both came back.', jazz)], may24).failures)
+    expect(guardNote([S1, say('Wes Montgomery and cat stevens both came back.', jazz)], may24).failures)
       .toEqual([`s2:name:fact${returns}`]);
     // A name spelt in lower case is matched whatever the case.
     const wf = { ...may24, names: [...may24.names, 'hubris.'] };
@@ -543,6 +582,79 @@ describe('guardNote', () => {
       .toEqual(['s2:quantity-entity:3:months']);
   });
 
+  it('reads "a <unit> of" as a figure of speech, not 1 of that unit', () => {
+    // The returns fact carries no 1, so a counted "a week" or "a day" would fail.
+    expect(guardNote([S1, say('It was a week of returns, with Tracy Chapman back on 13 plays.', returns)], may24))
+      .toEqual({ ok: true, failures: [] });
+    expect(guardNote([S1, say('Tracy Chapman and Cat Stevens made it a day of returns.', returns)], may24))
+      .toEqual({ ok: true, failures: [] });
+    // Without "of", "a week" is still 1 week.
+    expect(guardNote([S1, say('Tracy Chapman came back after a week away.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:weeks']);
+  });
+
+  it('reads "a week already full of" and "a day full of" as figures of speech', () => {
+    expect(guardNote([S1, say('It was a week already full of returns, with Tracy Chapman back on 13 plays.', returns)], may24))
+      .toEqual({ ok: true, failures: [] });
+    expect(guardNote([S1, say('Tracy Chapman made it a day full of returns.', returns)], may24))
+      .toEqual({ ok: true, failures: [] });
+    expect(guardNote([S1, say('Tracy Chapman came back after a week out of rotation.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:weeks']);
+  });
+
+  it('reads "a <unit> full of" or "a <unit> of" after "after", "for", "in" or "within" as a duration of 1', () => {
+    expect(guardNote([S1, say('Tracy Chapman came back after a week full of silence.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:weeks']);
+    expect(guardNote([S1, say('Tracy Chapman came back after a week of silence.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:weeks']);
+    expect(guardNote([S1, say('Tracy Chapman was gone for a month full of other records.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:months']);
+    expect(guardNote([S1, say('Tracy Chapman came back within a day of Cat Stevens.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:days']);
+    expect(guardNote([S1, say('Tracy Chapman got 13 plays in a week full of returns.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:weeks']);
+  });
+
+  it('reads "at once" as no number, and "once" on its own as 1 time', () => {
+    expect(guardNote([S1, say('Tracy Chapman and Cat Stevens came back at once.', returns)], may24))
+      .toEqual({ ok: true, failures: [] });
+    expect(guardNote([S1, say('Tracy Chapman came back once.', returns)], may24).failures)
+      .toEqual(['s2:quantity:1:times']);
+  });
+
+  describe('"in one day", "in a single day", "in one sitting" and "in one go"', () => {
+    // Fact 1 as a Boards of Canada Friday that carries no 1, so a counted idiom fails.
+    const fridayDates = may24.facts.find((f) => f.id === boc)!.dates;
+    const friday = withLead(may24, {
+      kind: 'volume_vs_normal',
+      subject: 'Boards of Canada',
+      statement: 'Boards of Canada: 41 plays this week against an average of 6 per week over the previous 12 weeks; all of them on Fri May 29.',
+      entities: ['Boards of Canada'],
+      quantities: [
+        { value: 41, unit: 'plays', entity: 'Boards of Canada' },
+        { value: 6, unit: 'plays', entity: 'Boards of Canada' },
+        { value: 12, unit: 'weeks' },
+      ],
+      dates: fridayDates,
+    });
+    const tracy = say('Tracy Chapman came back too.', returns);
+    const lead = (text: string): string[] => guardNote([say(text, 1), tracy], friday).failures;
+
+    it.each([
+      ['in one day', '1:days'],
+      ['in a single day', '1:days'],
+      ['in one sitting', '1'],
+      ['in one go', '1'],
+    ])('reads "%s" as no number beside a cited weekday or date, and as 1 without one', (idiom, code) => {
+      expect(lead(`Friday belonged to Boards of Canada, all 41 plays ${idiom}.`)).toEqual([]);
+      expect(lead(`On Fri May 29 Boards of Canada got all 41 plays ${idiom}.`)).toEqual([]);
+      expect(lead(`Boards of Canada had 41 plays ${idiom}.`)).toEqual([`s1:quantity:${code}`]);
+      // A weekday the cited facts do not carry grounds nothing.
+      expect(lead(`Tuesday belonged to Boards of Canada, all 41 plays ${idiom}.`))
+        .toEqual(['s1:day:tue', `s1:quantity:${code}`]);
+    });
+  });
+
   it('rejects an em dash and a question mark in any sentence', () => {
     expect(guardNote([{ ...S1, text: S1.text.replace(': ', ' — ') }, S2], may24).failures)
       .toEqual(['s1:punctuation:em-dash']);
@@ -598,4 +710,187 @@ describe('guardSentence', () => {
       }
     },
   );
+});
+
+describe('owner rulings after the week-trivia eval', () => {
+  /** The release lookups the eval made, so the fact ids match the prompt view each run saw. */
+  const released = (artist: string, album: string, date: string) => ({ [albumKey(artist, album)]: { title: album, artist, date } });
+  const may31Released = buildWeekFacts({
+    ...loadFixture('bordesak-2026-05-31'),
+    releases: released('Death Cab for Cutie', 'I Built You A Tower', '2026-06-05'),
+  });
+  const sep20Released = buildWeekFacts({
+    ...loadFixture('bordesak-heldout-2026-09-20'),
+    releases: {
+      ...released('Linkin Park', 'Unshatter Film Soundtrack (Live in São Paulo)', '2026-09-25'),
+      ...released('Leon Bridges', 'Happiness Anytime', '2026-09-25'),
+      ...released('Hermanos Gutiérrez', 'Los Ojos Del Cóndor', '2026-09-25'),
+    },
+  });
+  const aug2 = buildWeekFacts({ ...loadFixture('bordesak-heldout-2026-08-02'), releases: {} });
+  const live = buildWeekFacts({ ...loadFixture('bordesak-live-2026-11-09'), releases: {} });
+
+  it('builds the weeks the eval runs saw', () => {
+    expect(sep20Released.facts.slice(2, 5).map((f) => f.kind)).toEqual(['release_week', 'release_week', 'release_week']);
+    expect(may31Released.facts.slice(4, 6).map((f) => f.subject)).toEqual(['Seasurfer', 'Def Leppard']);
+  });
+
+  describe('the top-artists line counts as cited by every sentence', () => {
+    // The eval's extra weeks belong to other listeners and are not committed, so their top artists are spliced into
+    // May 24, whose cited facts carry none of these names or counts.
+    const spliced: WeekFacts = {
+      ...may24,
+      topArtists: [
+        { artist: 'Sisters of Mercy', plays: 17, tier: 'all_time_favourite', nameUncertain: false },
+        { artist: 'Motörhead', plays: 17, tier: 'all_time_favourite', nameUncertain: false },
+        { artist: 'Siouxsie and the Banshees', plays: 7, tier: 'all_time_favourite', nameUncertain: false },
+        { artist: 'Depeche Mode', plays: 6, tier: 'all_time_favourite', nameUncertain: false },
+      ],
+      names: [...may24.names, 'Sisters of Mercy', 'Motörhead', 'Siouxsie and the Banshees', 'Depeche Mode'],
+    };
+
+    it.each([
+      ['extra-1 r2, run 2', 'Sisters of Mercy and Motörhead still sat on top with 17 plays each, so the newcomers crowded in around your old anchors.', [1, 2, 3]],
+      ['extra-2 r1, run 1', 'Your old favourites kept their usual seats, Siouxsie and the Banshees with 7 and Depeche Mode with 6.', [2]],
+      ['extra-2 r2, run 1', 'Your favourites held their usual ground underneath, with Siouxsie and the Banshees on 7 and Depeche Mode on 6.', [2]],
+    ] as Array<[string, string, number[]]>)('passes the eval sentence from %s', (_label, text, facts) => {
+      expect(guardSentence({ text, facts }, spliced)).toEqual([]);
+    });
+
+    it('still fails a sentence that cites nothing, on its shape only', () => {
+      expect(guardSentence({ text: 'Above all that, Motörhead and Sisters of Mercy held the top spot together on 17 plays each.', facts: [] }, spliced))
+        .toEqual(['shape:uncited']);
+    });
+
+    it('ties a top artist\'s play count to that artist', () => {
+      // Gary Clark Jr. (6 plays, fact 4) is not a top artist; Meltt (38) is.
+      expect(live.topArtists.map((a) => a.artist)).not.toContain('Gary Clark Jr.');
+      expect(guardSentence({ text: 'Meltt had 38 plays.', facts: [4] }, live)).toEqual([]);
+      expect(guardSentence({ text: 'Meltt had 6 plays.', facts: [4] }, live)).toEqual(['quantity-entity:6:plays']);
+      // 15 is Seefeel's top-artist count, which only a sentence naming Seefeel before the 15 can use.
+      expect(guardSentence({ text: 'Meltt had 15 plays.', facts: [4] }, live)).toEqual(['quantity:15:plays']);
+      expect(guardSentence({ text: 'Meltt had 39 plays.', facts: [4] }, live)).toEqual(['quantity:39:plays']);
+    });
+
+    it('matches a top artist\'s plays only after that artist\'s name, with no other name in between', () => {
+      // May 24's shoegaze fact (3) carries no 6 and no 17, so only the top-artists line could supply them.
+      const say3 = (text: string): string[] => guardSentence({ text, facts: [3] }, spliced);
+      expect(say3('Sisters of Mercy had 17 plays and Depeche Mode had 6.')).toEqual([]);
+      expect(say3('Sisters of Mercy had 6 plays and Depeche Mode had 17 plays.'))
+        .toEqual(['quantity:6:plays', 'quantity:17:plays']);
+      expect(say3('Sisters of Mercy and Depeche Mode both had 17 plays.')).toEqual(['quantity:17:plays']);
+      expect(say3('17 plays went to Sisters of Mercy.')).toEqual(['quantity:17:plays']);
+      // Live: 38 is Meltt's; Gary Clark Jr. (fact 4) is not a top artist, and fact 4 carries no 38.
+      expect(guardSentence({ text: 'Gary Clark Jr. had 38 plays alongside Meltt.', facts: [4] }, live)).toEqual(['quantity:38:plays']);
+      expect(guardSentence({ text: 'You had 38 plays this week.', facts: [4] }, live)).toEqual(['quantity:38:plays']);
+    });
+
+    it('reads no quantity from a tier label', () => {
+      // Seefeel's tier is "barely known before this week"; the line gives no number but its 15 plays.
+      expect(guardSentence({ text: 'Seefeel had 3 plays.', facts: [6] }, live)).toEqual(['quantity:3:plays']);
+    });
+  });
+
+  describe('a count of the cited facts\' albums or artists', () => {
+    it.each([
+      ['Sep 20 r1 and r2, run 1', sep20Released, 'Friday was the story this week: three new albums landed on Sep 25 and you went straight through all of them that day.', [3, 4, 5]],
+      ['Sep 20 r2, run 2', sep20Released, 'Friday was the story this week: three new albums landed on Sep 25 and you went straight through them that day.', [3, 4, 5]],
+      ['May 31 r2, run 1', may31Released, 'Then you took two detours, Dive In by Seasurfer on Thursday and Hysteria by Def Leppard on Saturday, both straight through.', [5, 6]],
+      ['May 31 r2, run 2', may31Released, 'Late in the week you also took two full detours, Dive In by Seasurfer on Thursday and Hysteria by Def Leppard on Saturday.', [5, 6]],
+    ] as Array<[string, WeekFacts, string, number[]]>)('passes the eval sentence from %s', (_label, wf, text, facts) => {
+      expect(guardSentence({ text, facts }, wf)).toEqual([]);
+    });
+
+    it('fails a count of albums the cited facts do not name', () => {
+      expect(guardSentence({ text: 'Friday was the story this week: four new albums landed on Sep 25.', facts: [3, 4, 5] }, sep20Released))
+        .toEqual(['quantity:4:albums']);
+      expect(guardSentence({ text: 'Friday was the story this week: two new albums landed on Sep 25.', facts: [3, 4, 5] }, sep20Released))
+        .toEqual(['quantity:2:albums']);
+      // Three albums and three artists, but no four of either.
+      expect(guardSentence({ text: 'Friday was the story this week: four new records landed on Sep 25.', facts: [3, 4, 5] }, sep20Released))
+        .toEqual(['quantity:4']);
+    });
+
+    it('counts two artists\' albums of the same title as two albums', () => {
+      const hits = (id: number, artist: string): Fact => ({
+        id, kind: 'repeat_album', salience: 100 - id, subject: artist,
+        statement: `You played Greatest Hits by ${artist} start to finish.`,
+        entities: [artist, 'Greatest Hits'], albums: [{ artist, album: 'Greatest Hits' }],
+        quantities: [], dates: [], edges: [],
+      });
+      const wf: WeekFacts = {
+        ...may24, timezone: null, topArtists: [], facts: [hits(1, 'Queen'), hits(2, 'ABBA')], names: ['Queen', 'ABBA', 'Greatest Hits'],
+      };
+      expect(guardSentence({ text: 'You played two albums start to finish.', facts: [1, 2] }, wf)).toEqual([]);
+      // The title alone is still one of the names that make up the count, so it cannot carry the count by itself.
+      expect(guardSentence({ text: 'Greatest Hits was one of two albums you played start to finish.', facts: [1, 2] }, wf))
+        .toEqual(['quantity:2:albums']);
+    });
+
+    it('counts only up to 6', () => {
+      // Aug 2's fact 6 names nine artists; its only 9s are tracks.
+      expect(guardSentence({ text: 'Nine artists came back after months away.', facts: [6] }, aug2)).toEqual(['quantity-unit:9:artists']);
+    });
+
+    it('does not let a bare number beside one named artist stand for a count', () => {
+      // Two albums across facts 5 and 6, but "Seasurfer on 2" claims something about Seasurfer.
+      expect(guardSentence({ text: 'Seasurfer was on 2 by Thursday.', facts: [5, 6] }, may31Released)).toEqual(['quantity:2']);
+      expect(guardSentence({ text: 'Seasurfer was one of two detours.', facts: [5, 6] }, may31Released)).toEqual(['quantity:2']);
+    });
+
+    it('never attributes a count to just one of the albums or artists that make it up', () => {
+      // Facts 5 and 6 are Dive In by Seasurfer and Hysteria by Def Leppard: two albums between two artists, so the
+      // count may stand beside none of those names or two or more of them, never one.
+      expect(guardSentence({ text: 'Seasurfer got two albums played start to finish.', facts: [5, 6] }, may31Released))
+        .toEqual(['quantity:2:albums']);
+      expect(guardSentence({ text: 'Hysteria was one of two albums played start to finish.', facts: [5, 6] }, may31Released))
+        .toEqual(['quantity:2:albums']);
+      expect(guardSentence({ text: 'You played two albums start to finish: Dive In and Hysteria.', facts: [5, 6] }, may31Released))
+        .toEqual([]);
+      expect(guardSentence({ text: 'Two albums got start-to-finish plays this week.', facts: [5, 6] }, may31Released))
+        .toEqual([]);
+    });
+
+    it('never attributes a count to a top artist named alone', () => {
+      // Depeche Mode is on the top-artists line only, so it is not one of the names that make up the count, but the
+      // sentence still names exactly one entity and claims the count for it.
+      const withDepecheMode: WeekFacts = {
+        ...may31Released,
+        topArtists: [...may31Released.topArtists, { artist: 'Depeche Mode', plays: 6, tier: 'all_time_favourite', nameUncertain: false }],
+        names: [...may31Released.names, 'Depeche Mode'],
+      };
+      expect(may31Released.names).not.toContain('Depeche Mode');
+      expect(guardSentence({ text: 'Depeche Mode got two albums.', facts: [5, 6] }, withDepecheMode))
+        .toEqual(['quantity:2:albums']);
+      expect(guardSentence({ text: 'You played two albums start to finish: Dive In and Hysteria.', facts: [5, 6] }, withDepecheMode))
+        .toEqual([]);
+      expect(guardSentence({ text: 'Two albums got start-to-finish plays this week.', facts: [5, 6] }, withDepecheMode))
+        .toEqual([]);
+    });
+  });
+
+  describe('"those two", "these two", "both", "one of", "the two of them" and "either of" are not quantities', () => {
+    it.each([
+      ['Aug 2 r1, run 1', aug2, 'Around those two, the week spread out wide, with 22 artists reaching 10 or more plays where 14 is usual.', [5]],
+      ['live r1, run 1', live, 'All told, 15 artists reached ten plays, which made this one of your widest weeks.', [3]],
+    ] as Array<[string, WeekFacts, string, number[]]>)('passes the eval sentence from %s', (_label, wf, text, facts) => {
+      expect(guardSentence({ text, facts }, wf)).toEqual([]);
+    });
+
+    it.each([
+      'Around these two, the week spread out wide.',
+      'The two of them set the week going.',
+      'Either of them could have led the week.',
+      'Both set the week going.',
+    ])('reads "%s" as no number', (text) => {
+      expect(guardSentence({ text, facts: [5] }, aug2)).toEqual([]);
+    });
+
+    it('still reads a number after the idiom, and "those two" before a unit', () => {
+      expect(guardSentence({ text: 'Seasurfer and Def Leppard both got 9 plays.', facts: [5, 6] }, may31Released))
+        .toEqual(['quantity:9:plays']);
+      expect(guardSentence({ text: 'Around those two days, the week spread out wide.', facts: [5] }, aug2)).toEqual(['quantity:2:days']);
+      expect(guardSentence({ text: 'One of them had 9 plays.', facts: [5] }, aug2)).toEqual(['quantity:9:plays']);
+    });
+  });
 });

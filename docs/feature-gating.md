@@ -85,6 +85,7 @@ Generation stays behind sign-in. With `PUBLIC_CACHED_SUMMARIES` on, album, artis
 - `/api/internal/genre-summary`
 - `/api/internal/user-insights-summary`
 - `/api/internal/user-insights-recommendations`
+- `/api/internal/user-insights-trivia` (only the profile owner's view generates a card; visitors read the cached one)
 
 ### Public (cheap)
 - `/api/internal/streaming-links`

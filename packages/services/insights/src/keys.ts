@@ -1,6 +1,7 @@
 // ABOUTME: KV keys for the insights pipeline: per-user history partitions and lookups, global tracklists and
-// ABOUTME: tags, and the per-user facts, question, marker and last-note keys, plus the lists a user delete needs.
+// ABOUTME: tags and making-of facts, the per-user facts, question, marker, last-note and card keys, and delete lists.
 
+import { stripEdition } from './match';
 import { norm } from './text';
 
 /** Last.fm usernames are case-insensitive, so every per-user key uses the lower-cased name. */
@@ -35,6 +36,13 @@ export const keys = {
   generating: (user: string): string => `insights:generating:${u(user)}`,
   /** `{ signature }` of the note last served to the owner. */
   last: (user: string): string => `insights:last:${u(user)}`,
+  /** The profile's card result for its facts signature: the card, or null when the week has none. */
+  card: (user: string): string => `insights:card:${u(user)}`,
+  /**
+   * An album's making-of fact, or `{ none: true }`; global, with no user data. Artist and album are encoded segments,
+   * the album without an edition suffix, so every edition of a record reads, writes and deletes one entry.
+   */
+  trivia: (artist: string, album: string): string => `insights:trivia:${segment(artist)}:${segment(stripEdition(album))}`,
 };
 
 /**
@@ -57,5 +65,5 @@ export function userKeyPrefixes(user: string): string[] {
  * 'insights:facts:alice' is a prefix of 'insights:facts:alice2'.
  */
 export function userExactKeys(user: string): string[] {
-  return [keys.facts(user), keys.question(user), keys.generating(user), keys.last(user)];
+  return [keys.facts(user), keys.question(user), keys.generating(user), keys.last(user), keys.card(user)];
 }

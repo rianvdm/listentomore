@@ -1,20 +1,21 @@
 // ABOUTME: Builds a fact's statement together with the names, numbers and days it states.
 // ABOUTME: Every value enters the sentence through the builder, so entities, quantities and dates match the text.
 
-import type { Fact, Quantity, Unit } from './types';
+import type { AlbumRef, Fact, Quantity, Unit } from './types';
 import { dayLabel } from './window';
 
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 
-export type Grounded = Pick<Fact, 'statement' | 'entities' | 'quantities' | 'dates'>;
+export type Grounded = Pick<Fact, 'statement' | 'entities' | 'albums' | 'quantities' | 'dates'>;
 
 /**
- * Appends text piece by piece. `name`, `number`, `word` and `day` both write their value and record it,
+ * Appends text piece by piece. `name`, `album`, `number`, `word` and `day` both write their value and record it,
  * which is what the guard (spec section 3) relies on: nothing in a statement is untyped.
  */
 export class StatementBuilder {
   private text = '';
   private readonly entities: string[] = [];
+  private readonly albums: AlbumRef[] = [];
   private readonly quantities: Quantity[] = [];
   private readonly dates: number[] = [];
 
@@ -26,10 +27,17 @@ export class StatementBuilder {
     return this;
   }
 
-  /** An artist or album name. */
+  /** An artist name. Album names go through `album`, so every album is recorded with its artist. */
   name(name: string): this {
     this.text += name;
     if (!this.entities.includes(name)) this.entities.push(name);
+    return this;
+  }
+
+  /** An album's name, written and recorded like `name`, and recorded once more as an album of `artist`. */
+  album(artist: string, album: string): this {
+    this.name(album);
+    if (!this.albums.some((a) => a.artist === artist && a.album === album)) this.albums.push({ artist, album });
     return this;
   }
 
@@ -63,7 +71,13 @@ export class StatementBuilder {
   }
 
   build(): Grounded {
-    return { statement: this.text, entities: [...this.entities], quantities: [...this.quantities], dates: [...this.dates] };
+    return {
+      statement: this.text,
+      entities: [...this.entities],
+      albums: this.albums.map((a) => ({ ...a })),
+      quantities: [...this.quantities],
+      dates: [...this.dates],
+    };
   }
 
   private quantity(value: number, unit: Unit, entity?: string): this {

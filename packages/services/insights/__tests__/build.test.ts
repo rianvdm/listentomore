@@ -14,7 +14,8 @@ const SHARE_KINDS: FactKind[] = ['album_mode', 'themed_block'];
 const kinds = (facts: Fact[]): FactKind[] => facts.map((f) => f.kind);
 
 const draft = (over: Partial<Draft>): Draft => ({
-  kind: 'discovery', salience: 50, subject: null, statement: 'A fact.', entities: [], quantities: [], dates: [], edges: [], ...over,
+  kind: 'discovery', salience: 50, subject: null, statement: 'A fact.', entities: [], albums: [], quantities: [], dates: [], edges: [],
+  ...over,
 });
 
 const fact = (over: Partial<Fact>): Fact => ({ id: 1, ...draft(over), ...over });
@@ -100,6 +101,19 @@ describe('buildWeekFacts', () => {
       { artist: 'A', plays: 5, tier: 'unknown', nameUncertain: false },
     ]);
     expect(wf.names).toEqual(['A', 'Alpha', 'B', 'Beta']);
+  });
+
+  it('releasesChecked is false without releases and true with them', () => {
+    const scrobbles = Array.from({ length: 10 }, (_, i) => ({ artist: 'Meltt', album: 'Eternal Embers', track: `t${i + 1}`, ts: MON + i * 240 }));
+    const albums = { [albumKey('Meltt', 'Eternal Embers')]: { tracklist: scrobbles.map((s) => s.track), userPlaycount: 10, fetchedAt: NOW } };
+    const without = buildWeekFacts(makeInputs({ scrobbles, albums }));
+    expect(without.releasesChecked).toBe(false);
+    expect(without.facts.filter((f) => f.kind === 'release_week')).toEqual([]);
+    const releases = { [albumKey('Meltt', 'Eternal Embers')]: { title: 'Eternal Embers', artist: 'Meltt', date: '2026-11-02' } };
+    const checked = buildWeekFacts(makeInputs({ scrobbles, albums, releases }));
+    expect(checked.releasesChecked).toBe(true);
+    expect(checked.facts.find((f) => f.kind === 'release_week')).toMatchObject({ salience: 80, subject: 'Meltt' });
+    expect(buildWeekFacts(makeInputs({ scrobbles, albums, releases: {} })).releasesChecked).toBe(true);
   });
 
   it('a new account with one prior week has no baseline facts', () => {
@@ -242,6 +256,7 @@ describe('rankFacts', () => {
     kind: 'single_listen', salience: 70, subject: BOC,
     statement: 'Boards of Canada on Fri May 29: Inferno start to finish in one run; the album had 0 track plays before this week.',
     entities: [BOC, 'Inferno'],
+    albums: [{ artist: BOC, album: 'Inferno' }],
     quantities: [{ value: 1, unit: 'times', entity: 'Inferno' }, { value: 0, unit: 'plays', entity: 'Inferno' }],
     dates: [ts('2026-05-29T20:00:00')],
     ...over,
@@ -262,6 +277,15 @@ describe('rankFacts', () => {
     expect(facts[0].quantities).toContainEqual({ value: 0, unit: 'plays', entity: 'Inferno' });
     expect(facts[0].quantities).toContainEqual({ value: 1, unit: 'times', entity: 'Inferno' }); // "in one run" stays grounded
     expectGrounded(facts[0]);
+  });
+
+  it('a folded single listen carries its album into the host', () => {
+    const facts = rankFacts([volumeOf(), inferno()]);
+    expect(facts).toHaveLength(1);
+    expect(facts[0].albums).toEqual([{ artist: BOC, album: 'Inferno' }]);
+    // An album the host already records is not recorded twice.
+    const twice = rankFacts([volumeOf({ albums: [{ artist: BOC, album: 'Inferno' }] }), inferno()]);
+    expect(twice[0].albums).toEqual([{ artist: BOC, album: 'Inferno' }]);
   });
 
   it('a volume fact that does not name the listen\'s day has the day written in', () => {
@@ -309,6 +333,21 @@ describe('rankFacts', () => {
     expect(boc?.dates.map((d) => dayLabel(d, wf.timezone))).toContain('Fri May 29');
     expect(wf.facts.filter((f) => f.kind === 'single_listen' && f.subject === BOC)).toEqual([]);
     if (boc) expectGrounded(boc, wf.timezone);
+  });
+});
+
+describe('card albums', () => {
+  it('May 24 card albums include Inferno by Boards of Canada', () => {
+    const wf = buildWeekFacts(loadFixture('bordesak-2026-05-24'));
+    expect(wf.cardAlbums).toContainEqual(expect.objectContaining({ artist: 'Boards of Canada', album: 'Inferno' }));
+    expect(wf.cardAlbums.length).toBeGreaterThan(0);
+    expect(wf.cardAlbums.length).toBeLessThanOrEqual(6);
+    const plays = wf.cardAlbums.map((a) => a.plays);
+    expect(plays).toEqual([...plays].sort((a, b) => b - a));
+  });
+
+  it('an empty week has no card albums', () => {
+    expect(buildWeekFacts(makeInputs()).cardAlbums).toEqual([]);
   });
 });
 

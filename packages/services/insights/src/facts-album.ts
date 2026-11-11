@@ -75,7 +75,7 @@ function repeatAlbum(ctx: FactContext, listens: AlbumRun[]): Draft {
   const familiarity = before !== null && tracklistLength ? { before, times: before / tracklistLength } : null;
   const novelty = familiarity === null ? 0.1 : familiarity.times < 1 ? 1 : familiarity.times < 3 ? 0.5 : 0.1;
 
-  const b = new StatementBuilder(tz).name(album).add(' by ').name(artist).add(' played start to finish ')
+  const b = new StatementBuilder(tz).album(artist, album).add(' by ').name(artist).add(' played start to finish ')
     .number(listens.length, 'times', album).add(' times (')
     .each(listenDays(listens, tz), ', ', (w, d) => {
       if (d.listens > 1) w.number(d.listens, 'times', album).add(' times on ');
@@ -178,7 +178,7 @@ function singleListens(ctx: FactContext, repeated: Set<string>): Draft[] {
 function chainFact(ctx: FactContext, chain: AlbumRun[]): Draft {
   const b = new StatementBuilder(ctx.inputs.timezone).day(chain[0].from).add(': ')
     .number(chain.length, 'albums').add(' albums back to back, start to finish: ')
-    .each(chain, ', ', (w, r) => w.name(r.album).add(' (').name(r.artist).add(')'))
+    .each(chain, ', ', (w, r) => w.album(r.artist, r.album).add(' (').name(r.artist).add(')'))
     .add('.');
   return { kind: 'album_chain', salience: 60, subject: null, ...b.build(), edges: [] };
 }
