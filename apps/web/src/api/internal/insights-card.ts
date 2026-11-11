@@ -6,8 +6,12 @@ import type { CardAlbum, CreditedPerson, Library, TieBack, Viewer, WeekFacts } f
 import type { ArtistBands, CreditsClient, ReleaseCredits } from '@listentomore/musicbrainz';
 import type { MakingOfResult } from './insights-making-of';
 
-/** MusicBrainz network calls one card request may make (spec section 1, "Cap"). */
-export const CARD_MB_CALLS = 10;
+/**
+ * MusicBrainz network calls one card request may make (spec section 1, "Cap"). The card loads on its own after the
+ * note, so a long lookup only delays the card. 30 calls (about a minute) usually finish a week's uncached albums in
+ * one load; 10 left weeks with fresh albums needing several reloads (raised 2026-11-11).
+ */
+export const CARD_MB_CALLS = 30;
 
 /** The card as cached: album and artist in Last.fm spelling, the cover if found, and a tie-back or a making-of fact. */
 export type StoredCard = { album: string; artist: string; imageUrl: string | null }

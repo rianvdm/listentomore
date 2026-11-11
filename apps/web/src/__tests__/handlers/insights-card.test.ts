@@ -9,7 +9,7 @@ import * as insights from '@listentomore/insights';
 import type { CardAlbum, Fact, WeekFacts, WeekInputs } from '@listentomore/insights';
 import may24Json from '../../../../../packages/services/insights/__fixtures__/bordesak-2026-05-24.json';
 import { insightsInternalRoutes } from '../../api/internal/insights';
-import { renderCard } from '../../api/internal/insights-card';
+import { CARD_MB_CALLS, renderCard } from '../../api/internal/insights-card';
 import type { InternalAppContext } from '../../types';
 import { createMockKV } from '../utils/mocks';
 
@@ -379,9 +379,11 @@ describe('/user-insights-trivia', () => {
     });
 
     it('a cap hit mid-album returns null, caches no card and keeps the fetched credits', async () => {
-      // 2 calls find the release, 1 reads its credits, 1 reads Bowie, then 12 guests: 16 calls; only the 12th is in RHCP
+      // 2 calls find the release, 1 reads its credits, 1 reads Bowie, then CARD_MB_CALLS + 2 guests, only the last in
+      // RHCP: the album needs CARD_MB_CALLS + 6 calls, so the cap cuts it 6 calls short.
+      const guests = CARD_MB_CALLS + 2;
       mb.album('David Bowie', 'Earthling', {
-        guests: [...Array.from({ length: 11 }, (_, i) => mbGuest(`g${i}`, [])), mbGuest('chad', ['Red Hot Chili Peppers'])],
+        guests: [...Array.from({ length: guests - 1 }, (_, i) => mbGuest(`g${i}`, [])), mbGuest('chad', ['Red Hot Chili Peppers'])],
       });
       const services = createServices(OWNER, OWNER);
       await seedFacts(services.kv, await wfWith([EARTHLING]));
@@ -389,14 +391,15 @@ describe('/user-insights-trivia', () => {
       const app = buildApp(services);
 
       expect(await (await app(URL_TRIVIA)).json()).toEqual({ data: null });
-      expect(mb.calls()).toBe(10);
+      expect(mb.calls()).toBe(CARD_MB_CALLS);
       const written = writtenKeys(services.kv);
-      expect(written.filter((k) => k.startsWith('musicbrainz:credits:'))).toHaveLength(9); // rg, release, Bowie, 6 guests
+      // rg, release, Bowie and CARD_MB_CALLS - 4 guests (the search itself caches under the rg key)
+      expect(written.filter((k) => k.startsWith('musicbrainz:credits:'))).toHaveLength(CARD_MB_CALLS - 1);
       expect(written.some((k) => k.startsWith('insights:card:') || k.startsWith('insights:trivia:'))).toBe(false);
       expect(services.ai.getAlbumTrivia).not.toHaveBeenCalled();
 
       const second = (await (await app(URL_TRIVIA)).json()) as { data: Record<string, string> };
-      expect(mb.calls()).toBe(16);
+      expect(mb.calls()).toBe(CARD_MB_CALLS + 6);
       expect(collectWeekInputs).not.toHaveBeenCalled();
       expect(second.data).toMatchObject({ kind: 'tieback', album: 'Earthling' });
       expect(second.data.text).toContain("a band you've played 19 times.");

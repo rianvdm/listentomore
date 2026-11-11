@@ -69,6 +69,7 @@ What would make him wince is obvious AI slop. Every sentence a user sees must pa
 - All MusicBrainz calls go through the existing `MUSICBRAINZ_RATE_LIMITER` Durable Object.
 - Per-album and per-artist results are cached globally, not per user. A missing result is cached too, with a shorter life, so the app doesn't re-ask.
 - Cap: 10 MusicBrainz calls per card request. The limiter spaces calls about 1.1 s apart and gives up on waits over 5 s, so 10 calls is roughly the most a page should wait.
+  - Amended 2026-11-11 (owner): raised to 30. In production, 10 calls took about 25 s and left a week of fresh albums needing several reloads. The card loads on its own after the note, so a longer lookup only delays the card.
 - What is fetched is cached, so later loads continue where the cap stopped.
 - If the cap is reached before every candidate has been checked and no tie-back has turned up, the request returns no card and caches no card result. It does not fall back to the making-of fact. The next load continues.
 - The making-of fallback runs only once every candidate has been checked.
