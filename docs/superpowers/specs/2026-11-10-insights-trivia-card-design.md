@@ -165,7 +165,7 @@ The prompt version becomes `v7`. The live eval must pass before merge, with no f
 - The making-of fact needs a web-search citation and shows a source link.
 - Release dates come from Spotify, not MusicBrainz, and reissues are skipped.
 - Candidate albums: up to 6, from the top facts plus runs of 6+ tracks, ordered by plays.
-- MusicBrainz is capped at 10 calls per card request. A cut-off request shows no card and caches no card result.
+- MusicBrainz is capped at 10 calls per card request (raised to 30 on 2026-11-11, see §1). A cut-off request shows no card and caches no card result.
 - The album artist and its own other bands never count as tie-backs. Guests rank before band members.
 - Only the owner's view generates a card; visitors read the cached one.
 - `release_week` starts at salience 70 (+10 on release day), pending the eval.
