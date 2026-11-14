@@ -811,6 +811,17 @@ async function scheduled(
     }
   }
 
+  // Delete expired sign-in sessions once an hour. They hold the IP address and user agent of the
+  // sign-in, and validateSession only removes one when its owner comes back with the old cookie.
+  if (minute < 5) {
+    try {
+      const deleted = await new Database(env.DB).deleteExpiredSessions();
+      console.log(`[CRON] Deleted ${deleted} expired sessions`);
+    } catch (error) {
+      console.error('[CRON] Failed to delete expired sessions:', error);
+    }
+  }
+
   // Pre-warm user listens cache (runs every 5 minutes)
   try {
     const db = new Database(env.DB);
