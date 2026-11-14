@@ -236,10 +236,18 @@ export class Database {
       .run();
   }
 
-  async deleteExpiredSessions(): Promise<void> {
-    await this.db
-      .prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
+  /**
+   * Delete every session whose expiry has passed and return how many went.
+   * expires_at holds an ISO 8601 string (see createSession), so it's compared with one:
+   * SQLite's datetime('now') uses a space instead of 'T', and as text that kept
+   * sessions expiring today from counting as expired until the next day.
+   */
+  async deleteExpiredSessions(now: Date = new Date()): Promise<number> {
+    const result = await this.db
+      .prepare('DELETE FROM sessions WHERE expires_at < ?')
+      .bind(now.toISOString())
       .run();
+    return result.meta.changes ?? 0;
   }
 
   async deleteUserSessions(userId: string): Promise<void> {
