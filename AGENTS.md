@@ -201,7 +201,9 @@ Mount in the directory's `index.ts` via `app.route('/path', myRoutes)`.
 
 ## Releases
 
-GitHub releases follow Rian's side-project release notes contract: `~/git/product-ai/05-personal/side-projects/release-notes-contract.md`. Read it before drafting. Publishing a release cross-posts it to elezea.com (`.github/workflows/elezea-release-post.yml`), and the endpoint rejects anything off-contract.
+GitHub releases follow Rian's side-project release notes contract: `~/git/product-ai/05-personal/side-projects/release-notes-contract.md`. Read it before drafting.
+
+A release stays on GitHub unless Rian explicitly asks for an elezea.com cross-post. Only then, put `<!-- post-to-elezea -->` on its own line at the end of the body: `.github/workflows/elezea-release-post.yml` posts a release that carries the marker to elezea.com, and the endpoint rejects anything off-contract. Adding the marker after publishing does nothing, because the workflow runs only when a release is published. A release runs the workflow from its tagged commit, so tag a commit that includes this version of the workflow.
 
 - Name: `listentomore vX.Y.Z — <tagline>` (em dash).
 - Body: a 1-3 sentence opening paragraph, then only `## What's new`, `## Fixes`, `## Under the hood` (optional `## Breaking changes` first). No H3s, no issue numbers, written from the user's side.
