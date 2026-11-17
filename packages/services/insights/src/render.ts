@@ -5,8 +5,8 @@ import { FIRST_UNDER_THIS_NAME, plural } from './facts-shared';
 import type { Fact, Quantity, Tier, Unit, WeekFacts } from './types';
 import { dayLabel } from './window';
 
-/** How many ranked facts the model sees (spec section 2, "Fact kinds and salience"). */
-export const PROMPT_FACTS = 6;
+/** How many ranked facts the model sees. */
+export const PROMPT_FACTS = 10;
 /** Under this share of the 4-week average, a quiet week is called quiet rather than "nothing stood out". */
 const QUIET_SHARE = 0.8;
 const SIGNATURE_HEX = 16;
@@ -29,9 +29,18 @@ function topArtistsLine(wf: WeekFacts): string {
     .join(', ')}.`;
 }
 
+/** The top-albums line of the prompt view; also part of the note signature. */
+function topAlbumsLine(wf: WeekFacts): string {
+  if (wf.topAlbums.length === 0) return 'Top albums this week: none.';
+  return `Top albums this week: ${wf.topAlbums
+    .map((a) => `${a.album} by ${a.artist} ${a.plays} ${plural(a.plays, 'play', 'plays')}`)
+    .join(', ')}.`;
+}
+
 /**
- * The model's input: fact 0 (the window line), the top six facts numbered by id, the top artists with tier labels,
- * and the caveats. Never the question: the model does not see or write it (spec section 2, "Question").
+ * The model's input: fact 0 (the window line), the first PROMPT_FACTS facts numbered by id, the top artists with tier
+ * labels, the top albums and the caveats. Never the question: the model does not see or write it (spec section 2,
+ * "Question").
  */
 export function renderPromptView(wf: WeekFacts): string {
   const top = wf.facts.slice(0, PROMPT_FACTS);
@@ -42,15 +51,18 @@ export function renderPromptView(wf: WeekFacts): string {
     '',
     topArtistsLine(wf),
     '',
+    topAlbumsLine(wf),
+    '',
     `Caveats: ${wf.caveats.join('; ')}.`,
   ].join('\n');
 }
 
 /**
  * The note's cache signature (spec section 5, "One reuse rule"): the first 16 hex characters of SHA-256 over the
- * rule version, the prompt version, fact 0's quantities, the top six facts' ids and statements, the top-artists line
- * and the caveats. A note may cite fact 0 for the week's plays and the usual week, so those values are hashed; its
- * day labels, the window timestamps and pulledAt are left out, so a moving window with the same facts reuses the note.
+ * rule version, the prompt version, fact 0's quantities, the first PROMPT_FACTS facts' ids and statements, the
+ * top-artists and top-albums lines and the caveats. A note may cite fact 0 for the week's plays and the usual week,
+ * so those values are hashed; its day labels, the window timestamps and pulledAt are left out, so a moving window
+ * with the same facts reuses the note.
  */
 export async function noteSignature(wf: WeekFacts, promptVersion: string): Promise<string> {
   return hashSignature([
@@ -60,6 +72,7 @@ export async function noteSignature(wf: WeekFacts, promptVersion: string): Promi
     wf.windowFact.quantities.map((q) => [q.value, q.unit]),
     wf.facts.slice(0, PROMPT_FACTS).map((f) => [f.id, f.statement]),
     topArtistsLine(wf),
+    topAlbumsLine(wf),
     wf.caveats,
   ]);
 }

@@ -428,11 +428,6 @@ describe('guardNote', () => {
     // Citing nothing, the sentence's names and numbers fail too.
     expect(guardNote([S1, { ...S2, facts: [] }], may24).failures).toContain('s2:shape:uncited');
     expect(guardNote([S1, { ...S2, facts: [boc, 99] }], may24).failures).toEqual(['s2:shape:unknown-fact:99']);
-    // May 31 has a fact 7, outside the prompt view: the model never saw it, so it cannot cite it.
-    const hidden = PROMPT_FACTS + 1;
-    expect(may31.facts.some((f) => f.id === hidden)).toBe(true);
-    expect(guardNote([say('Death Cab for Cutie had 44 plays.', 1), say('Boards of Canada had 37 plays.', hidden)], may31).failures)
-      .toContain(`s2:shape:unknown-fact:${hidden}`);
   });
 
   it('accepts fact 1 cited by any sentence, and fails a note where no sentence cites it', () => {

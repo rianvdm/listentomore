@@ -1,5 +1,5 @@
 // ABOUTME: buildWeekFacts - turns one WeekInputs into the ranked WeekFacts object: weeks, dedupe, baseline,
-// ABOUTME: the fact rules, ranking, the question, the window line, top artists, caveats and names.
+// ABOUTME: the fact rules, ranking, the question, the window line, top artists and albums, caveats and names.
 
 import { dedupe } from './dedupe';
 import { albumFacts } from './facts-album';
@@ -22,6 +22,7 @@ const WEEKS = 5;
 /** Prior weeks with plays, and usable baseline weeks, an account needs for a baseline (spec section 1, "Provenance"). */
 const MIN_BASELINE_WEEKS = 4;
 const TOP_ARTISTS = 8;
+const TOP_ALBUMS = 5;
 const WINDOW_DAYS = 7;
 /** Facts that state a share of the week, which a truncated week cannot support (spec section 1, caps). */
 const SHARE_KINDS: ReadonlySet<FactKind> = new Set<FactKind>(['album_mode', 'themed_block']);
@@ -60,6 +61,24 @@ function windowFact(inputs: WeekInputs, plays: number, priorAverage: number | nu
   if (priorAverage !== null) b.add('; the usual week is about ').number(priorAverage, 'plays');
   b.add('.');
   return { id: 0, kind: 'volume', salience: 0, subject: null, ...b.build(), edges: [] };
+}
+
+/**
+ * This week's albums by deduped plays, then album name, then artist name, capped at TOP_ALBUMS. Scrobbles with a
+ * blank album are skipped; each album appears once by albumKey, spelled as first seen. `week` is deduped, ascending.
+ */
+function topAlbumsOf(week: Scrobble[]): WeekFacts['topAlbums'] {
+  const byKey = new Map<string, WeekFacts['topAlbums'][number]>();
+  for (const { artist, album } of week) {
+    if (!album.trim()) continue;
+    const key = albumKey(artist, album);
+    const seen = byKey.get(key);
+    if (seen) seen.plays += 1;
+    else byKey.set(key, { artist, album, plays: 1 });
+  }
+  return [...byKey.values()]
+    .sort((a, b) => b.plays - a.plays || a.album.localeCompare(b.album) || a.artist.localeCompare(b.artist))
+    .slice(0, TOP_ALBUMS);
 }
 
 /** Mislabelled runs (one caveat per album, in run order), truncation, and the dedupe note. */
@@ -121,6 +140,7 @@ export function buildWeekFacts(
     facts,
     topArtists: [...artists.values()].sort(byPlaysThenName).slice(0, TOP_ARTISTS)
       .map(({ artist, plays, tier, nameUncertain }) => ({ artist, plays, tier, nameUncertain })),
+    topAlbums: topAlbumsOf(weeks[0]),
     caveats: caveatsOf(inputs, ctx.runs),
     quiet,
     // A quiet week gets the code sentence and no note, so nothing for a question to follow.

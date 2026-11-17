@@ -103,6 +103,44 @@ describe('buildWeekFacts', () => {
     expect(wf.names).toEqual(['A', 'Alpha', 'B', 'Beta']);
   });
 
+  it('is built under rule version r3', () => {
+    expect(buildWeekFacts(makeInputs({})).ruleVersion).toBe('r3');
+  });
+
+  it('topAlbums lists up to five albums by plays, then album, then artist, and skips blank albums', () => {
+    const at = (hours: number): number => MON + hours * 3600;
+    const wf = buildWeekFacts(makeInputs({
+      scrobbles: [
+        ...plays('A', 7, at(0), 'Alpha'), ...plays('B', 6, at(1), 'Beta'), ...plays('H', 4, at(2), 'Delta'),
+        ...plays('D', 4, at(3), 'Delta'), ...plays('E', 4, at(4), 'Epsilon'), ...plays('F', 3, at(5), 'Zeta'),
+        ...plays('G', 9, at(6), ''), ...plays('W', 8, at(7), '  '),
+      ],
+    }));
+    expect(wf.topAlbums).toEqual([
+      { artist: 'A', album: 'Alpha', plays: 7 },
+      { artist: 'B', album: 'Beta', plays: 6 },
+      { artist: 'D', album: 'Delta', plays: 4 },
+      { artist: 'H', album: 'Delta', plays: 4 },
+      { artist: 'E', album: 'Epsilon', plays: 4 },
+    ]);
+    expect(buildWeekFacts(makeInputs({})).topAlbums).toEqual([]);
+  });
+
+  it('topAlbums merges case and Unicode variants by albumKey and keeps the first spelling', () => {
+    // NFKC folds the decomposed accents into the composed ones, and norm lower-cases.
+    const wf = buildWeekFacts(makeInputs({
+      scrobbles: [...plays('Sigur Rós', 3, MON, 'Ágætis byrjun'), ...plays('SIGUR RO\u0301S', 2, WED, 'A\u0301gætis Byrjun')],
+    }));
+    expect(wf.topAlbums).toEqual([{ artist: 'Sigur Rós', album: 'Ágætis byrjun', plays: 5 }]);
+  });
+
+  it('topAlbums counts deduped plays', () => {
+    const once = plays('A', 5, MON, 'Alpha');
+    const wf = buildWeekFacts(makeInputs({ scrobbles: [...once, ...once.map((s) => ({ ...s, ts: s.ts + 1 }))].sort((a, b) => a.ts - b.ts) }));
+    expect(wf.plays).toMatchObject({ raw: 10, deduped: 5 });
+    expect(wf.topAlbums).toEqual([{ artist: 'A', album: 'Alpha', plays: 5 }]);
+  });
+
   it('releasesChecked is false without releases and true with them', () => {
     const scrobbles = Array.from({ length: 10 }, (_, i) => ({ artist: 'Meltt', album: 'Eternal Embers', track: `t${i + 1}`, ts: MON + i * 240 }));
     const albums = { [albumKey('Meltt', 'Eternal Embers')]: { tracklist: scrobbles.map((s) => s.track), userPlaycount: 10, fetchedAt: NOW } };

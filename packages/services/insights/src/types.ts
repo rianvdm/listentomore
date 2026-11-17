@@ -73,6 +73,7 @@ export interface WeekFacts {
   windowFact: Fact;                    // id 0
   facts: Fact[];                       // ranked, ids 1..n
   topArtists: Array<{ artist: string; plays: number; tier: Tier; nameUncertain: boolean }>;
+  topAlbums: Array<{ artist: string; album: string; plays: number }>; // by deduped plays this week, blank albums skipped
   caveats: string[];
   quiet: boolean;
   question: (QuestionOption & { subject: string }) | null;
@@ -89,5 +90,5 @@ export interface LastfmHistoryClient {
   getAlbumInfo(artist: string, album: string): Promise<{ tracklist: string[] | null; userPlaycount: number | null }>;
   getArtistTopTags(artist: string): Promise<string[]>;
 }
-export const RULE_VERSION = 'r2';
+export const RULE_VERSION = 'r3';
 export const albumKey = (artist: string, album: string): string => `${norm(artist)}\u0000${norm(album)}`;

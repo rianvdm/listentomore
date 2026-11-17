@@ -18,6 +18,8 @@ export { BROAD_TAGS, BUCKETS, BUCKET_LABELS, NOISE_TAGS, STOP_TAGS, bucketOf, cl
 export { QUIET_THRESHOLD, chooseQuestion, rankFacts } from './rank';
 export { DUPLICATES_CAVEAT, TRUNCATED_CAVEAT, buildWeekFacts } from './build';
 export { PROMPT_FACTS, noteSignature, renderLine, renderPromptView } from './render';
+export { checkNote } from './check';
+export type { NoteCheckFailure } from './check';
 export { guardNote, guardSentence } from './guard';
 export type { GuardResult, NoteSentence } from './guard';
 export { keys, userExactKeys, userKeyPrefixes } from './keys';
