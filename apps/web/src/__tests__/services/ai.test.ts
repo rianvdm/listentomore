@@ -749,6 +749,22 @@ describe('buildUserInsightsNoteMessages', () => {
     expect(buildUserInsightsNoteMessages(notePromptView)[1].content).toContain(notePromptView);
   });
 
+  it('rules open on the week\'s artist or record, ration counts, and leave opinions to the model\'s own words', () => {
+    const user = buildUserInsightsNoteMessages('VIEW')[1].content;
+    expect(user).toContain(
+      '- Open on the artist or record that defined the week, by name, and say what made the week theirs. Then connect the facts that belong together, and say what sat alongside them.\n',
+    );
+    expect(user).toContain(
+      '- Use a count only when the number itself makes the point, one or two per paragraph at most, and say the rest in words.\n',
+    );
+    expect(user).toContain(
+      '- An opinion about a record is welcome when it grows out of what you just said. Phrase it in your own words, as an opinion.\n',
+    );
+    expect(user).not.toContain('Open with what the week was about');
+    // The rules no longer quote an opinion to copy; the Siiga voice example still says "Still the one, no argument."
+    expect(user).not.toContain('no argument.")');
+  });
+
   it('user prompt has no em dash, and neither do the examples', () => {
     expect(buildUserInsightsNoteMessages('VIEW')[1].content).not.toContain('\u2014');
     for (const example of USER_INSIGHTS_VOICE_EXAMPLES) expect(example).not.toContain('\u2014');
