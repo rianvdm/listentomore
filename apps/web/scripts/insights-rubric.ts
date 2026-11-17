@@ -29,7 +29,7 @@ const straightApostrophes = (s: string): string => s.replace(/[‘’]/g, "'");
  * so "Great White" goes before "Great". Names match as given, case included: the model is told to write them exactly,
  * and a one-word name such as "Best" must not hide the word "best". A match must not run on into a letter or digit.
  */
-export function maskNames(text: string, names: string[]): string {
+export function maskNames(text: string, names: readonly string[]): string {
   const sorted = [...new Set(names.map(straightApostrophes).filter((n) => n.trim() !== ''))]
     .sort((a, b) => b.length - a.length);
   let masked = straightApostrophes(text);

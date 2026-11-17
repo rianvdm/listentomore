@@ -1,5 +1,5 @@
 // ABOUTME: Tests for scripts/insights-eval-lib.ts: the arguments, the output directory, fixture tags and gold keys, phrases copied
-// ABOUTME: from the voice examples, counts, phrases repeated across notes, word counts, and the .dev.vars keys a live run needs.
+// ABOUTME: from the voice examples, counts, phrases and openings repeated across notes, word counts, and the .dev.vars keys.
 
 import { describe, it, expect, vi } from 'vitest';
 import { join } from 'node:path';
@@ -14,8 +14,10 @@ import {
   fixtureTag,
   goldKey,
   missingDevVarsError,
+  openingFrame,
   parseEvalArgs,
   preflightFixtures,
+  repeatedOpenings,
   repeatedPhrases,
   requiredDevVars,
   wordCount,
@@ -198,6 +200,47 @@ describe('repeatedPhrases', () => {
     const notes = [note('a', 'Still the one, no argument.'), note('b', 'Kid A again, no argument.'), note('c', 'Quiet.')];
     expect(repeatedPhrases(notes)).toEqual([]);
     expect(repeatedPhrases(notes, 2)).toContainEqual({ phrase: 'no argument', labels: ['a', 'b'] });
+  });
+});
+
+describe('openingFrame and repeatedOpenings', () => {
+  const owned = [
+    { label: 'a', note: 'Boards of Canada owned this week. Geogaddi twice.', names: ['Boards of Canada', 'Geogaddi'] },
+    { label: 'b', note: 'Siiga owned this week.\n\nNostalgia Burns again.', names: ['Siiga', 'Nostalgia Burns'] },
+  ];
+  const distinct = [
+    { label: 'c', note: 'Friday Aug 7 belonged to U2.', names: ['U2'] },
+    { label: 'd', note: 'Los Ojos Del Cóndor was the record of the week.', names: ['Los Ojos Del Cóndor'] },
+  ];
+
+  it("reads the first four words with the note's own names masked, lower-cased and without punctuation", () => {
+    expect(openingFrame(owned[0].note, owned[0].names)).toBe('name owned this week');
+    expect(openingFrame(owned[1].note, owned[1].names)).toBe('name owned this week');
+    expect(openingFrame(distinct[0].note, distinct[0].names)).toBe('friday aug 7 belonged');
+    expect(openingFrame(distinct[1].note, distinct[1].names)).toBe('name was the record');
+  });
+
+  it('reports a frame two notes share, with their labels', () => {
+    expect(repeatedOpenings([...owned, ...distinct])).toEqual([{ frame: 'name owned this week', labels: ['a', 'b'] }]);
+  });
+
+  it('reports nothing for openings that differ, or for a single note', () => {
+    expect(repeatedOpenings(distinct)).toEqual([]);
+    expect(repeatedOpenings([owned[0]])).toEqual([]);
+  });
+
+  it('honours minNotes and sorts by the number of notes, most first, then by frame', () => {
+    const notes = [
+      ...owned,
+      { label: 'e', note: 'Kid A owned this week, again.', names: ['Kid A'] },
+      { label: 'f', note: 'A quiet week for drone.', names: [] },
+      { label: 'g', note: 'A quiet week for jazz.', names: [] },
+    ];
+    expect(repeatedOpenings(notes)).toEqual([
+      { frame: 'name owned this week', labels: ['a', 'b', 'e'] },
+      { frame: 'a quiet week for', labels: ['f', 'g'] },
+    ]);
+    expect(repeatedOpenings(notes, 3)).toEqual([{ frame: 'name owned this week', labels: ['a', 'b', 'e'] }]);
   });
 });
 

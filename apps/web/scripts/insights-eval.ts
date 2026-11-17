@@ -19,8 +19,9 @@
 // its tag, the attempt outcomes, the final note with the owner's gold summary below it when there is one, and the
 // flags: check failures, em dashes and negation contrast (names masked), phrases of six or more words copied from the
 // voice examples, the word count, marked when it is outside 120-200, and the number of integers the note states. After
-// the fixtures, a section lists the phrases of two to four words found in three or more of the run's notes, with the
-// fixtures they are in. No pass rate gates the run.
+// the fixtures, one section lists the opening frames (first four words, names masked) shared by two or more of the
+// run's notes, and another the phrases of two to four words found in three or more, each with the fixtures they are
+// in. No pass rate gates the run.
 //
 // Spends real money and never runs in CI. Keys come from apps/web/.dev.vars only, never process.env. Exit code 0 means
 // the run finished; 2 means it could not start: an unsupported option (the removed --dry-run and --trivia included), a
@@ -48,6 +49,7 @@ import {
   missingDevVarsError,
   parseEvalArgs,
   preflightFixtures,
+  repeatedOpenings,
   repeatedPhrases,
   requiredDevVars,
   wordCount,
@@ -372,6 +374,13 @@ function renderFixture(r: FixtureRecord, gold: Record<string, string>): string[]
   return lines;
 }
 
+/** The opening frames repeated across the run's notes, each with the fixtures that open on it, or "none". */
+function renderOpenings(openings: Array<{ frame: string; labels: string[] }>): string[] {
+  const lines = ['## Openings repeated across weeks', ''];
+  if (openings.length === 0) return [...lines, 'none', ''];
+  return [...lines, ...openings.map(({ frame, labels }) => `- "${frame}": ${labels.join(', ')}`), ''];
+}
+
 /** The phrases repeated across the run's notes, each with the fixtures it is in, or "none". */
 function renderRepeated(repeated: Array<{ phrase: string; labels: string[] }>): string[] {
   const lines = ['## Phrases repeated across weeks', ''];
@@ -382,6 +391,7 @@ function renderRepeated(repeated: Array<{ phrase: string; labels: string[] }>): 
 function renderSummary(
   label: string,
   records: FixtureRecord[],
+  openings: Array<{ frame: string; labels: string[] }>,
   repeated: Array<{ phrase: string; labels: string[] }>,
   runInfo: string,
   gold: Record<string, string>,
@@ -399,7 +409,7 @@ function renderSummary(
     '',
   );
   for (const r of records) lines.push(...renderFixture(r, gold));
-  lines.push(...renderRepeated(repeated));
+  lines.push(...renderOpenings(openings), ...renderRepeated(repeated));
   return lines.join('\n');
 }
 
@@ -439,14 +449,16 @@ async function main(): Promise<number> {
   const wallSeconds = ((performance.now() - started) / 1000).toFixed(0);
   const runInfo = `Run ${new Date().toISOString()} at ${gitRef()}, wall time ${wallSeconds}s.`;
   // runAll keeps input order, so records[i] is fixtures[i]'s record.
-  const repeated = repeatedPhrases(
-    records.flatMap((r, i) => (r.note ? [{ label: r.fixture, note: r.note.note, names: fixtures[i].wf.names }] : [])),
+  const noted = records.flatMap((r, i) =>
+    r.note ? [{ label: r.fixture, note: r.note.note, names: fixtures[i].wf.names }] : [],
   );
+  const openings = repeatedOpenings(noted);
+  const repeated = repeatedPhrases(noted);
 
   const { outDir } = args;
   mkdirSync(outDir, { recursive: true });
   for (const r of records) writeFileSync(join(outDir, `${r.fixture}.json`), `${JSON.stringify(r, null, 2)}\n`);
-  writeFileSync(join(outDir, 'summary.md'), renderSummary(args.label, records, repeated, runInfo, gold));
+  writeFileSync(join(outDir, 'summary.md'), renderSummary(args.label, records, openings, repeated, runInfo, gold));
   console.log(`[insights-eval] Wrote ${outDir}/summary.md (${records.length} fixtures, ${usd(sum(records.map((r) => r.costUsd)))})`);
   return 0;
 }

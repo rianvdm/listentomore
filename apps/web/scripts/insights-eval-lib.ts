@@ -1,9 +1,10 @@
 // ABOUTME: Pure helpers for scripts/insights-eval.ts: its arguments, the output directory kept inside eval-output/,
-// ABOUTME: the fixture preflight, tags and gold keys, copied and repeated phrases, counts, and .dev.vars keys.
+// ABOUTME: the fixture preflight, tags and gold keys, copied and repeated phrases, repeated openings, counts, .dev.vars keys.
 
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { buildWeekFacts, integersOf, matchKey, renderPromptView } from '@listentomore/insights';
 import type { WeekFacts, WeekInputs } from '@listentomore/insights';
+import { maskNames } from './insights-rubric';
 
 /** The eval's arguments as given: the run label and the --extra directory, unchecked on disk. */
 export interface EvalArgs {
@@ -199,6 +200,37 @@ export function repeatedPhrases(
     .sort((a, b) => b.labels.length - a.labels.length || a.phrase.localeCompare(b.phrase))
     .slice(0, REPEATED_CAP)
     .map(({ phrase, labels }) => ({ phrase, labels }));
+}
+
+const OPENING_WORDS = 4;
+
+/**
+ * The note's first four matchKey words after maskNames, so "Siiga owned this week." and "Boards of Canada owned this
+ * week." both read "name owned this week": the frame the note opens on, whoever fills it.
+ */
+export function openingFrame(note: string, names: readonly string[]): string {
+  return keyWords(maskNames(note, names)).slice(0, OPENING_WORDS).join(' ');
+}
+
+/**
+ * The opening frames shared by `minNotes` or more of the notes, each with the labels of the notes that open on it, in
+ * note order: the run-wide habit the repeated-phrase list can miss when generic phrases fill its slots. Sorted by the
+ * number of notes, most first, then by frame.
+ */
+export function repeatedOpenings(
+  notes: ReadonlyArray<{ label: string; note: string; names: readonly string[] }>,
+  minNotes = 2,
+): Array<{ frame: string; labels: string[] }> {
+  const found = new Map<string, string[]>();
+  for (const { label, note, names } of notes) {
+    const frame = openingFrame(note, names);
+    if (!frame) continue;
+    found.set(frame, [...(found.get(frame) ?? []), label]);
+  }
+  return [...found]
+    .filter(([, labels]) => labels.length >= minNotes)
+    .map(([frame, labels]) => ({ frame, labels }))
+    .sort((a, b) => b.labels.length - a.labels.length || a.frame.localeCompare(b.frame));
 }
 
 /** Whitespace-separated words, across lines and paragraphs. */
