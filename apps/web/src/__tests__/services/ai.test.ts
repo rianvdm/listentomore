@@ -777,6 +777,8 @@ describe('parseWeekNote', () => {
     expect(parseWeekNote('```\n' + noteJson + '\n```')).toEqual(parsedNote);
     expect(parseWeekNote('Here is the note:\n' + noteJson + '\nHope that works {ok}.')).toEqual(parsedNote);
     expect(parseWeekNote('Fields {note} and {names}:\n' + noteJson)).toEqual(parsedNote);
+    expect(parseWeekNote('Facts [1] and [2]:\n' + noteJson + '\nSee [3].')).toEqual(parsedNote);
+    expect(parseWeekNote('[Draft] ' + noteJson + ' [end]')).toEqual(parsedNote);
   });
 
   it('normalises paragraph breaks to exactly one blank line and joins lines inside a paragraph', () => {
@@ -804,6 +806,11 @@ describe('parseWeekNote', () => {
     expect(parseWeekNote('{"note": "One.", "names": ["Meltt", 2]}')).toBeNull();
     expect(parseWeekNote('{"note": "One.", "names": [null]}')).toBeNull();
     expect(parseWeekNote('[{"note": "One.", "names": []}]')).toBeNull();
+    // Wrapping an array in a fence or prose doesn't change the verdict.
+    expect(parseWeekNote('```json\n[{"note": "One.", "names": []}]\n```')).toBeNull();
+    expect(parseWeekNote('```\n[{"note": "One.", "names": []}, {"note": "Two.", "names": []}]\n```')).toBeNull();
+    expect(parseWeekNote('Here is the note:\n[{"note": "One.", "names": []}]\nHope that works.')).toBeNull();
+    expect(parseWeekNote('Facts [1] and [2]:\n[ {"note": "One.", "names": []} ] (see [3])')).toBeNull();
     expect(parseWeekNote('[{"text": "One.", "facts": [1]}]')).toBeNull();
     expect(parseWeekNote('{"note": "One.", "names": []')).toBeNull();
   });

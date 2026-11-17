@@ -115,10 +115,27 @@ function tryParse(text: string): unknown {
   }
 }
 
+/** The indexes in `text` where `char` occurs, in order. */
+function indexesOf(text: string, char: string): number[] {
+  const found: number[] = [];
+  for (let i = 0; i < text.length; i++) if (text[i] === char) found.push(i);
+  return found;
+}
+
+/**
+ * Whether the span from `start` to `end` sits inside a JSON array in `raw`: some '[' before it and ']' after it
+ * enclose a span that parses as an array. Brackets in prose ("facts [1] and [2]") enclose nothing that parses.
+ */
+function insideArray(raw: string, start: number, end: number): boolean {
+  const opens = indexesOf(raw.slice(0, start), '[');
+  const closes = indexesOf(raw, ']').filter((i) => i > end);
+  return opens.some((open) => closes.some((close) => Array.isArray(tryParse(raw.slice(open, close + 1)))));
+}
+
 /**
  * Parse the model's reply into a week note. Accepts bare JSON, a fenced ```json block, or an object with prose
- * before or after it. Returns null, never throws, for anything else. A reply that is valid JSON as a whole is judged
- * as it stands, so an array that holds a note object is refused with no search inside it.
+ * before or after it. Returns null, never throws, for anything else, including an array, bare or wrapped in a fence
+ * or prose: wrapping never changes whether a payload passes.
  */
 export function parseWeekNote(raw: string): WeekNote | null {
   const whole = tryParse(raw.trim());
@@ -126,16 +143,12 @@ export function parseWeekNote(raw: string): WeekNote | null {
 
   // Fences and surrounding prose: try each '{' as the object's start against each '}' as its end, widest first.
   // Prose can hold braces of its own, so the first span that parses is not always the note.
-  const starts: number[] = [];
-  const ends: number[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '{') starts.push(i);
-    else if (raw[i] === '}') ends.push(i);
-  }
+  const starts = indexesOf(raw, '{');
+  const ends = indexesOf(raw, '}');
   for (const start of starts) {
     for (let e = ends.length - 1; e >= 0 && ends[e] > start; e--) {
       const note = toWeekNote(tryParse(raw.slice(start, ends[e] + 1)));
-      if (note) return note;
+      if (note) return insideArray(raw, start, ends[e]) ? null : note;
     }
   }
   return null;
