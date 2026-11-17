@@ -41,15 +41,15 @@ describe('deleteUserInsightsData', () => {
     expect(await remaining(kv)).toEqual([...ALICE2, ...GLOBAL].sort());
   });
 
-  it('deletes insights:card:<lower> by exact key', async () => {
+  it('deletes insights:last:<lower> by exact key', async () => {
     const kv = createMockKV();
-    await seed(kv, ['insights:card:alice', 'insights:card:alice2']);
+    await seed(kv, ['insights:last:alice', 'insights:last:alice2']);
 
     const deleted = await deleteUserInsightsData(kv, 'Alice');
 
     expect(deleted).toBe(1);
-    expect(await remaining(kv)).toEqual(['insights:card:alice2']);
-    expect(kv.delete).toHaveBeenCalledWith('insights:card:alice');
+    expect(await remaining(kv)).toEqual(['insights:last:alice2']);
+    expect(kv.delete).toHaveBeenCalledWith('insights:last:alice');
   });
 
   it("never deletes a user whose name starts with this user's name", async () => {

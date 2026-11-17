@@ -11,7 +11,6 @@ import type {
   ChatCompletionResponse,
   AIResponseMetadata,
   ReasoningEffort,
-  WebCitation,
 } from './types';
 import type { AIRateLimiter } from './rate-limit';
 
@@ -45,7 +44,6 @@ export function mapReasoningToEffort(
 // search is a direct tool call, so the ceiling counts real searches.
 // max_uses is 5, not 3 (raised in eval round 4): albumRecommendations verifies
 // the seed plus 3 picks, which needs 4 searches; at 3 Claude returned 2 picks.
-// A task that needs fewer sets webSearchMaxUses in its config.
 export const WEB_SEARCH_TOOL = {
   type: 'web_search_20250305',
   name: 'web_search',
@@ -57,20 +55,10 @@ export function timeoutPresetFor(webSearch: boolean | undefined): TimeoutPreset 
   return webSearch ? 'verySlow' : 'slow';
 }
 
-// A citation on a text block. Only web_search_result_location citations are
-// read; other types (document locations, caller-supplied search results) are
-// skipped.
-interface AnthropicCitation {
-  type: string;
-  url?: string;
-  title?: string | null;
-}
-
 type AnthropicContentBlock = {
   type: string;
   text?: string;
   name?: string;
-  citations?: AnthropicCitation[] | null;
   // A web_search_tool_result holds an array of results, or one error object.
   content?: unknown;
 };
@@ -92,10 +80,9 @@ interface AnthropicMessagesPayload {
 // blocks are ignored. Join with '' so [[Artist]] placeholders split across
 // blocks stay intact. When the model searched, it can narrate before the
 // search ("I'll search for ..."), so only text after the last search result
-// counts as the answer, and only its citations are the answer's.
+// counts as the answer.
 function extractAnswerText(content: AnthropicContentBlock[]): {
   text: string;
-  citations: WebCitation[];
   droppedBlocks: number;
   droppedChars: number;
 } {
@@ -111,27 +98,9 @@ function extractAnswerText(content: AnthropicContentBlock[]): {
   const dropped = content.slice(0, lastResult + 1);
   return {
     text: join(answer),
-    citations: collectCitations(answer.filter(isText)),
     droppedBlocks: dropped.filter(isText).length,
     droppedChars: join(dropped).length,
   };
-}
-
-// Web search citations of the given text blocks, once per URL, in order of
-// first citation; the first title seen for a URL is kept.
-function collectCitations(blocks: AnthropicContentBlock[]): WebCitation[] {
-  const byUrl = new Map<string, WebCitation>();
-  for (const block of blocks) {
-    for (const citation of block.citations ?? []) {
-      if (citation.type !== 'web_search_result_location') continue;
-      if (typeof citation.url !== 'string' || byUrl.has(citation.url)) continue;
-      byUrl.set(citation.url, {
-        url: citation.url,
-        title: typeof citation.title === 'string' ? citation.title : null,
-      });
-    }
-  }
-  return [...byUrl.values()];
 }
 
 function sumOptional(a: number | undefined, b: number | undefined): number | undefined {
@@ -215,9 +184,7 @@ export class AnthropicClient implements ChatClient {
     const effort = mapReasoningToEffort(options.reasoning);
     body.output_config = { effort };
     if (options.webSearch === true) {
-      body.tools = [
-        { ...WEB_SEARCH_TOOL, max_uses: options.webSearchMaxUses ?? WEB_SEARCH_TOOL.max_uses },
-      ];
+      body.tools = [WEB_SEARCH_TOOL];
     }
 
     let data = await this.post(body, options);
@@ -250,7 +217,7 @@ export class AnthropicClient implements ChatClient {
       console.warn(`[Anthropic] Web search tool errors: ${webSearchErrors.join(', ')}`);
     }
 
-    const { text: content, citations, droppedBlocks, droppedChars } = extractAnswerText(data.content);
+    const { text: content, droppedBlocks, droppedChars } = extractAnswerText(data.content);
     if (droppedBlocks > 0) {
       console.log(
         `[Anthropic] Dropped ${droppedBlocks} text block${droppedBlocks === 1 ? '' : 's'} ` +
@@ -307,7 +274,7 @@ export class AnthropicClient implements ChatClient {
       },
     };
 
-    return citations.length > 0 ? { content, metadata, citations } : { content, metadata };
+    return { content, metadata };
   }
 
   private async post(

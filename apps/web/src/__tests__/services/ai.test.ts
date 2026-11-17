@@ -3,9 +3,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
 import * as aiExports from '@listentomore/ai';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, ALBUM_TRIVIA_NONE, buildAlbumTriviaMessages, generateAlbumTrivia, parseAlbumTrivia, buildUserInsightsNoteMessages, generateUserInsightsNote, generateUserInsightsRecommendations, parseNoteSentences, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsNoteMessages, generateUserInsightsNote, generateUserInsightsRecommendations, parseNoteSentences, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS, type AITask } from '@listentomore/config';
-import { makingOfFact } from '../../api/internal/insights-making-of';
 import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -453,16 +452,6 @@ describe('AnthropicClient.chatCompletion', () => {
       model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: false,
     });
     expect('tools' in lastBody(mockFetch)).toBe(false);
-  });
-
-  it('sizes max_uses from webSearchMaxUses when a task sets it', async () => {
-    const mockFetch = setupFetchMock([
-      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
-    ]);
-    await new AnthropicClient('key').chatCompletion({
-      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true, webSearchMaxUses: 3,
-    });
-    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
   });
 
   it('uses the 60s timeout preset for web search tasks', () => {
@@ -1487,141 +1476,12 @@ describe('playlist cover removal', () => {
   });
 });
 
-describe('album trivia', () => {
+describe('web search tool errors', () => {
   type Block = { type: string; [key: string]: unknown };
-  /** A web_search_result_location citation as the Messages API puts it on a text block. */
-  const cite = (url: string, title: string): Block => ({
-    type: 'web_search_result_location', url, title, encrypted_index: 'Eo8BCioIAhgB', cited_text: 'Recorded in Vancouver.',
+  const chat = () => new AnthropicClient('key').chatCompletion({
+    model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
   });
-  const searched = (...answer: Block[]) => ({
-    id: 'msg_01',
-    type: 'message',
-    role: 'assistant',
-    model: 'claude-opus-5-5',
-    content: [
-      { type: 'text', text: "I'll look up Eternal Embers." },
-      { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Meltt Eternal Embers' } },
-      {
-        type: 'web_search_tool_result',
-        tool_use_id: 'srvtoolu_1',
-        content: [{ type: 'web_search_result', url: 'https://a.example/x', title: 'A', encrypted_content: 'EqgfCioIARgB', page_age: 'March 2, 2025' }],
-      },
-      { type: 'text', text: 'Let me confirm the date.', citations: [cite('https://b.example', 'B')] },
-      { type: 'server_tool_use', id: 'srvtoolu_2', name: 'web_search', input: { query: 'Eternal Embers release date' } },
-      {
-        type: 'web_search_tool_result',
-        tool_use_id: 'srvtoolu_2',
-        content: [{ type: 'web_search_result', url: 'https://b.example', title: 'B', encrypted_content: 'EqgfCioIARgC', page_age: null }],
-      },
-      ...answer,
-    ],
-    stop_reason: 'end_turn',
-    usage: { input_tokens: 4000, output_tokens: 150, server_tool_use: { web_search_requests: 2 } },
-  });
-  const FACT = 'Meltt recorded Eternal Embers in Vancouver and released it in 2025.';
   const anthropicFetch = (response: unknown) => setupFetchMock([{ pattern: /api\.anthropic\.com/, response }]);
-  const requestBody = (mockFetch: ReturnType<typeof setupFetchMock>, call = 0) =>
-    JSON.parse((mockFetch.mock.calls[call][1] as RequestInit).body as string);
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-  });
-  // The console spies are per test.
-  afterEach(() => vi.restoreAllMocks());
-
-  it('is an uncached Opus task at low effort with web search capped at 2 searches', () => {
-    // The insights making-of route caches the result under CACHE_CONFIG.albumTrivia; the task itself never does.
-    expect(getTaskConfig('albumTrivia')).toMatchObject({
-      provider: 'anthropic', model: 'claude-opus-5-5', reasoning: 'low', webSearch: true, webSearchMaxUses: 2, maxTokens: 3000, cacheTtlDays: 0,
-    });
-  });
-
-  it('asks for one verifiable fact about the album, or exactly NONE', () => {
-    const [system, user] = buildAlbumTriviaMessages('Meltt', 'Eternal Embers');
-    expect(system.role).toBe('system');
-    expect(system.content.split('\n')).toHaveLength(1);
-    expect(user.content).toBe(
-      'Find one specific, verifiable fact about the album "Eternal Embers" by Meltt: how or where it was made, when it came out, who played on it, or something notable that happened around it. Write it in one or two plain sentences. No opinions about the music, no adjectives describing how it sounds, no em dashes, no hedging. If you can\'t find a fact you can verify, reply with exactly NONE.',
-    );
-  });
-
-  it('parseAlbumTrivia reads "NONE. I could not..." as null and keeps "None of the songs..."', () => {
-    expect(ALBUM_TRIVIA_NONE).toBe('NONE');
-    for (const reply of ['NONE', ' NONE.\n', 'NONE. I could not verify anything about this album.', '', '   ']) {
-      expect(parseAlbumTrivia(reply), reply).toBeNull();
-    }
-    expect(parseAlbumTrivia(`  ${FACT}\n`)).toBe(FACT);
-    // Only an upper-case NONE is the sentinel.
-    expect(parseAlbumTrivia('None of the songs were recorded live.')).toBe('None of the songs were recorded live.');
-  });
-
-  it("sends the task's max_uses", async () => {
-    let mockFetch = anthropicFetch(searched({ type: 'text', text: FACT }));
-    await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(requestBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }]);
-
-    // albumRecommendations sets no webSearchMaxUses, so the client's default of 5 applies.
-    const recs = getTaskConfig('albumRecommendations');
-    expect(recs.webSearchMaxUses).toBeUndefined();
-    mockFetch = anthropicFetch(searched({ type: 'text', text: FACT }));
-    await new AnthropicClient('key').chatCompletion({
-      model: recs.model, messages: [{ role: 'user', content: 'hi' }], webSearch: recs.webSearch, webSearchMaxUses: recs.webSearchMaxUses,
-    });
-    expect(requestBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]);
-  });
-
-  it('keeps only the text after the last search result and logs how many text blocks it dropped', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT }));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result.text).toBe(FACT);
-    expect(result.metadata?.features?.webSearchRequests).toBe(2);
-    expect(vi.mocked(console.log).mock.calls.map((c) => String(c[0])).filter((m) => m.includes('pre-search')))
-      .toEqual(['[Anthropic] Dropped 2 text blocks (52 chars) of pre-search text']);
-  });
-
-  it("returns the answer's citations once each, ignoring blocks before the last search result", async () => {
-    anthropicFetch(searched(
-      { type: 'text', text: 'Meltt recorded the album in Vancouver', citations: [cite('https://a.example/x', 'A')] },
-      { type: 'text', text: ' and released it in 2025.', citations: [cite('https://a.example/x', 'A again')] },
-    ));
-    const res = await new AnthropicClient('key').chatCompletion({
-      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
-    });
-    expect(res.content).toBe('Meltt recorded the album in Vancouver and released it in 2025.');
-    expect(res.citations).toEqual([{ url: 'https://a.example/x', title: 'A' }]);
-  });
-
-  it('generateAlbumTrivia is uncached and takes the first https citation as sourceUrl', async () => {
-    const mockFetch = anthropicFetch(searched({
-      type: 'text', text: FACT, citations: [cite('http://plain.example/y', 'Plain'), cite('https://a.example/x', 'A'), cite('https://c.example/z', 'C')],
-    }));
-    const client = new AnthropicClient('key');
-    const first = await generateAlbumTrivia('Meltt', 'Eternal Embers', client);
-    expect(first).toMatchObject({ text: FACT, sourceUrl: 'https://a.example/x', raw: FACT });
-    expect(first.metadata?.provider).toBe('anthropic');
-    // No cache: the same album asked twice is two model calls.
-    await generateAlbumTrivia('Meltt', 'Eternal Embers', client);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    // Errors from this call log no upstream body.
-    const chat = vi.fn(async () => ({ content: FACT }));
-    await generateAlbumTrivia('Meltt', 'Eternal Embers', { chatCompletion: chat });
-    expect(chat).toHaveBeenCalledWith(expect.objectContaining({ quietErrors: true, webSearch: true, webSearchMaxUses: 2 }));
-    // The only log line names the model, never the album.
-    const logged = vi.mocked(console.log).mock.calls.map((c) => c.map(String).join(' ')).filter((m) => m.includes('[Album Trivia]'));
-    expect(logged).toEqual([
-      '[Album Trivia] Model: anthropic/claude-opus-5-5',
-      '[Album Trivia] Model: anthropic/claude-opus-5-5',
-      '[Album Trivia] Model: unknown/claude-opus-5-5',
-    ]);
-  });
-
-  it('an http-only citation gives sourceUrl null', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT, citations: [cite('http://plain.example/y', 'Plain')] }));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result).toMatchObject({ text: FACT, sourceUrl: null });
-  });
 
   /** A search that failed inside a 200, as the Messages API returns it. */
   const searchError = (id: string, errorCode: string): Block => ({
@@ -1640,13 +1500,39 @@ describe('album trivia', () => {
     stop_reason: stopReason,
     usage: { input_tokens: 900, output_tokens: 20, server_tool_use: { web_search_requests: 1 } },
   });
+  /** A search that returned results, then the answer. */
+  const searched = (stopReason = 'end_turn', answer: Block[] = [{ type: 'text', text: 'NONE' }]) => ({
+    id: 'msg_01',
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-opus-5-5',
+    content: [
+      { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Meltt Eternal Embers' } },
+      {
+        type: 'web_search_tool_result',
+        tool_use_id: 'srvtoolu_1',
+        content: [{ type: 'web_search_result', url: 'https://a.example/x', title: 'A', encrypted_content: 'EqgfCioIARgB', page_age: null }],
+      },
+      ...answer,
+    ],
+    stop_reason: stopReason,
+    usage: { input_tokens: 900, output_tokens: 20, server_tool_use: { web_search_requests: 1 } },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  // The console spies are per test.
+  afterEach(() => vi.restoreAllMocks());
 
   it.each(['too_many_requests', 'unavailable', 'max_uses_exceeded'])(
-    'reports a %s web search tool error inside a 200 reply that then says NONE',
+    'reports a %s web search tool error inside a 200 reply',
     async (code) => {
       anthropicFetch(failedSearch(code));
-      const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-      expect(result.text).toBeNull();
+      const result = await chat();
+      expect(result.content).toBe('NONE');
       expect(result.metadata?.truncated).toBe(false);
       expect(result.metadata?.features?.webSearchErrors).toEqual([code]);
       expect(vi.mocked(console.warn).mock.calls.map((c) => String(c[0])))
@@ -1655,98 +1541,31 @@ describe('album trivia', () => {
   );
 
   it('reports no web search errors when every search returned results', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT }));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
+    anthropicFetch(searched());
+    const result = await chat();
     expect(result.metadata?.features).not.toHaveProperty('webSearchErrors');
   });
 
   it('keeps web search errors from both requests of a resumed pause_turn', async () => {
     const paused = failedSearch('unavailable', 'pause_turn', []);
-    const resumedClean = { ...searched({ type: 'text', text: 'NONE' }), content: [{ type: 'text', text: 'NONE' }] };
+    const resumedClean = { ...searched(), content: [{ type: 'text', text: 'NONE' }] };
     let fetchMock = vi.fn()
       .mockResolvedValueOnce(mockFetchResponse(paused))
       .mockResolvedValueOnce(mockFetchResponse(resumedClean));
     globalThis.fetch = fetchMock as typeof fetch;
-    let result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
+    let result = await chat();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.metadata?.features?.webSearchErrors).toEqual(['unavailable']);
 
     // A clean first request, then a failed search on the resumed turn.
-    const pausedClean = { ...searched(), stop_reason: 'pause_turn' };
+    const pausedClean = searched('pause_turn', []);
     fetchMock = vi.fn()
       .mockResolvedValueOnce(mockFetchResponse(pausedClean))
       .mockResolvedValueOnce(mockFetchResponse(failedSearch('too_many_requests')));
     globalThis.fetch = fetchMock as typeof fetch;
-    result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
+    result = await chat();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.metadata?.truncated).toBe(false);
     expect(result.metadata?.features?.webSearchErrors).toEqual(['too_many_requests']);
-  });
-
-  it('a transient failed search makes the making-of helper return error and write nothing, through the real client', async () => {
-    const kv = createMockKV();
-    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: kv });
-    anthropicFetch(failedSearch('too_many_requests'));
-    expect(await makingOfFact(ai, kv, 'Meltt', 'Eternal Embers')).toMatchObject({ status: 'error' });
-
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(mockFetchResponse(failedSearch('unavailable', 'pause_turn', [])))
-      .mockResolvedValueOnce(mockFetchResponse({ ...searched(), content: [{ type: 'text', text: 'NONE' }] }));
-    globalThis.fetch = fetchMock as typeof fetch;
-    expect(await makingOfFact(ai, kv, 'Meltt', 'Eternal Embers')).toMatchObject({ status: 'error' });
-
-    const written = vi.mocked(kv.put).mock.calls.map((c) => String(c[0]));
-    expect(written.filter((key) => key !== 'ai:ratelimit:anthropic')).toEqual([]);
-
-    // A spent search budget is not transient: NONE after it is cached as none.
-    anthropicFetch(failedSearch('max_uses_exceeded'));
-    expect(await makingOfFact(ai, kv, 'Meltt', 'Eternal Embers')).toMatchObject({ status: 'none' });
-    expect(await kv.get('insights:trivia:meltt:eternal%20embers', 'json')).toEqual({ none: true });
-  });
-
-  it('an answer with no citation gives sourceUrl null', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT }));
-    expect((await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'))).sourceUrl).toBeNull();
-  });
-
-  it.each([
-    ['NONE', [{ type: 'text', text: 'NONE' }]],
-    ['NONE with a reason', [{ type: 'text', text: 'NONE. Nothing verifiable turned up.' }]],
-    ['an empty reply', []],
-  ])('returns null text for %s, with the raw reply', async (_label, answer) => {
-    anthropicFetch(searched(...answer));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result.text).toBeNull();
-    expect(result.raw).toBe(answer.map((b) => b.text).join(''));
-  });
-
-  it.each(['max_tokens', 'refusal'])('marks a reply that stopped on %s as truncated', async (stop) => {
-    anthropicFetch({ ...searched({ type: 'text', text: FACT }), stop_reason: stop });
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result.text).toBe(FACT);
-    expect(result.metadata?.truncated).toBe(true);
-    expect(isCacheableResponse(result.raw, result.metadata, 'albumTrivia')).toBe(false);
-  });
-
-  it('marks a turn still paused after its one resume as truncated', async () => {
-    const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn', content: [{ type: 'text', text: FACT }] };
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(mockFetchResponse(paused))
-      .mockResolvedValueOnce(mockFetchResponse(paused));
-    globalThis.fetch = fetchMock as typeof fetch;
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.metadata?.truncated).toBe(true);
-    expect(isCacheableResponse(result.raw, result.metadata, 'albumTrivia')).toBe(false);
-  });
-
-  it('is reached through AIService.getAlbumTrivia on the anthropic client and writes nothing to KV', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT, citations: [cite('https://a.example/x', 'A')] }));
-    const kv = createMockKV();
-    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: kv });
-    expect(await ai.getAlbumTrivia('Meltt', 'Eternal Embers')).toMatchObject({ text: FACT, sourceUrl: 'https://a.example/x' });
-    // The rate limiter's counters are the only KV traffic: nothing under the AI cache.
-    const touched = [...vi.mocked(kv.get).mock.calls, ...vi.mocked(kv.put).mock.calls].map((c) => String(c[0]));
-    expect(touched.filter((key) => key !== 'ai:ratelimit:anthropic')).toEqual([]);
   });
 });

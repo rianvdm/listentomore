@@ -38,14 +38,6 @@ export {
 } from './user-insights-note';
 
 export {
-  generateAlbumTrivia,
-  buildAlbumTriviaMessages,
-  parseAlbumTrivia,
-  ALBUM_TRIVIA_NONE,
-  type AlbumTriviaResult,
-} from './album-trivia';
-
-export {
   generateUserInsightsRecommendations,
   type UserInsightsRecommendationsResult,
   type AlbumRecommendation,

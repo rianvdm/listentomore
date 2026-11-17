@@ -2,7 +2,7 @@
 // ABOUTME: An error's name is free text, so a made-up one must never reach a log line.
 
 import { describe, it, expect } from 'vitest';
-import { CreditsCapReached, MusicBrainzApiError, MusicBrainzRateLimitError } from '@listentomore/musicbrainz';
+import { MusicBrainzRateLimitError } from '@listentomore/musicbrainz';
 import { InsightsFetchError } from '@listentomore/insights';
 import { errorKind } from '../../utils/error-kind';
 
@@ -11,8 +11,6 @@ describe('errorKind', () => {
     expect(errorKind(new Error('x'))).toBe('Error');
     expect(errorKind(new TypeError('x'))).toBe('TypeError');
     expect(errorKind(new SyntaxError('x'))).toBe('SyntaxError');
-    expect(errorKind(new CreditsCapReached())).toBe('CreditsCapReached');
-    expect(errorKind(new MusicBrainzApiError(500, 'x'))).toBe('MusicBrainzApiError');
     expect(errorKind(new MusicBrainzRateLimitError('queue_full'))).toBe('MusicBrainzRateLimitError');
     expect(errorKind(new InsightsFetchError('x'))).toBe('InsightsFetchError');
   });

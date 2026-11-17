@@ -140,29 +140,8 @@ describe('keys', () => {
     ]);
     expect(prefixes.some((p) => keys.scrobbleDay('alice2', '2026-11-08').startsWith(p))).toBe(false);
     expect(userExactKeys('Alice')).toEqual([
-      'insights:facts:alice', 'insights:question:alice', 'insights:generating:alice', 'insights:last:alice', 'insights:card:alice',
+      'insights:facts:alice', 'insights:question:alice', 'insights:generating:alice', 'insights:last:alice',
     ]);
-  });
-
-  it('userExactKeys includes insights:card', () => {
-    expect(keys.card('Alice')).toBe('insights:card:alice');
-    expect(userExactKeys('Alice')).toContain(keys.card('Alice'));
-    // One user's card key is never another's: exact keys only, no prefix.
-    expect(userKeyPrefixes('alice').some((p) => keys.card('alice2').startsWith(p))).toBe(false);
-  });
-
-  it('trivia keys are global: no user segment, not in userKeyPrefixes', () => {
-    const key = keys.trivia('Boards of Canada', 'Inferno');
-    expect(key).toBe('insights:trivia:boards%20of%20canada:inferno');
-    expect(keys.trivia('A:B', 'C')).not.toBe(keys.trivia('A', 'B:C'));
-    // The key is the original record's: every edition of an album shares it.
-    expect(keys.trivia('Boards of Canada', 'Inferno (Deluxe Edition)')).toBe(key);
-    expect(keys.trivia('Celer', 'Capri (Remastered 2026)')).toBe(keys.trivia('Celer', 'Capri'));
-    // A user named like the artist still owns nothing under the trivia family.
-    for (const user of ['alice', 'boards of canada']) {
-      expect(userKeyPrefixes(user).some((p) => key.startsWith(p))).toBe(false);
-      expect(userExactKeys(user)).not.toContain(key);
-    }
   });
 });
 

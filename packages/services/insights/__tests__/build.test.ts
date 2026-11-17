@@ -336,21 +336,6 @@ describe('rankFacts', () => {
   });
 });
 
-describe('card albums', () => {
-  it('May 24 card albums include Inferno by Boards of Canada', () => {
-    const wf = buildWeekFacts(loadFixture('bordesak-2026-05-24'));
-    expect(wf.cardAlbums).toContainEqual(expect.objectContaining({ artist: 'Boards of Canada', album: 'Inferno' }));
-    expect(wf.cardAlbums.length).toBeGreaterThan(0);
-    expect(wf.cardAlbums.length).toBeLessThanOrEqual(6);
-    const plays = wf.cardAlbums.map((a) => a.plays);
-    expect(plays).toEqual([...plays].sort((a, b) => b - a));
-  });
-
-  it('an empty week has no card albums', () => {
-    expect(buildWeekFacts(makeInputs()).cardAlbums).toEqual([]);
-  });
-});
-
 describe('chooseQuestion', () => {
   const where: QuestionOption = { kind: 'where_from', text: 'Where did you come across Siiga?' };
   const started: QuestionOption = { kind: 'started', text: 'What got you started on Siiga this week?' };

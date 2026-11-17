@@ -36,8 +36,6 @@ export type QuestionKind = 'after' | 'where_from' | 'started' | 'one_sitting';
 export interface QuestionOption { kind: QuestionKind; text: string }
 /** An album a statement names, with the artist it is by, so no later step has to guess which name is an album. */
 export interface AlbumRef { artist: string; album: string }
-/** A candidate album for the week's card, with its deduped plays this week. */
-export interface CardAlbum { artist: string; album: string; plays: number }
 export interface Fact {
   id: number;                 // 1-based rank, assigned in rank.ts; 0 is the window line
   kind: FactKind;
@@ -80,7 +78,6 @@ export interface WeekFacts {
   question: (QuestionOption & { subject: string }) | null;
   names: string[];                     // every artist and album name in the week's scrobbles
   releasesChecked: boolean;            // the inputs carried release lookups, so release_week could fire
-  cardAlbums: CardAlbum[];             // the card's candidate albums, most played this week first
 }
 export interface LastfmHistoryClient {
   getRecentTracksPage(from: number, to: number, page: number): Promise<{ tracks: Scrobble[]; totalPages: number }>;

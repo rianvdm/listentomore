@@ -13,7 +13,7 @@ const KNOWN_ERROR_KINDS: ReadonlySet<string> = new Set([
   // @listentomore/ai
   'RegionUnsupportedError',
   // @listentomore/musicbrainz
-  'MusicBrainzApiError', 'MusicBrainzRateLimitError', 'CreditsCapReached',
+  'MusicBrainzRateLimitError',
   // @listentomore/lastfm, @listentomore/spotify, @listentomore/insights
   'LastfmApiError', 'SpotifyNotFoundError', 'InsightsFetchError',
 ]);

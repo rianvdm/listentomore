@@ -1,7 +1,6 @@
 // ABOUTME: buildWeekFacts - turns one WeekInputs into the ranked WeekFacts object: weeks, dedupe, baseline,
-// ABOUTME: the fact rules, ranking, the question, the window line, top artists, caveats, names and card albums.
+// ABOUTME: the fact rules, ranking, the question, the window line, top artists, caveats and names.
 
-import { cardAlbums } from './card-albums';
 import { dedupe } from './dedupe';
 import { albumFacts } from './facts-album';
 import { artistFacts } from './facts-artist';
@@ -128,6 +127,5 @@ export function buildWeekFacts(
     question: quiet ? null : chooseQuestion(facts, opts.lastQuestion ?? null),
     names: [...names].sort((a, b) => a.localeCompare(b)),
     releasesChecked: inputs.releases !== undefined,
-    cardAlbums: cardAlbums(facts, ctx.runs, weeks[0]),
   };
 }

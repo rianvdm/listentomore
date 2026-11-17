@@ -82,7 +82,7 @@ export function logSafeFailures(failures: readonly string[]): string[] {
 }
 
 /**
- * A key's family, its first two segments ('insights:card', 'lastfm:toplist'), for log lines: the rest of a key holds
+ * A key's family, its first two segments ('insights:facts', 'lastfm:toplist'), for log lines: the rest of a key holds
  * a username or a name.
  */
 const keyFamily = (key: string): string => key.split(':').slice(0, 2).join(':');
