@@ -51,6 +51,22 @@ describe('deleteUserInsightsData', () => {
     expect(kv.delete).toHaveBeenCalledWith('insights:last:alice');
   });
 
+  it('deletes the retired insights:card and insights:question keys by exact key, never by prefix', async () => {
+    const kv = createMockKV();
+    const neighbours = ['insights:card:alice2', 'insights:question:alice2'];
+    await seed(kv, ['insights:card:alice', 'insights:question:alice', ...neighbours]);
+
+    const deleted = await deleteUserInsightsData(kv, 'Alice');
+
+    expect(deleted).toBe(2);
+    expect(await remaining(kv)).toEqual(neighbours);
+    expect(kv.delete).toHaveBeenCalledWith('insights:card:alice');
+    expect(kv.delete).toHaveBeenCalledWith('insights:question:alice');
+    const prefixes = (kv.list as ReturnType<typeof vi.fn>).mock.calls
+      .map(([options]) => (options as { prefix?: string } | undefined)?.prefix ?? '');
+    expect(prefixes.filter((p) => p.startsWith('insights:card') || p.startsWith('insights:question'))).toEqual([]);
+  });
+
   it("never deletes a user whose name starts with this user's name", async () => {
     const kv = createMockKV();
     await seed(kv, [...ALICE, ...ALICE2]);

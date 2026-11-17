@@ -12,6 +12,16 @@ function lastfmExactKeys(lower: string): string[] {
 }
 
 /**
+ * Transitional: the per-user keys of the retired insights card and closing question, which nothing reads or writes
+ * any more but which can outlive the change (card 8 days, question 60 days). Deleted by exact key, never by prefix
+ * ('insights:card:alice' is a prefix of 'insights:card:alice2'). Remove this list once the retired-key purge
+ * (apps/web/scripts/delete-retired-insights-keys.ts) has run in production and verified zero counts.
+ */
+function retiredExactKeys(lower: string): string[] {
+  return [`insights:card:${lower}`, `insights:question:${lower}`];
+}
+
+/**
  * Prefixes outside @listentomore/insights. The per-user artist detail is keyed on the lower-cased
  * name (artist-detail.ts). Top artists, top albums and loved tracks are keyed on the username as the
  * LastfmService was given it (top-artists.ts, top-albums.ts, loved-tracks.ts), which is usually the
@@ -58,7 +68,7 @@ export async function deleteUserInsightsData(kv: KVNamespace, lastfmUsername: st
   let deleted = 0;
 
   // Every exact key is deleted; the read only decides whether it counts, so a stale read never skips one.
-  for (const key of [...userExactKeys(lower), ...lastfmExactKeys(lower)]) {
+  for (const key of [...userExactKeys(lower), ...lastfmExactKeys(lower), ...retiredExactKeys(lower)]) {
     const existed = (await kv.get(key)) !== null;
     await kv.delete(key);
     if (existed) deleted++;
