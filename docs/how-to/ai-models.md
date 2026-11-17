@@ -60,9 +60,9 @@ Everything goes to `apps/web/eval-output/<label>/insights/` (gitignored): one JS
 No pass rate gates the run. The owner reads the notes and decides. Exit codes:
 
 - `0`: the run finished, whatever the flags say.
-- `2`: the run could not start: an option it doesn't take, a bad `--label` or `--extra`, or a missing key.
+- `2`: the run could not start: an option it doesn't take, a bad `--label` or `--extra`, a fixture whose facts can't be built, or a missing key.
 
-The eval calls the live API and spends real money, so it never runs in CI; run it by hand. Keys come from `apps/web/.dev.vars` only (never `process.env`): `ANTHROPIC_API_KEY` while `userInsightsSummary` runs on Anthropic. A missing key stops the run before any live call.
+The eval calls the live API and spends real money, so it never runs in CI; run it by hand. Keys come from `apps/web/.dev.vars` only (never `process.env`): `ANTHROPIC_API_KEY` while `userInsightsSummary` runs on Anthropic. A missing key stops the run before any live call. Before it reads the keys, the eval builds every fixture's facts and prompt view, so a malformed fixture stops the run, named by its label (`extra-2`, never the file name), before anything is spent.
 
 ---
 

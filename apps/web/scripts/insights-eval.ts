@@ -8,10 +8,11 @@
 // --extra <dir>. Extra fixtures may belong to other listeners, so their output is labelled extra-1, extra-2, ... in
 // file-name order, and the file names appear only on the console, never in eval-output/.
 //
-// For each fixture: buildWeekFacts. A week under MIN_WEEK_PLAYS or NOTE_MIN_PLAYS plays is recorded as skipped with
-// the code line the owner would see (none under MIN_WEEK_PLAYS, where the route shows its sparse message). Otherwise
-// one writeWeekNote, as the route runs it: up to NOTE_ATTEMPTS calls, keeping the first note that passes checkNote, and
-// the code line when none does.
+// First, before any key is read or call made, a preflight runs buildWeekFacts and renderPromptView on every fixture; one
+// that cannot be built stops the run, named by its label (extra-<n> for --extra ones). Then, for each fixture: a week
+// under MIN_WEEK_PLAYS or NOTE_MIN_PLAYS plays is recorded as skipped with the code line the owner would see (none
+// under MIN_WEEK_PLAYS, where the route shows its sparse message). Otherwise one writeWeekNote, as the route runs it:
+// up to NOTE_ATTEMPTS calls, keeping the first note that passes checkNote, and the code line when none does.
 //
 // Writes eval-output/<label>/insights/<fixture>.json (the prompt view, every attempt with its raw reply, tokens, cost
 // and ms, the final note and its flags) and eval-output/<label>/insights/summary.md. For each fixture, summary.md shows
@@ -21,8 +22,8 @@
 //
 // Spends real money and never runs in CI. Keys come from apps/web/.dev.vars only, never process.env. Exit code 0 means
 // the run finished; 2 means it could not start: an unsupported option (the removed --dry-run and --trivia included), a
-// bad --label or --extra, or a missing key. The options are checked before .dev.vars is read, and everything before
-// the first call.
+// bad --label or --extra, a fixture that fails the preflight, or a missing key. The options and the preflight come
+// before .dev.vars is read, and everything before the first call.
 
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { AIService, USER_INSIGHTS_VOICE_EXAMPLES } from '@listentomore/ai';
 import type { AIResponseMetadata, WeekNote } from '@listentomore/ai';
 import { AI_TASKS } from '@listentomore/config';
-import { buildWeekFacts, renderLine, renderPromptView } from '@listentomore/insights';
+import { renderLine } from '@listentomore/insights';
 import type { NoteCheckFailure, WeekFacts, WeekInputs } from '@listentomore/insights';
 import { writeWeekNote } from '../src/api/internal/insights-note';
 import type { NoteAttempt } from '../src/api/internal/insights-note';
@@ -43,10 +44,11 @@ import {
   goldKey,
   missingDevVarsError,
   parseEvalArgs,
+  preflightFixtures,
   requiredDevVars,
   wordCount,
 } from './insights-eval-lib';
-import type { FixtureTag } from './insights-eval-lib';
+import type { FixtureTag, PreparedFixture } from './insights-eval-lib';
 import { checkEvalRubric } from './insights-rubric';
 import type { RubricHit } from './insights-rubric';
 import { createMemoryKV, readDevVars } from './script-env';
@@ -231,9 +233,11 @@ function attemptRecord(attempt: NoteAttempt, call: CallRecord | undefined, index
   };
 }
 
-async function runFixture(fixture: Fixture, keys: { openai: string; anthropic: string }): Promise<FixtureRecord> {
-  const wf = buildWeekFacts(fixture.inputs);
-  const promptView = renderPromptView(wf);
+async function runFixture(
+  fixture: PreparedFixture<Fixture>,
+  keys: { openai: string; anthropic: string },
+): Promise<FixtureRecord> {
+  const { wf, promptView } = fixture;
   const skipped = skipReason(wf);
   const record: FixtureRecord = {
     fixture: fixture.name,
@@ -279,7 +283,7 @@ async function runFixture(fixture: Fixture, keys: { openai: string; anthropic: s
 }
 
 /** Runs fixtures with bounded concurrency, keeping input order in the result. */
-async function runAll(fixtures: Fixture[], run: (f: Fixture) => Promise<FixtureRecord>): Promise<FixtureRecord[]> {
+async function runAll<F>(fixtures: F[], run: (f: F) => Promise<FixtureRecord>): Promise<FixtureRecord[]> {
   const results = new Array<FixtureRecord>(fixtures.length);
   let next = 0;
   let done = 0;
@@ -392,12 +396,13 @@ function gitRef(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns 0 when the run finishes. Every check that can stop the run (the flags, the fixtures and their names, the
- * keys) comes before the first call; a throw exits with code 2 below.
+ * Returns 0 when the run finishes. Every check that can stop the run (the flags, the fixtures, their names and their
+ * preflight, the keys) comes before the first call; a throw exits with code 2 below.
  */
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
-  const fixtures = loadFixtures(args.extra);
+  // Every fixture is built before .dev.vars is read, so a bad one costs nothing and loses no finished output.
+  const fixtures = preflightFixtures(loadFixtures(args.extra));
   const gold = loadGold();
 
   // Keys come from apps/web/.dev.vars only, and every one the run needs is checked before any live call.

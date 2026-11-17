@@ -1,9 +1,12 @@
 // ABOUTME: Tests for scripts/insights-eval-lib.ts: the arguments, the output directory, fixture tags and gold keys, phrases copied
 // ABOUTME: from the voice examples, word counts, and the .dev.vars keys a live run needs.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { join } from 'node:path';
 import { USER_INSIGHTS_VOICE_EXAMPLES } from '@listentomore/ai';
+import { buildWeekFacts, renderPromptView } from '@listentomore/insights';
+import type { WeekInputs } from '@listentomore/insights';
+import may24Json from '../../../../../packages/services/insights/__fixtures__/bordesak-2026-05-24.json';
 import {
   copiedPhrases,
   evalOutputDir,
@@ -11,6 +14,7 @@ import {
   goldKey,
   missingDevVarsError,
   parseEvalArgs,
+  preflightFixtures,
   requiredDevVars,
   wordCount,
 } from '../../../scripts/insights-eval-lib';
@@ -73,6 +77,46 @@ describe('fixtureTag and goldKey', () => {
   it('refuses a fixture name it cannot tag', () => {
     expect(() => fixtureTag('week-of-plays')).toThrow(/fixture name/);
     expect(goldKey('week-of-plays')).toBeNull();
+  });
+});
+
+describe('preflightFixtures', () => {
+  const MAY24 = may24Json as unknown as WeekInputs;
+  const valid = { name: 'bordesak-2026-05-24', inputs: MAY24 };
+  // Passes the loader's shape check (username, now, scrobbles) but has no history lists, so buildWeekFacts throws.
+  const invalid = {
+    name: 'extra-2',
+    inputs: { username: 'someone-else', now: MAY24.now, scrobbles: MAY24.scrobbles } as unknown as WeekInputs,
+  };
+
+  it("builds every fixture's week facts and prompt view", () => {
+    const [prepared] = preflightFixtures([valid]);
+    const wf = buildWeekFacts(MAY24);
+    expect(prepared.name).toBe(valid.name);
+    expect(prepared.wf).toEqual(wf);
+    expect(prepared.promptView).toBe(renderPromptView(wf));
+  });
+
+  it('stops on a fixture whose facts cannot be built, naming its label and nothing from it', () => {
+    let message = '';
+    try {
+      preflightFixtures([valid, invalid]);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/extra-2/);
+    expect(message).not.toContain('someone-else');
+    expect(message).not.toMatch(/\.json/);
+  });
+
+  it('a run that preflights first makes no model call when one fixture is invalid, even after valid ones', () => {
+    const callModel = vi.fn();
+    const run = (fixtures: Array<{ name: string; inputs: WeekInputs }>): void => {
+      for (const f of preflightFixtures(fixtures)) callModel(f.promptView);
+    };
+
+    expect(() => run([valid, valid, invalid])).toThrow(/extra-2/);
+    expect(callModel).not.toHaveBeenCalled();
   });
 });
 

@@ -1,8 +1,9 @@
 // ABOUTME: Pure helpers for scripts/insights-eval.ts: its arguments, the output directory kept inside eval-output/,
-// ABOUTME: fixture tags and gold keys, phrases copied from the voice examples, word counts, and the .dev.vars keys.
+// ABOUTME: the fixture preflight, tags and gold keys, phrases copied from the examples, word counts, and .dev.vars keys.
 
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { matchKey } from '@listentomore/insights';
+import { buildWeekFacts, matchKey, renderPromptView } from '@listentomore/insights';
+import type { WeekFacts, WeekInputs } from '@listentomore/insights';
 
 /** The eval's arguments as given: the run label and the --extra directory, unchecked on disk. */
 export interface EvalArgs {
@@ -81,6 +82,26 @@ export function goldKey(name: string): string | null {
   if (EXTRA_NAME.test(name)) return null;
   const match = COMMITTED_NAME.exec(name);
   return match && !match[1] ? match[2] : null;
+}
+
+/** A fixture with the week facts and prompt view the run sends to the model. */
+export type PreparedFixture<F> = F & { wf: WeekFacts; promptView: string };
+
+/**
+ * Builds every fixture's week facts and prompt view before the run makes its first model call, so a fixture that
+ * passes the loader's shape check but cannot be built stops the run before any money is spent, not part-way through
+ * it. Throws naming the fixture's label (`extra-<n>` for --extra fixtures, never the file name) and nothing from the
+ * fixture or the error, whose message can quote listening data.
+ */
+export function preflightFixtures<F extends { name: string; inputs: WeekInputs }>(fixtures: F[]): Array<PreparedFixture<F>> {
+  return fixtures.map((fixture) => {
+    try {
+      const wf = buildWeekFacts(fixture.inputs);
+      return { ...fixture, wf, promptView: renderPromptView(wf) };
+    } catch {
+      throw new Error(`fixture ${fixture.name} failed preflight: its week facts or prompt view could not be built`);
+    }
+  });
 }
 
 /** `text` as matchKey words: lowercase, accents and punctuation dropped. */
