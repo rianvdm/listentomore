@@ -1,4 +1,4 @@
-// ABOUTME: Tests for scripts/insights-eval-lib.ts: the output directory, fixture tags and gold keys, phrases copied
+// ABOUTME: Tests for scripts/insights-eval-lib.ts: the arguments, the output directory, fixture tags and gold keys, phrases copied
 // ABOUTME: from the voice examples, word counts, and the .dev.vars keys a live run needs.
 
 import { describe, it, expect } from 'vitest';
@@ -10,11 +10,35 @@ import {
   fixtureTag,
   goldKey,
   missingDevVarsError,
+  parseEvalArgs,
   requiredDevVars,
   wordCount,
 } from '../../../scripts/insights-eval-lib';
 
 const WEB_ROOT = '/repo/apps/web';
+
+describe('parseEvalArgs', () => {
+  it('parses --label and an optional --extra', () => {
+    expect(parseEvalArgs(['--label', 'x'])).toEqual({ label: 'x', extra: null });
+    expect(parseEvalArgs(['--label', 'x', '--extra', 'd'])).toEqual({ label: 'x', extra: 'd' });
+    expect(parseEvalArgs(['--extra', 'd', '--label', 'x'])).toEqual({ label: 'x', extra: 'd' });
+  });
+
+  it('rejects the removed and unknown options by name', () => {
+    expect(() => parseEvalArgs(['--label', 'x', '--dry-run'])).toThrow(/--dry-run/);
+    expect(() => parseEvalArgs(['--label', 'x', '--trivia'])).toThrow(/--trivia/);
+    expect(() => parseEvalArgs(['--foo', '--label', 'x'])).toThrow(/--foo/);
+    expect(() => parseEvalArgs(['--label', 'x', 'stray'])).toThrow(/stray/);
+  });
+
+  it('needs --label, a value after each flag, and each flag once', () => {
+    expect(() => parseEvalArgs([])).toThrow(/--label <name> is required/);
+    expect(() => parseEvalArgs(['--extra', 'd'])).toThrow(/--label <name> is required/);
+    expect(() => parseEvalArgs(['--label'])).toThrow(/--label needs a value/);
+    expect(() => parseEvalArgs(['--label', '--extra', 'd'])).toThrow(/--label needs a value/);
+    expect(() => parseEvalArgs(['--label', 'x', '--label', 'y'])).toThrow(/--label given twice/);
+  });
+});
 
 describe('evalOutputDir', () => {
   it('puts a run under eval-output/<label>/insights', () => {

@@ -20,7 +20,9 @@
 // voice examples, and the word count, marked when it is outside 120-200. No pass rate gates the run.
 //
 // Spends real money and never runs in CI. Keys come from apps/web/.dev.vars only, never process.env. Exit code 0 means
-// the run finished; 2 means it could not start (a bad --label or --extra, or a missing key, named before any call).
+// the run finished; 2 means it could not start: an unsupported option (the removed --dry-run and --trivia included), a
+// bad --label or --extra, or a missing key. The options are checked before .dev.vars is read, and everything before
+// the first call.
 
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -40,6 +42,7 @@ import {
   fixtureTag,
   goldKey,
   missingDevVarsError,
+  parseEvalArgs,
   requiredDevVars,
   wordCount,
 } from './insights-eval-lib';
@@ -126,20 +129,12 @@ interface FixtureRecord {
 // Setup
 // ---------------------------------------------------------------------------
 
+/** parseEvalArgs, then the checks that touch the disk: the output directory and the --extra directory. */
 function parseArgs(argv: string[]): CliArgs {
-  const valueOf = (flag: string): string | undefined => {
-    const i = argv.indexOf(flag);
-    if (i < 0) return undefined;
-    const value = argv[i + 1];
-    if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
-    return value;
-  };
-  const label = valueOf('--label');
-  if (!label) throw new Error('--label <name> is required');
+  const { label, extra } = parseEvalArgs(argv);
   const outDir = evalOutputDir(WEB_ROOT, label);
-  const extra = valueOf('--extra');
-  if (extra !== undefined && !existsSync(extra)) throw new Error('--extra directory does not exist');
-  return { label, outDir, extra: extra === undefined ? null : resolve(extra) };
+  if (extra !== null && !existsSync(extra)) throw new Error('--extra directory does not exist');
+  return { label, outDir, extra: extra === null ? null : resolve(extra) };
 }
 
 const isWeekInputs = (value: unknown): value is WeekInputs => {

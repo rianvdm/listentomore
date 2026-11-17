@@ -1,8 +1,37 @@
-// ABOUTME: Pure helpers for scripts/insights-eval.ts: the output directory kept inside eval-output/, fixture tags and
-// ABOUTME: gold keys, phrases copied from the voice examples, word counts, and the .dev.vars keys a live run needs.
+// ABOUTME: Pure helpers for scripts/insights-eval.ts: its arguments, the output directory kept inside eval-output/,
+// ABOUTME: fixture tags and gold keys, phrases copied from the voice examples, word counts, and the .dev.vars keys.
 
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { matchKey } from '@listentomore/insights';
+
+/** The eval's arguments as given: the run label and the --extra directory, unchecked on disk. */
+export interface EvalArgs {
+  label: string;
+  extra: string | null;
+}
+
+const EVAL_FLAGS = ['--label', '--extra'] as const;
+type EvalFlag = (typeof EVAL_FLAGS)[number];
+const isEvalFlag = (arg: string): arg is EvalFlag => (EVAL_FLAGS as readonly string[]).includes(arg);
+
+/**
+ * `--label <name> [--extra <dir>]`, in either order. Throws, naming the argument, for anything else: an unknown or
+ * removed option such as --dry-run or --trivia, a stray value, a flag without a value or a flag given twice. The run
+ * must never go ahead with an option it ignores, since it spends money.
+ */
+export function parseEvalArgs(argv: string[]): EvalArgs {
+  const values: Partial<Record<EvalFlag, string>> = {};
+  for (let i = 0; i < argv.length; i += 2) {
+    const flag = argv[i];
+    if (!isEvalFlag(flag)) throw new Error(`unsupported argument ${flag}: the eval takes --label <name> [--extra <dir>]`);
+    if (values[flag] !== undefined) throw new Error(`${flag} given twice`);
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
+    values[flag] = value;
+  }
+  if (!values['--label']) throw new Error('--label <name> is required');
+  return { label: values['--label'], extra: values['--extra'] ?? null };
+}
 
 /**
  * `<webRoot>/eval-output/<label>/insights`. Throws for a label that is empty, holds anything but letters, digits, dot,
