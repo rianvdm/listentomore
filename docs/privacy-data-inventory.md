@@ -84,13 +84,13 @@ Providers and models come from `packages/config/src/ai.ts` (`AI_TASKS`).
 | **Image hosts** | Album art and Last.fm avatars are URLs returned by Spotify and Last.fm, loaded by the visitor's browser from those services' servers; a fallback image loads from `file.elezea.com` | `pages/auth/lastfm.ts:151,224` (avatar URL stored); `packages/services/lastfm/src/top-artists.ts:8`; `pages/user/insights.tsx:250` |
 | **Cloudflare** | Hosts the Worker, D1 database, KV and Durable Object. Workers Observability logs, traces and Issues are enabled (`[observability]`, `[observability.traces]`, sampling 100%). Retention of those logs and exactly which request fields they hold are **unconfirmed** | `apps/web/wrangler.toml:19-34` |
 
-What the insights page sends to Anthropic. There are two calls.
+What the insights page sends to Anthropic. There are two kinds of call.
 
 The week note (`apps/web/src/api/internal/insights-week.ts:262-289`, `insights-note.ts:10,33-56`; prompt `packages/services/ai/src/prompts/user-insights-note.ts:8,48-75`, version `v8`; prompt view `packages/services/insights/src/render.ts:40-57`):
 
 - The site first computes the week's facts in code from the cached history in section 5 (`insights-week.ts:209-250`). The model gets only a text view of them: the week's dates in the owner's time zone (or UTC) with the play count and the usual week, the top ten ranked facts (each a sentence naming artists or albums with play counts, and for a `release_week` fact the album's Spotify release date), the week's top artists with a label for how well the listener knows each, the week's top five albums with play counts, and caveats about the data.
 - Only the owner's own request calls the model, and only on a week with 30 or more deduplicated plays whose note is not cached. A signed-in visitor of a public profile gets a line written by the site's code, with no model call; the request still computes and caches that profile's facts and history, without release lookups (`insights-week.ts:241,244,256-260`). The owner's next load recomputes facts a visitor computed, so release lookups run (`insights-week.ts:157-158`). A visitor never gets the owner's note.
-- At most two calls per uncached week: a reply that can't be parsed, or a note that fails `checkNote` (`packages/services/insights/src/check.ts:25-38`), is asked for once more. If neither passes, the owner gets the code-written line (`insights-week.ts:285-288`).
+- At most two calls per generation run: a reply that can't be parsed, or a note that fails `checkNote` (`packages/services/insights/src/check.ts:25-38`), is asked for once more (`insights-note.ts:10,36-54`). If neither passes, the owner gets the code-written line and no note is cached, so the owner's next request for that week runs again, with up to two more calls (`insights-week.ts:267,275,285-288`).
 - It does **not** send the username, display name, session key, bio, IP address, the timezone name or any account field.
 
 The album picks (`apps/web/src/api/internal/insights.ts:161-283`; prompt `packages/services/ai/src/prompts/user-insights-recommendations.ts:69-120`), unchanged by the note redesign:
