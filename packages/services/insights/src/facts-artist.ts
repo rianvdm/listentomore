@@ -37,7 +37,7 @@ const isNew = (a: ArtistWeek): a is New =>
 
 const byPlaysThenName = (a: ArtistWeek, b: ArtistWeek): number => b.plays - a.plays || a.artist.localeCompare(b.artist);
 
-interface PlayDay { ts: number; label: string; plays: number }
+interface PlayDay { ts: number; plays: number }
 
 /** The days an artist was played this week, in time order; `ts` is the day's first play. */
 function playDays(ctx: FactContext, artist: string): PlayDay[] {
@@ -47,7 +47,7 @@ function playDays(ctx: FactContext, artist: string): PlayDay[] {
     const label = dayLabel(s.ts, ctx.inputs.timezone);
     const day = days.get(label);
     if (day) day.plays++;
-    else days.set(label, { ts: s.ts, label, plays: 1 });
+    else days.set(label, { ts: s.ts, plays: 1 });
   }
   return [...days.values()];
 }

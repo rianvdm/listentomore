@@ -3,7 +3,12 @@
 
 import type { Draft, Fact } from './types';
 
-/** A week whose top fact scores under this is quiet: no model call, a code sentence instead. */
+/**
+ * A week whose top fact scores under this is quiet (`WeekFacts.quiet`). Its code-rendered line, which is the visitor's
+ * line and the owner's fallback when no note is written or none passes, is the quiet sentence rather than the lead
+ * fact's, and a visitor's response carries mode `quiet`. It does not gate the owner's model call; NOTE_MIN_PLAYS in
+ * apps/web/src/api/internal/insights-week.ts does.
+ */
 export const QUIET_THRESHOLD = 50;
 
 const clamp = (salience: number): number => Math.min(100, Math.max(0, salience));

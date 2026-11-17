@@ -76,7 +76,7 @@ export async function noteSignature(wf: WeekFacts, promptVersion: string): Promi
   ]);
 }
 
-/** The first 16 hex characters of SHA-256 over `payload` as JSON: the cache signature of the note and the card. */
+/** The first 16 hex characters of SHA-256 over `payload` as JSON: the note's cache signature. */
 export async function hashSignature(payload: unknown): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, SIGNATURE_HEX);
