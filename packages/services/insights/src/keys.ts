@@ -1,5 +1,5 @@
 // ABOUTME: KV keys for the insights pipeline: per-user history partitions and lookups, global tracklists and
-// ABOUTME: tags, the per-user facts, question, marker and last-note keys, and delete lists.
+// ABOUTME: tags, the per-user facts, marker and last-note keys, and delete lists.
 
 import { norm } from './text';
 
@@ -29,8 +29,6 @@ export const keys = {
   topTags: (artist: string): string => `lastfm:toptags:${norm(artist)}`,
   /** The user's computed WeekFacts. */
   facts: (user: string): string => `insights:facts:${u(user)}`,
-  /** The owner's last question, for rotation. */
-  question: (user: string): string => `insights:question:${u(user)}`,
   /** Set while a generation runs. */
   generating: (user: string): string => `insights:generating:${u(user)}`,
   /** `{ signature }` of the note last served to the owner. */
@@ -57,5 +55,5 @@ export function userKeyPrefixes(user: string): string[] {
  * 'insights:facts:alice' is a prefix of 'insights:facts:alice2'.
  */
 export function userExactKeys(user: string): string[] {
-  return [keys.facts(user), keys.question(user), keys.generating(user), keys.last(user)];
+  return [keys.facts(user), keys.generating(user), keys.last(user)];
 }

@@ -261,7 +261,7 @@ export class AIService {
 
   /**
    * Generate the weekly insights note from a prompt view (provider determined
-   * by config). Uncached: the route guards the sentences and owns caching.
+   * by config). Uncached: the route checks the note and owns caching.
    */
   async getUserInsightsNote(promptView: string) {
     const { generateUserInsightsNote } = await import(

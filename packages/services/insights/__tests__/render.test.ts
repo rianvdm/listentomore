@@ -37,7 +37,7 @@ const withoutNames = (text: string, wf: WeekFacts): string =>
   [...wf.names].sort((a, b) => b.length - a.length).reduce((t, name) => t.split(name).join('#'), text);
 
 const sample = (kind: FactKind, over: Partial<Fact>): Fact => ({
-  id: 1, kind, salience: 70, subject: null, statement: 'Unused by the line.', entities: [], albums: [], quantities: [], dates: [], edges: [],
+  id: 1, kind, salience: 70, subject: null, statement: 'Unused by the line.', entities: [], quantities: [], dates: [],
   ...over,
 });
 
@@ -182,7 +182,6 @@ describe('renderPromptView', () => {
     for (const n of FIXTURES) {
       const wf = buildWeekFacts(loadFixture(n));
       const view = renderPromptView(wf);
-      if (wf.question) expect(view).not.toContain(wf.question.text);
       for (const line of view.split('\n')) expect(withoutNames(line, wf)).not.toContain('?');
     }
   });

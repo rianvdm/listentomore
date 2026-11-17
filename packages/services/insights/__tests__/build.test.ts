@@ -1,10 +1,10 @@
-// ABOUTME: Tests for ranking and buildWeekFacts - fixture leads, baselines, truncation, merging, the quiet rule
-// ABOUTME: and the code-chosen question (spec section 2, "Merging", "Quiet week", "Question"; section 1 caps).
+// ABOUTME: Tests for ranking and buildWeekFacts - fixture leads, baselines, truncation, merging and the quiet rule
+// ABOUTME: (spec section 2, "Merging" and "Quiet week"; section 1 caps).
 
 import {
-  QUIET_THRESHOLD, TRUNCATED_CAVEAT, albumKey, albumRuns, buildWeekFacts, chooseQuestion, dayLabel, dedupe, rankFacts, weekWindow,
+  QUIET_THRESHOLD, TRUNCATED_CAVEAT, albumKey, albumRuns, buildWeekFacts, dayLabel, dedupe, rankFacts, weekWindow,
 } from '../src';
-import type { Draft, Fact, FactKind, QuestionOption, Scrobble } from '../src';
+import type { Draft, Fact, FactKind, Scrobble } from '../src';
 import { NOW, expectGrounded, loadFixture, makeInputs, plays, ts } from './helpers';
 
 const FIXTURES = ['bordesak-2026-05-24', 'bordesak-2026-05-31', 'bordesak-2026-06-12'];
@@ -14,11 +14,9 @@ const SHARE_KINDS: FactKind[] = ['album_mode', 'themed_block'];
 const kinds = (facts: Fact[]): FactKind[] => facts.map((f) => f.kind);
 
 const draft = (over: Partial<Draft>): Draft => ({
-  kind: 'discovery', salience: 50, subject: null, statement: 'A fact.', entities: [], albums: [], quantities: [], dates: [], edges: [],
+  kind: 'discovery', salience: 50, subject: null, statement: 'A fact.', entities: [], quantities: [], dates: [],
   ...over,
 });
-
-const fact = (over: Partial<Fact>): Fact => ({ id: 1, ...draft(over), ...over });
 
 const MON = ts('2026-11-02T10:00:00');
 const WED = ts('2026-11-04T10:00:00');
@@ -28,7 +26,6 @@ describe('fixture leads', () => {
     const wf = buildWeekFacts(loadFixture('bordesak-2026-05-24'));
     expect(wf.facts[0]).toMatchObject({ id: 1, kind: 'genre_cluster', subject: 'jazz' });
     expect(wf.facts[1]).toMatchObject({ kind: 'volume_vs_normal', subject: 'Boards of Canada' });
-    expect(wf.question?.text).toBe('What got you back into jazz this week?');
     expect(wf.plays).toMatchObject({ raw: 488, deduped: 455 });
   });
 
@@ -36,7 +33,6 @@ describe('fixture leads', () => {
     const wf = buildWeekFacts(loadFixture('bordesak-2026-06-12'));
     expect(wf.facts.slice(0, 3).map((f) => f.subject)).toEqual(['Siiga', 'Celer', 'The Police']);
     expect(wf.facts[0].kind).toBe('discovery');
-    expect(wf.question).toBeNull();
   });
 
   // Spec section 2's start_to_finish rule (>= 90% of the tracklist, including its first and last track) makes the
@@ -78,11 +74,10 @@ describe('fixture leads', () => {
 });
 
 describe('buildWeekFacts', () => {
-  it('an empty week is quiet with no facts and no question', () => {
+  it('an empty week is quiet with no facts', () => {
     const wf = buildWeekFacts(makeInputs({}));
     expect(wf.quiet).toBe(true);
     expect(wf.facts).toEqual([]);
-    expect(wf.question).toBeNull();
     expect(wf.baseline).toBe('none');
     expect(wf.priorAverage).toBeNull();
     expect(wf.windowFact.statement).toBe('Week: Sun Nov 1 to Sun Nov 8 (rolling 7 days). 0 plays.');
@@ -239,25 +234,14 @@ describe('buildWeekFacts', () => {
     expect(wf.facts[0]).toMatchObject({ kind: 'discovery', subject: 'Newcomer', salience: 58 }); // 40 + 60 * 9/30
     expect(wf.facts[0].salience).toBeGreaterThanOrEqual(QUIET_THRESHOLD);
     expect(wf.quiet).toBe(false);
-    expect(wf.question?.kind).toBe('where_from');
   });
 
-  it('a week whose top fact scores under the threshold is quiet and has no question', () => {
+  it('a week whose top fact scores under the threshold is quiet', () => {
     // No album, so no runs: the only fact is last week's top artist fading, at 45.
     const lastWeek = weekWindow(NOW, 1).from + 3600;
     const wf = buildWeekFacts(makeInputs({ scrobbles: [...plays('Old', 10, lastWeek, ''), ...plays('Someone', 30, MON, '')] }));
     expect(wf.facts.map((f) => [f.kind, f.salience])).toEqual([['last_week_faded', 45]]);
     expect(wf.quiet).toBe(true);
-    expect(wf.question).toBeNull();
-  });
-
-  it('passes the last question through to the rotation', () => {
-    const inputs = makeInputs({
-      scrobbles: plays('Newcomer', 9, MON),
-      artistLifetime: { Newcomer: { count: 9, fetchedAt: NOW } },
-    });
-    expect(buildWeekFacts(inputs).question?.kind).toBe('where_from');
-    expect(buildWeekFacts(inputs, { lastQuestion: { kind: 'where_from', subject: 'Someone else' } }).question?.kind).toBe('started');
   });
 });
 
@@ -294,7 +278,6 @@ describe('rankFacts', () => {
     kind: 'single_listen', salience: 70, subject: BOC,
     statement: 'Boards of Canada on Fri May 29: Inferno start to finish in one run; the album had 0 track plays before this week.',
     entities: [BOC, 'Inferno'],
-    albums: [{ artist: BOC, album: 'Inferno' }],
     quantities: [{ value: 1, unit: 'times', entity: 'Inferno' }, { value: 0, unit: 'plays', entity: 'Inferno' }],
     dates: [ts('2026-05-29T20:00:00')],
     ...over,
@@ -315,15 +298,6 @@ describe('rankFacts', () => {
     expect(facts[0].quantities).toContainEqual({ value: 0, unit: 'plays', entity: 'Inferno' });
     expect(facts[0].quantities).toContainEqual({ value: 1, unit: 'times', entity: 'Inferno' }); // "in one run" stays grounded
     expectGrounded(facts[0]);
-  });
-
-  it('a folded single listen carries its album into the host', () => {
-    const facts = rankFacts([volumeOf(), inferno()]);
-    expect(facts).toHaveLength(1);
-    expect(facts[0].albums).toEqual([{ artist: BOC, album: 'Inferno' }]);
-    // An album the host already records is not recorded twice.
-    const twice = rankFacts([volumeOf({ albums: [{ artist: BOC, album: 'Inferno' }] }), inferno()]);
-    expect(twice[0].albums).toEqual([{ artist: BOC, album: 'Inferno' }]);
   });
 
   it('a volume fact that does not name the listen\'s day has the day written in', () => {
@@ -371,35 +345,5 @@ describe('rankFacts', () => {
     expect(boc?.dates.map((d) => dayLabel(d, wf.timezone))).toContain('Fri May 29');
     expect(wf.facts.filter((f) => f.kind === 'single_listen' && f.subject === BOC)).toEqual([]);
     if (boc) expectGrounded(boc, wf.timezone);
-  });
-});
-
-describe('chooseQuestion', () => {
-  const where: QuestionOption = { kind: 'where_from', text: 'Where did you come across Siiga?' };
-  const started: QuestionOption = { kind: 'started', text: 'What got you started on Siiga this week?' };
-  const lead = fact({ id: 1, subject: 'Siiga', edges: [where, started] });
-
-  it('takes the lead fact\'s first edge with no stored question', () => {
-    expect(chooseQuestion([lead], null)).toEqual({ ...where, subject: 'Siiga' });
-  });
-
-  it('the question keeps the same text for the same subject and rotates kind for a new one', () => {
-    expect(chooseQuestion([lead], { kind: 'started', subject: 'Siiga' })).toEqual({ ...started, subject: 'Siiga' });
-    expect(chooseQuestion([lead], { kind: 'where_from', subject: 'Siiga' })).toEqual({ ...where, subject: 'Siiga' });
-    expect(chooseQuestion([lead], { kind: 'where_from', subject: 'Celer' })).toEqual({ ...started, subject: 'Siiga' });
-  });
-
-  it('falls to rank 2 when rank 1 has no edge, or none that rotates away', () => {
-    const after: QuestionOption = { kind: 'after', text: 'What happened with Celer after Wed Jun 17?' };
-    const second = fact({ id: 2, subject: 'Celer', edges: [after] });
-    expect(chooseQuestion([fact({ id: 1, subject: 'X' }), second], null)).toEqual({ ...after, subject: 'Celer' });
-    const onlyWhere = fact({ id: 1, subject: 'Siiga', edges: [where] });
-    expect(chooseQuestion([onlyWhere, second], { kind: 'where_from', subject: 'Someone' })).toEqual({ ...after, subject: 'Celer' });
-  });
-
-  it('no question when neither of the top two facts has an edge', () => {
-    const third = fact({ id: 3, subject: 'Z', edges: [where] });
-    expect(chooseQuestion([fact({ id: 1, subject: 'X' }), fact({ id: 2, subject: 'Y' }), third], null)).toBeNull();
-    expect(chooseQuestion([], null)).toBeNull();
   });
 });

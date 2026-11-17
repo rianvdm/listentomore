@@ -1,5 +1,5 @@
 // ABOUTME: Renders a WeekFacts object as the model's prompt view, the note signature for the reuse rule, and the
-// ABOUTME: code-written line for visitors, quiet weeks and the guard's fallback (spec sections 2, 4 and 5).
+// ABOUTME: code-written line for visitors, quiet weeks and a note that fails its check (spec sections 2, 4 and 5).
 
 import { FIRST_UNDER_THIS_NAME, plural } from './facts-shared';
 import type { Fact, Quantity, Tier, Unit, WeekFacts } from './types';
@@ -39,8 +39,7 @@ function topAlbumsLine(wf: WeekFacts): string {
 
 /**
  * The model's input: fact 0 (the window line), the first PROMPT_FACTS facts numbered by id, the top artists with tier
- * labels, the top albums and the caveats. Never the question: the model does not see or write it (spec section 2,
- * "Question").
+ * labels, the top albums and the caveats.
  */
 export function renderPromptView(wf: WeekFacts): string {
   const top = wf.facts.slice(0, PROMPT_FACTS);
@@ -239,7 +238,7 @@ function quietLine(wf: WeekFacts, person: Person): string {
 
 /**
  * The code-rendered sentence: for the rank-1 fact in second person (the owner's fallback) or third person (the
- * visitor's line, spec section 4), or the quiet sentence when the week is quiet. No question, no adjectives for music.
+ * visitor's line, spec section 4), or the quiet sentence when the week is quiet. No adjectives for music.
  */
 export function renderLine(wf: WeekFacts, person: Person): string {
   const lead = wf.facts[0];

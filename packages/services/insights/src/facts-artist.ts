@@ -1,14 +1,14 @@
 // ABOUTME: Artist-level week facts - discovery, volume against the artist's normal, genre clusters and returns.
 // ABOUTME: Ports build.py's rules with spec section 2's corrections; every stated value is typed on the draft.
 
-import { FIRST_UNDER_THIS_NAME, baselineWeeks, plural, quietAfter, score, writeRun } from './facts-shared';
+import { FIRST_UNDER_THIS_NAME, baselineWeeks, plural, score, writeRun } from './facts-shared';
 import type { ArtistWeek } from './history';
 import type { AlbumRun } from './runs';
 import { StatementBuilder } from './statement';
 import { BROAD_TAGS, cleanTags } from './tags';
 import { norm } from './text';
 import { albumKey } from './types';
-import type { Draft, FactContext, QuestionOption, Tier } from './types';
+import type { Draft, FactContext, Tier } from './types';
 import { dayLabel } from './window';
 
 const DISCOVERY_MIN_PLAYS = 8;
@@ -81,21 +81,12 @@ function discovery(ctx: FactContext, a: New): Draft {
   b.add('; played on ').number(days.length, 'days', a.artist).add(plural(days.length, ' day (', ' days ('))
     .each(days, ', ', (w, d) => w.day(d.ts)).add(').');
 
-  const edges: QuestionOption[] = [];
-  if (first) {
-    edges.push(
-      { kind: 'where_from', text: `Where did you come across ${a.artist}?` },
-      { kind: 'started', text: `What got you started on ${a.artist} this week?` },
-    );
-    if (days.length === 1) edges.push({ kind: 'one_sitting', text: `Was that ${a.artist} stretch on ${days[0].label} one sitting?` });
-  }
   const novelty = first ? 1 : 0.9;
   return {
     kind: 'discovery',
     salience: score(40 + 60 * novelty * Math.min(1, a.plays / DISCOVERY_FULL_PLAYS)),
     subject: a.artist,
     ...b.build(),
-    edges,
   };
 }
 
@@ -150,7 +141,7 @@ function volume(ctx: FactContext, a: ArtistWeek, base: Baseline): Volume | null 
   const b = new StatementBuilder(ctx.inputs.timezone).name(a.artist).add(': ').number(a.plays, 'plays', a.artist)
     .add(' plays this week against an average of ');
   writeUsual(b, mean, a.artist);
-  // "per week", not "a week": the guard reads "a" before a unit word as the number 1.
+  // "per week", not "a week": "a" before a unit word reads as the number 1, which the statement would not type.
   b.add(' per week over the previous ').number(base.weeks, 'weeks').add(' weeks');
   if (top && top.plays >= TOP_DAY_SHARE * a.plays) {
     if (top.plays === a.plays) b.add('; all of them on ');
@@ -159,10 +150,6 @@ function volume(ctx: FactContext, a: ArtistWeek, base: Baseline): Volume | null 
   }
   b.add('.');
 
-  const last = quietAfter(ctx, ctx.week.filter((s) => s.artist === a.artist));
-  const edges: QuestionOption[] = last !== null
-    ? [{ kind: 'after', text: `What happened with ${a.artist} after ${dayLabel(last, ctx.inputs.timezone)}?` }]
-    : [];
   return {
     artist: a,
     mean,
@@ -171,7 +158,6 @@ function volume(ctx: FactContext, a: ArtistWeek, base: Baseline): Volume | null 
       salience: score(Math.min(95, 45 + 8 * Math.log2(Math.min(ratio, VOLUME_MAX_RATIO)) + Math.min(20, a.plays / 2.5))),
       subject: a.artist,
       ...b.build(),
-      edges,
     },
   };
 }
@@ -187,7 +173,7 @@ function spread(ctx: FactContext, volumes: Volume[], base: Baseline): Draft {
       w.add(')');
     })
     .add('.');
-  return { kind: 'volume_spread', salience: volumes[0].draft.salience, subject: null, ...b.build(), edges: [] };
+  return { kind: 'volume_spread', salience: volumes[0].draft.salience, subject: null, ...b.build() };
 }
 
 function volumeFacts(ctx: FactContext): Draft[] {
@@ -255,10 +241,7 @@ function clusterFact(ctx: FactContext, { tag, members }: Cluster): Draft {
       }
     })
     .add('.');
-  const edges: QuestionOption[] = back.some((a) => a.absentMonths === 12)
-    ? [{ kind: 'started', text: `What got you back into ${tag} this week?` }]
-    : [];
-  return { kind: 'genre_cluster', salience: score(Math.min(95, 55 + 8 * members.length)), subject: tag, ...b.build(), edges };
+  return { kind: 'genre_cluster', salience: score(Math.min(95, 55 + 8 * members.length)), subject: tag, ...b.build() };
 }
 
 // ---------- returns ----------
@@ -281,15 +264,11 @@ function returnsFact(ctx: FactContext, clustered: Set<string>): Draft | null {
     .add('.');
   const total = rest.reduce((sum, a) => sum + a.plays, 0);
   const lead = rest[0];
-  const edges: QuestionOption[] = lead.absentMonths === 12
-    ? [{ kind: 'started', text: `What brought ${lead.artist} back after more than a year?` }]
-    : [];
   return {
     kind: 'returns',
     salience: score(45 + Math.min(25, total / 2) + (rest.some((a) => a.absentMonths === 12) ? 5 : 0)),
     subject: lead.artist,
     ...b.build(),
-    edges,
   };
 }
 

@@ -118,8 +118,8 @@ describe('keys', () => {
     expect(keys.tracklist('Low', 'Secret  Name')).toBe('lastfm:tracklist:low:secret%20name');
     expect(keys.userAlbum('Alice', 'Low', 'Secret Name')).toBe('lastfm:useralbum:alice:low:secret%20name');
     expect(keys.topTags('LOW')).toBe('lastfm:toptags:low');
-    expect([keys.facts('Alice'), keys.question('Alice'), keys.generating('Alice'), keys.last('Alice')])
-      .toEqual(['insights:facts:alice', 'insights:question:alice', 'insights:generating:alice', 'insights:last:alice']);
+    expect([keys.facts('Alice'), keys.generating('Alice'), keys.last('Alice')])
+      .toEqual(['insights:facts:alice', 'insights:generating:alice', 'insights:last:alice']);
   });
 
   it('album keys encode each name, so a colon inside a name cannot move the boundary', () => {
@@ -139,9 +139,7 @@ describe('keys', () => {
       'lastfm:userartist:alice:', 'lastfm:useralbum:alice:', 'ai:userInsightsSummary:alice:',
     ]);
     expect(prefixes.some((p) => keys.scrobbleDay('alice2', '2026-11-08').startsWith(p))).toBe(false);
-    expect(userExactKeys('Alice')).toEqual([
-      'insights:facts:alice', 'insights:question:alice', 'insights:generating:alice', 'insights:last:alice',
-    ]);
+    expect(userExactKeys('Alice')).toEqual(['insights:facts:alice', 'insights:generating:alice', 'insights:last:alice']);
   });
 });
 

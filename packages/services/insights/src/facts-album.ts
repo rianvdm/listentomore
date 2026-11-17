@@ -7,7 +7,7 @@ import type { AlbumRun } from './runs';
 import { StatementBuilder } from './statement';
 import { cleanTags } from './tags';
 import { albumKey } from './types';
-import type { Draft, FactContext, QuestionOption, Scrobble } from './types';
+import type { Draft, FactContext, Scrobble } from './types';
 import { dayLabel } from './window';
 
 const REPEAT_MIN_LISTENS = 2;
@@ -75,7 +75,7 @@ function repeatAlbum(ctx: FactContext, listens: AlbumRun[]): Draft {
   const familiarity = before !== null && tracklistLength ? { before, times: before / tracklistLength } : null;
   const novelty = familiarity === null ? 0.1 : familiarity.times < 1 ? 1 : familiarity.times < 3 ? 0.5 : 0.1;
 
-  const b = new StatementBuilder(tz).album(artist, album).add(' by ').name(artist).add(' played start to finish ')
+  const b = new StatementBuilder(tz).name(album).add(' by ').name(artist).add(' played start to finish ')
     .number(listens.length, 'times', album).add(' times (')
     .each(listenDays(listens, tz), ', ', (w, d) => {
       if (d.listens > 1) w.number(d.listens, 'times', album).add(' times on ');
@@ -93,17 +93,12 @@ function repeatAlbum(ctx: FactContext, listens: AlbumRun[]): Draft {
   }
 
   const last = quietAfter(ctx, albumPlays(ctx.week, artist, album));
-  const edges: QuestionOption[] = [];
-  if (last !== null) {
-    b.add(' Last play of it this week: ').day(last).add('.');
-    edges.push({ kind: 'after', text: `What happened with ${album} after ${dayLabel(last, tz)}?` });
-  }
+  if (last !== null) b.add(' Last play of it this week: ').day(last).add('.');
   return {
     kind: 'repeat_album',
     salience: score(40 + 10 * Math.min(listens.length, REPEAT_MAX_LISTENS) + 40 * novelty),
     subject: artist,
     ...b.build(),
-    edges,
   };
 }
 
@@ -158,16 +153,11 @@ function singleListens(ctx: FactContext, repeated: Set<string>): Draft[] {
     }
     b.add('.');
 
-    const a = ctx.artists.get(run.artist);
-    const edges: QuestionOption[] = a?.tier === 'lapsed' && a.absentMonths === 12
-      ? [{ kind: 'started', text: `What brought ${run.artist} back after more than a year?` }]
-      : [];
     drafts.push({
       kind: 'single_listen',
       salience: score(45 + (isNew ? 25 : 0) + (outlier ? 10 : 0) + (long ? 10 : 0)),
       subject: run.artist,
       ...b.build(),
-      edges,
     });
   }
   return drafts;
@@ -178,9 +168,9 @@ function singleListens(ctx: FactContext, repeated: Set<string>): Draft[] {
 function chainFact(ctx: FactContext, chain: AlbumRun[]): Draft {
   const b = new StatementBuilder(ctx.inputs.timezone).day(chain[0].from).add(': ')
     .number(chain.length, 'albums').add(' albums back to back, start to finish: ')
-    .each(chain, ', ', (w, r) => w.album(r.artist, r.album).add(' (').name(r.artist).add(')'))
+    .each(chain, ', ', (w, r) => w.name(r.album).add(' (').name(r.artist).add(')'))
     .add('.');
-  return { kind: 'album_chain', salience: 60, subject: null, ...b.build(), edges: [] };
+  return { kind: 'album_chain', salience: 60, subject: null, ...b.build() };
 }
 
 // ---------- album mode ----------
@@ -209,7 +199,7 @@ function albumMode(ctx: FactContext): Draft | null {
     .number(prior.length, 'weeks').add(' weeks before, most recent first: ')
     .each(prior, ', ', (w, p) => w.number(p, 'percent').add('%'))
     .add(').');
-  return { kind: 'album_mode', salience: 50, subject: null, ...b.build(), edges: [] };
+  return { kind: 'album_mode', salience: 50, subject: null, ...b.build() };
 }
 
 /** Repeat albums, notable single listens, album chains and album mode for the week. */

@@ -1,5 +1,5 @@
 // ABOUTME: Helpers the artist, album and week fact rules share - clamped scores, run phrases, the baseline weeks
-// ABOUTME: and the "after" edge, so every rule states runs and applies spec section 2 the same way.
+// ABOUTME: and the last play before a quiet spell, so every rule states runs and applies spec section 2 the same way.
 
 import type { AlbumRun } from './runs';
 import type { StatementBuilder } from './statement';
@@ -15,19 +15,19 @@ export const score = (x: number): number => Math.round(Math.min(100, Math.max(0,
 
 export const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
 
-/** How a statement marks an artist with no plays before this week; the guard reads it to allow the same claim. */
+/** How a statement marks an artist with no plays before this week; render.ts uses the same words as the tier label. */
 export const FIRST_UNDER_THIS_NAME = 'first plays under this name';
 
 /** Writes a run as runs.ts phrases it, with its album and track counts typed. Callers never pass a mislabelled run. */
 export function writeRun(b: StatementBuilder, run: AlbumRun): void {
   if (run.verdict === 'start_to_finish') {
-    b.album(run.artist, run.album).add(' start to finish');
+    b.name(run.album).add(' start to finish');
   } else if (run.verdict === 'most_of' && run.coverage !== null && run.tracklistLength !== null) {
     const covered = Math.round(run.coverage * run.tracklistLength);
     b.number(covered, 'tracks', run.album).add(' of ').number(run.tracklistLength, 'tracks', run.album)
-      .add(' tracks of ').album(run.artist, run.album).add(', in order');
+      .add(' tracks of ').name(run.album).add(', in order');
   } else {
-    b.number(run.tracksPlayed, 'tracks', run.album).add(' tracks in a row from ').album(run.artist, run.album);
+    b.number(run.tracksPlayed, 'tracks', run.album).add(' tracks in a row from ').name(run.album);
   }
 }
 
@@ -48,8 +48,8 @@ export function baselineWeeks(ctx: FactContext): Array<Record<string, number>> |
 }
 
 /**
- * The last play of a subject that has the "after" edge (spec section 2, "Question"): plays on 2+ days this week,
- * then none recorded for 72+ hours before the window end. `played` is the subject's plays this week, ascending.
+ * The last play of a subject that went quiet: plays on 2+ days this week, then none recorded for 72+ hours before
+ * the window end. `played` is the subject's plays this week, ascending.
  */
 export function quietAfter(ctx: FactContext, played: Scrobble[]): number | null {
   if (played.length === 0) return null;

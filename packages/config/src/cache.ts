@@ -35,9 +35,8 @@ export const CACHE_CONFIG = {
   userInsights: {
     refreshCooldown: { ttlMinutes: 5 }, // Rate limit for refresh button
     weekFacts: { ttlHours: 24 }, // The computed WeekFacts object for a user
-    note: { ttlDays: 8 }, // A guarded note, and the pointer to the note last served to the owner
+    note: { ttlDays: 8 }, // A checked note, and the pointer to the note last served to the owner
     generatingMarker: { ttlMinutes: 1 }, // Marks a generation in progress; KV's minimum TTL is 60 seconds
-    questionState: { ttlDays: 60 }, // The owner's last question, for rotation
   },
 
   discogs: {

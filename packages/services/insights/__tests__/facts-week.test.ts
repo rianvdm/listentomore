@@ -24,7 +24,7 @@ describe('breadth', () => {
     const { prior, chartWeeks } = history(atTen(names(18)));
     const now = names(27);
     const d = only(weekFacts(context({ week: spread(now, 10), artists: [], prior, inputs: { chartWeeks } })), 'breadth');
-    expect(d).toMatchObject({ salience: 75, subject: null, edges: [] }); // 60 + 30*(27/18 - 1)
+    expect(d).toMatchObject({ salience: 75, subject: null }); // 60 + 30*(27/18 - 1)
     expect(d.statement).toBe('A wide week: 27 artists reached 10 or more plays, against a usual 18 (median of the previous 12 weeks): '
       + `${[...now].sort((a, b) => a.localeCompare(b)).join(', ')}.`);
     expect(d.quantities).toEqual([
@@ -134,7 +134,7 @@ describe('last week faded', () => {
 
   it('last week faded lists top artists at 10% or less', () => {
     const d = only(weekFacts(context({ week: thisWeek, artists: [], prior: [before, [], [], []] })), 'last_week_faded');
-    expect(d).toMatchObject({ salience: 45, subject: null, edges: [] });
+    expect(d).toMatchObject({ salience: 45, subject: null });
     // Grouper (3 of 20) is above 10%; Doves is not among last week's top five.
     expect(d.statement).toBe("Last week's top artists dropped away: Boards of Canada (40 plays last week, 4 this week), "
       + 'Hammock (30 plays last week, 3 this week), Moby (10 plays last week, 0 this week), Low (5 plays last week, 0 this week).');
@@ -164,7 +164,7 @@ describe('volume', () => {
 
   it('volume fires at +/-20% against the 4-week average', () => {
     const [up] = volumeAt(120);
-    expect(up).toMatchObject({ salience: 35, subject: null, edges: [] });
+    expect(up).toMatchObject({ salience: 35, subject: null });
     expect(up.statement).toBe('120 plays this week, 20% above the 4-week average of 100; 3 artists against a usual 2.');
     expect(up.quantities).toEqual([
       { value: 120, unit: 'plays' },
@@ -217,7 +217,7 @@ describe('themed block', () => {
 
   it('themed block needs 60 minutes, 12 plays, 4 artists and a bucket under 15% of the week', () => {
     const [d] = blocks([...rock(25), ...jazz(12)]);
-    expect(d).toMatchObject({ salience: 40, subject: null, edges: [] });
+    expect(d).toMatchObject({ salience: 40, subject: null });
     expect(d.statement).toBe('Wed Nov 4: 12 plays of jazz from 4 artists (most played: Grant Green, Joe Henderson, Wayne Shorter, '
       + "Wes Montgomery); jazz is 11% of the week's plays.");
     expect(d.dates).toEqual([BLOCK]);

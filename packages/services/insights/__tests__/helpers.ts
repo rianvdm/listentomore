@@ -99,7 +99,7 @@ const WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
 };
 const WORD = new RegExp(`\\b(?:${Object.keys(WORDS).join('|')})\\b`, 'g');
-// Task 8's guard reads "a" or "an" before a unit word as 1 of that unit, and "a year" as 12 months.
+// "a" or "an" before a unit word states 1 of that unit, and "a year" states 12 months.
 const ARTICLE_UNIT = /\b(?:a|an) (plays?|tracks?|times?|days?|weeks?|months?|years?|percent|artists?|albums?)\b/gi;
 const articleQuantity = (word: string): Pick<Quantity, 'value' | 'unit'> => {
   const singular = word.toLowerCase().replace(/s$/, '');
@@ -134,7 +134,6 @@ export function expectGrounded(d: Draft, tz: string | null = null): void {
   expect(d.salience).toBeGreaterThanOrEqual(0);
   expect(d.salience).toBeLessThanOrEqual(100);
   expect(d.statement).not.toMatch(/[—–]|stop|first time|first ever|\bsince\b|\bnever\b/i);
-  for (const e of d.edges) expect(e.text).not.toMatch(/[—–]|stop/i);
 }
 
 // ---------- KV ----------

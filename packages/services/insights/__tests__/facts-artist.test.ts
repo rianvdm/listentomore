@@ -1,5 +1,5 @@
 // ABOUTME: Tests for artist-level week facts - discovery, volume against normal, genre clusters and returns.
-// ABOUTME: Follows spec section 2 (fact table, "Question", anti-goals); every fact is checked for grounding.
+// ABOUTME: Follows spec section 2 (fact table, anti-goals); every fact is checked for grounding.
 
 import { albumKey, albumRuns, artistFacts } from '../src';
 import type { AlbumRun, ArtistWeek, Scrobble } from '../src';
@@ -23,7 +23,6 @@ describe('discovery', () => {
       { value: 39, unit: 'plays', entity: 'Siiga' },
       { value: 2, unit: 'days', entity: 'Siiga' },
     ]));
-    expect(d.edges).toEqual([]);
     expectGrounded(d);
   });
 
@@ -47,7 +46,6 @@ describe('discovery', () => {
     expect(d).toMatchObject({ subject: 'Andy Shauf', salience: 58 });
     expect(d.statement).toBe('Andy Shauf: first plays under this name, 9 this week; played on 1 day (Wed Nov 4).');
     expect(d.dates).toEqual([ts('2026-11-04T19:00:00')]);
-    expect(d.edges).toContainEqual({ kind: 'one_sitting', text: 'Was that Andy Shauf stretch on Wed Nov 4 one sitting?' });
     expectGrounded(d);
   });
 
@@ -130,7 +128,6 @@ describe('volume against normal', () => {
       { value: 6, unit: 'plays', entity: 'Boards of Canada' },
       { value: 12, unit: 'weeks' },
     ]));
-    expect(d.edges).toEqual([]);
     expectGrounded(d);
   });
 
@@ -223,22 +220,6 @@ describe('volume against normal', () => {
     expectGrounded(d);
   });
 
-  it('no "after" edge unless plays span 2+ days and end 72+ hours before the window end', () => {
-    const { prior, chartWeeks } = history({ Meltt: 2 });
-    const meltt = artist({ artist: 'Meltt', tier: 'regular', plays: 24 });
-    const edgesFor = (week: Scrobble[]) =>
-      only(artistFacts(context({ week, artists: [meltt], prior, inputs: { chartWeeks } })), 'volume_vs_normal').edges;
-
-    const monThu = [...plays('Meltt', 12, ts('2026-11-02T10:00:00')), ...plays('Meltt', 12, ts('2026-11-05T10:00:00'))];
-    // Last play Thu 10:44, 82.5 h before Sun 21:17.
-    expect(edgesFor(monThu)).toEqual([{ kind: 'after', text: 'What happened with Meltt after Thu Nov 5?' }]);
-
-    const monFri = [...plays('Meltt', 12, ts('2026-11-02T10:00:00')), ...plays('Meltt', 12, ts('2026-11-06T10:00:00'))];
-    expect(edgesFor(monFri)).toEqual([]); // last play Fri 10:44, 58.5 h before Sun 21:17: an edge under the old 36 h rule
-
-    expect(edgesFor(plays('Meltt', 24, ts('2026-11-04T10:00:00')))).toEqual([]); // one day only
-  });
-
   it('an artist with two start-to-finish listens of one album gets no volume fact', () => {
     const { prior, chartWeeks } = history({ 'Boards of Canada': 6 });
     const run = (from: number): AlbumRun => ({
@@ -265,7 +246,7 @@ describe('volume against normal', () => {
     expect(ofKind(merged, 'volume_vs_normal')).toEqual([]);
     const d = only(merged, 'volume_spread');
     // Bowery Electric: 30 against 2 has the top single score, 45 + 8*log2(15) + 12.
-    expect(d).toMatchObject({ subject: null, salience: 88.3, edges: [] });
+    expect(d).toMatchObject({ subject: null, salience: 88.3 });
     expect(d.statement).toBe('Four artists played at three or more times their usual weekly rate (average of the previous 12 weeks): '
       + 'Bowery Electric 30 (usual 2), Pink Floyd 22 (usual under 1), Moby 41 (usual 6), Depeche Mode 20 (usual 5).');
     expect(d.entities).toEqual(['Bowery Electric', 'Pink Floyd', 'Moby', 'Depeche Mode']);
@@ -402,7 +383,6 @@ describe('genre clusters and returns', () => {
       + 'Kamasi Washington (12 plays; first plays under this name); Makaya McCraven (9 plays; only 2 before); '
       + 'Nubya Garcia (4 plays; first plays under this name).');
     expect(d.salience).toBe(79);
-    expect(d.edges).toEqual([]);
     expectGrounded(d);
   });
 
@@ -436,32 +416,6 @@ describe('genre clusters and returns', () => {
     expect(d.salience).toBe(49); // 45 + 8/2, no 12-month absence
     expect(d.statement).toContain('none in the 6+ months before this week');
     expect(d.statement).not.toMatch(/since|first time/);
-    expect(d.edges).toEqual([]);
     expectGrounded(d);
-  });
-
-  it('an edge is attached for first under this name and for a 12-month return', () => {
-    const tue = ts('2026-11-03T10:00:00');
-    const first = only(artistFacts(context({
-      week: [...plays('Andy Shauf', 6, tue), ...plays('Andy Shauf', 6, tue + 86400)],
-      artists: [artist({ artist: 'Andy Shauf', tier: 'first_under_this_name', plays: 12, lifetimeBefore: 0 })],
-    })), 'discovery');
-    expect(first.edges.map((e) => e.kind)).toEqual(['where_from', 'started']);
-    expect(first.edges).toEqual([
-      { kind: 'where_from', text: 'Where did you come across Andy Shauf?' },
-      { kind: 'started', text: 'What got you started on Andy Shauf this week?' },
-    ]);
-
-    const cluster = only(artistFacts(context({ week: weekOf(jazz), artists: jazz, inputs: { tags: jazzTags } })), 'genre_cluster');
-    expect(cluster.edges).toEqual([{ kind: 'started', text: 'What got you back into jazz this week?' }]);
-
-    const back = [lapsed('Tracy Chapman', 12, 200, 12)];
-    const returns = only(artistFacts(context({ week: weekOf(back), artists: back })), 'returns');
-    expect(returns.edges).toEqual([{ kind: 'started', text: 'What brought Tracy Chapman back after more than a year?' }]);
-
-    const barely = only(artistFacts(context({
-      week: plays('Siiga', 9, tue), artists: [artist({ artist: 'Siiga', tier: 'barely_known', plays: 9, lifetimeBefore: 3 })],
-    })), 'discovery');
-    expect(barely.edges).toEqual([]);
   });
 });

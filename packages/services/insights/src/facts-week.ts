@@ -92,7 +92,6 @@ function breadth(ctx: FactContext): Draft | null {
     salience: wide ? score(60 + 30 * Math.min(1, now / usual - 1)) : 55,
     subject: null,
     ...b.build(),
-    edges: [],
   };
 }
 
@@ -116,7 +115,7 @@ function lastWeekFaded(ctx: FactContext): Draft | null {
         .number(now.get(name) ?? 0, 'plays', name).add(' this week)');
     })
     .add('.');
-  return { kind: 'last_week_faded', salience: 45, subject: null, ...b.build(), edges: [] };
+  return { kind: 'last_week_faded', salience: 45, subject: null, ...b.build() };
 }
 
 // ---------- themed blocks ----------
@@ -194,7 +193,7 @@ function themedBlockFacts(ctx: FactContext): Draft[] {
         .number(block.plays.length, 'plays').add(` plays of ${label} from `).number(artists.length, 'artists')
         .add(' artists (most played: ').each(artists.slice(0, BLOCK_NAMED_ARTISTS), ', ', (w, [name]) => w.name(name))
         .add(`); ${label} is `).number(Math.round(100 * weekShare(block.theme)), 'percent').add("% of the week's plays.");
-      return { kind: 'themed_block', salience: 40, subject: null, ...b.build(), edges: [] };
+      return { kind: 'themed_block', salience: 40, subject: null, ...b.build() };
     });
 }
 
@@ -223,7 +222,7 @@ function volume(ctx: FactContext): Draft | null {
     .add('-week average of ').number(usualPlays, 'plays').add('; ')
     .number(artists, 'artists').add(plural(artists, ' artist against a usual ', ' artists against a usual '))
     .number(usualArtists, 'artists').add('.');
-  return { kind: 'volume', salience: 35, subject: null, ...b.build(), edges: [] };
+  return { kind: 'volume', salience: 35, subject: null, ...b.build() };
 }
 
 /** Breadth, last week's top artists fading, themed blocks and total volume for the week. */

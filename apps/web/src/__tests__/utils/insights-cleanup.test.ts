@@ -25,7 +25,6 @@ describe('deleteUserInsightsData', () => {
     'lastfm:scrobbles:alice:2026-11-01',
     'lastfm:toplist:alice:6month',
     'insights:facts:alice',
-    'insights:question:alice',
     'ai:userInsightsSummary:alice:abcd',
   ];
   const ALICE2 = ['lastfm:scrobbles:alice2:2026-11-01', 'insights:facts:alice2'];
@@ -37,7 +36,7 @@ describe('deleteUserInsightsData', () => {
 
     const deleted = await deleteUserInsightsData(kv, 'alice');
 
-    expect(deleted).toBe(5);
+    expect(deleted).toBe(4);
     expect(await remaining(kv)).toEqual([...ALICE2, ...GLOBAL].sort());
   });
 
