@@ -4,7 +4,7 @@ This guide covers how to configure AI tasks, switch between providers, and use w
 
 ## Overview
 
-ListenToMore runs nine of its ten AI tasks on **Anthropic Claude**. `randomFact` stays on **OpenAI**. Both clients are live: switching a task between providers is a config edit, with no code change.
+ListenToMore runs eight of its nine AI tasks on **Anthropic Claude**. `randomFact` stays on **OpenAI**. Both clients are live: switching a task between providers is a config edit, with no code change.
 
 | Provider | Models | Used for |
 |----------|--------|----------|
@@ -35,7 +35,6 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 | `genreSummary` | `claude-opus-5-5` | low | Long-form, cached 180 days |
 | `albumRecommendations` | `claude-opus-5-5` | low | Web search plus judgement about what to recommend |
 | `userInsightsSummary` | `claude-opus-5-5` | medium | The weekly note: two or three short paragraphs, returned as JSON `{ note, names }`, then checked by `checkNote` (names are this week's and in the text, integers are in the prompt view). Uncached here; the insights route caches only a note that passes |
-| `albumTrivia` | `claude-opus-5-5` | low | The making-of card on the insights page: one fact about an album, with web search capped at 2 searches. Uncached here; the insights route keeps a cited fact that passes the copy rubric for 120 days per album, and a NONE, a missing citation or two rubric failures for 30 days |
 | `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
 | `artistSentence` | `claude-opus-5-5` | low | Short output with web search, cached 180 days. Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval rows (64-74 words against the 38-word cap) |
 | `listenAi` | `claude-sonnet-5-5` | low | Chat; the user waits on it |
@@ -47,26 +46,23 @@ To compare models or settings, run the eval script `apps/web/scripts/ai-eval.ts`
 
 ### Evaluating the weekly insights note
 
-The weekly note has its own eval, `apps/web/scripts/insights-eval.ts`. Run it before merging any change to the note prompt (`packages/services/ai/src/prompts/user-insights-note.ts`), to the `userInsightsSummary` config, or to a salience weight in `@listentomore/insights`.
+The weekly note has its own eval, `apps/web/scripts/insights-eval.ts`. Run it before merging any change to the note prompt (`packages/services/ai/src/prompts/user-insights-note.ts`), to the `userInsightsSummary` config, to `checkNote`, or to a salience weight in `@listentomore/insights`.
 
 ```bash
 cd apps/web
-pnpm dlx tsx scripts/insights-eval.ts --label <name> --dry-run      # call count and projected cost, no API calls
 pnpm dlx tsx scripts/insights-eval.ts --label <name> [--extra <dir>]
-pnpm dlx tsx scripts/insights-eval.ts --label <name> --trivia [--extra <dir>]   # also the Did you know card
 ```
 
-For every `WeekInputs` fixture in `packages/services/insights/__fixtures__` (and in `--extra <dir>`), it builds the week's facts and asks the model for the note twice. Each note goes through the production guard (`guardNote`) and a rubric of banned words and constructions (`apps/web/scripts/insights-rubric.ts`), which reads the note with the week's artist and album names masked. `--extra` is for weeks that must stay out of the repository, such as another listener's; their output is labelled `extra-1`, `extra-2` and so on. Everything goes to `apps/web/eval-output/<label>/insights/` (gitignored): one JSON per fixture with the prompt view, both replies, guard results, rubric hits, tokens and cost, plus a `summary.md` with the table, every note and an opener-overlap figure.
+`--label` and `--extra` are its only options. For every `WeekInputs` fixture in `packages/services/insights/__fixtures__` (`gold.json` is skipped) and in `--extra <dir>`, it builds the week's facts and writes the note the way the owner's view does: one `writeWeekNote` run of up to two calls, keeping the first note that passes `checkNote`. A week under 30 plays gets no call and is recorded with the code-written line the owner would see (no line under 5 plays, where the page shows its sparse message). `--extra` is for weeks that must stay out of the repository, such as another listener's; their output is labelled `extra-1`, `extra-2` and so on.
 
-`--trivia` runs each week the way the owner's view does. Spotify release dates (`SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from `.dev.vars`) go into the facts first, so the `release_week` fact can fire; the notes keep the note rubric. Then the card is generated with the MusicBrainz cap lifted and every candidate album checked, so each week's final card shows, rendered as the owner sees it and checked with the copy rubric (`checkCopyRubric`). One local limiter keeps every MusicBrainz request 1.1 seconds apart and the weeks take turns on MusicBrainz, so a run takes several minutes. `summary.md` adds each `release_week` fact with its salience, each card with its MusicBrainz calls and rubric hits, a report on the known tie-backs from the recon, and a fact-check list of every making-of fact with its source URL to spot-check before merging. A card that trips the copy rubric fails its week. `--dry-run --trivia` projects two `albumTrivia` calls per week at the search cap, so the figure errs high.
+Everything goes to `apps/web/eval-output/<label>/insights/` (gitignored): one JSON per fixture with the prompt view, every attempt with its raw reply, tokens, cost and time, and the final note, plus a `summary.md` that shows each note with the owner's gold summary below it where there is one. Each fixture is tagged `gold`, `gold, example in prompt` (the 2026-06-12 week, whose summary is the prompt's first voice example), `held-out`, `live` or `extra`; the held-out and live weeks carry the decision. Each note is flagged for `checkNote` failures, em dashes and negation contrast (`apps/web/scripts/insights-rubric.ts`, read with the week's names masked), phrases of six or more words copied from the voice examples, and a word count outside 120-200.
 
-Exit codes:
+No pass rate gates the run. The owner reads the notes and decides. Exit codes:
 
-- `0`: every week got at least one note past the guard, and no note tripped the rubric.
-- `1`: a week failed the guard on both runs, so the page would show the code-written line instead of a note, or a note (or, with `--trivia`, a card) used a banned word or construction. With `--trivia`, a card cut by MusicBrainz or a making-of failure, or a card run that threw, also fails its week: the card is unknown, so an outage cannot pass as a week without a card. Read the failure codes in `summary.md` before changing anything. A code can come from a guard false positive as well as from a model miss, and the fix for each is different.
-- `2`: the run could not start (a missing key or a bad label).
+- `0`: the run finished, whatever the flags say.
+- `2`: the run could not start: an option it doesn't take, a bad `--label` or `--extra`, or a missing key.
 
-Each fixture costs two calls. The first full run (8 fixtures, 16 calls) cost $0.16. The eval calls the live API and spends real money, so it never runs in CI; run it by hand. Keys come from `apps/web/.dev.vars` only (never `process.env`): `ANTHROPIC_API_KEY`, plus `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` with `--trivia`. A missing key stops the run before any live call.
+The eval calls the live API and spends real money, so it never runs in CI; run it by hand. Keys come from `apps/web/.dev.vars` only (never `process.env`): `ANTHROPIC_API_KEY` while `userInsightsSummary` runs on Anthropic. A missing key stops the run before any live call.
 
 ---
 
@@ -98,7 +94,6 @@ Each API key is needed only by the tasks routed to its provider: `ANTHROPIC_API_
 | Config field | Anthropic (Messages API) | OpenAI (Responses API, `gpt-5.x`) |
 |--------------|--------------------------|-----------------------------------|
 | `webSearch` | Server-side `web_search_20250305` tool, `max_uses: 5` | `web_search` tool |
-| `webSearchMaxUses` | The tool's `max_uses`, when a task needs fewer than 5 | Ignored |
 | `reasoning` | `output_config.effort`; `none`, `minimal`, or unset map to `low` | `reasoning.effort` |
 | `temperature` | Never sent | Only sent when reasoning is `none` |
 | `verbosity` | Ignored | `text.verbosity` |
@@ -109,9 +104,8 @@ Anthropic client behavior worth knowing:
 - `stop_reason: max_tokens` and `refusal` both mark the response uncacheable.
 - A `pause_turn` stop is resumed once automatically. Usage covers both requests; a second `pause_turn` marks the response uncacheable.
 - When a response contains search results, only text after the last result is kept, so narration such as "I'll search for..." never reaches the page or the cache. The client logs how many text blocks it dropped.
-- The web search citations on the kept text come back as `citations` (URL and title, once per URL).
-- A search that fails inside a 200 response (`too_many_requests`, `unavailable`, `max_uses_exceeded` and so on) is reported in `metadata.features.webSearchErrors`, across both requests of a resumed turn. The model often answers anyway. The making-of fact still keeps a cited fact, but a NONE, missing citation or double rubric failure after a transient error (anything except `max_uses_exceeded`, `invalid_input` and `query_too_long`) is an error that caches nothing.
-- A call with `quietErrors: true` logs and throws a non-2xx response with its status alone, never the body. `albumTrivia`, `userInsightsSummary` and `userInsightsRecommendations` use it because their prompts carry album, artist or listening data.
+- A search that fails inside a 200 response (`too_many_requests`, `unavailable`, `max_uses_exceeded` and so on) is reported in `metadata.features.webSearchErrors`, across both requests of a resumed turn. The model often answers anyway.
+- A call with `quietErrors: true` logs and throws a non-2xx response with its status alone, never the body. `userInsightsSummary` and `userInsightsRecommendations` use it because their prompts carry listening data.
 - Requests with web search use the 60-second timeout tier.
 - `max_uses: 5` allows album recommendations to verify the seed album plus three picks (four searches). The newer `web_search_20260209` tool was tried first; its model-written filter scripts crashed while still consuming searches, which produced empty summaries.
 
@@ -132,7 +126,7 @@ Controls how many reasoning (GPT) or thinking (Claude) tokens the model spends b
 | `none` | OpenAI: no reasoning, temperature works. Claude: treated as `low` |
 | `minimal` | OpenAI `gpt-5` / `gpt-5-mini` only. Claude: treated as `low` |
 | `low` | Light reasoning, fast. Used by most tasks |
-| `medium` | Default on Opus 5.5 and the GPT-5.6 tiers. Used by `userInsightsRecommendations` |
+| `medium` | Default on Opus 5.5 and the GPT-5.6 tiers. Used by `userInsightsSummary` and `userInsightsRecommendations` |
 | `high`, `xhigh`, `max` | Deeper and slower. Claude receives all three unchanged; on OpenAI, `max` exists on GPT-5.6 only |
 
 Set `reasoning` explicitly on every task. On OpenAI, an unset value falls to the model default (`medium` on GPT-5.6), which is slower and spends more tokens. The Anthropic client maps an unset value to `low`.
