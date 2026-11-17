@@ -1,8 +1,8 @@
 // ABOUTME: Pure helpers for scripts/insights-eval.ts: its arguments, the output directory kept inside eval-output/,
-// ABOUTME: the fixture preflight, tags and gold keys, phrases copied from the examples, word counts, and .dev.vars keys.
+// ABOUTME: the fixture preflight, tags and gold keys, copied and repeated phrases, counts, and .dev.vars keys.
 
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { buildWeekFacts, matchKey, renderPromptView } from '@listentomore/insights';
+import { buildWeekFacts, integersOf, matchKey, renderPromptView } from '@listentomore/insights';
 import type { WeekFacts, WeekInputs } from '@listentomore/insights';
 
 /** The eval's arguments as given: the run label and the --extra directory, unchecked on disk. */
@@ -133,6 +133,72 @@ export function copiedPhrases(note: string, examples: readonly string[], n = 6):
   }
   if (start >= 0) spans.push(words.slice(start, end).join(' '));
   return [...new Set(spans)];
+}
+
+/** How many integers the note states, read the way checkNote reads them: digit runs, thousands commas removed. */
+export function countIntegers(note: string): number {
+  return integersOf(note).length;
+}
+
+/**
+ * Words too common to make a repeated phrase on their own: articles, prepositions, pronouns, forms of be and have,
+ * and conjunctions. A phrase made only of these ("of the", "this was") is never reported.
+ */
+const STOPWORDS: ReadonlySet<string> = new Set([
+  'a', 'an', 'the',
+  'of', 'to', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'as', 'into', 'about',
+  'and', 'or', 'but',
+  'that', 'this', 'it', 'its', 'you', 'your', 'i', 'me', 'my', 'we', 'our', 'they', 'them', 'their',
+  'be', 'is', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had',
+]);
+
+const REPEATED_MIN_WORDS = 2;
+const REPEATED_MAX_WORDS = 4;
+const REPEATED_CAP = 15;
+
+/** Whether the words of `inner` run, whole, inside the words of `outer`. Both are space-joined matchKey words. */
+const containsWords = (outer: string, inner: string): boolean => ` ${outer} `.includes(` ${inner} `);
+
+/**
+ * Phrases of two to four matchKey words that turn up in `minNotes` or more of the notes, each with the labels of the
+ * notes it is in, in note order: a tic the model carries from week to week. A phrase counts once per note. Skipped: a
+ * phrase made only of stopwords, and in each note a phrase inside one of that note's own names, since artist and album
+ * names repeat legitimately. A shorter phrase goes when a longer reported one contains it in the same notes. Sorted
+ * by the number of notes, most first, then by phrase; at most 15.
+ */
+export function repeatedPhrases(
+  notes: ReadonlyArray<{ label: string; note: string; names: readonly string[] }>,
+  minNotes = 3,
+): Array<{ phrase: string; labels: string[] }> {
+  const found = new Map<string, string[]>();
+  for (const { label, note, names } of notes) {
+    const nameKeys = names.map(matchKey).filter(Boolean);
+    const words = keyWords(note);
+    const grams = new Set<string>();
+    for (let n = REPEATED_MIN_WORDS; n <= REPEATED_MAX_WORDS; n++) {
+      for (let i = 0; i + n <= words.length; i++) {
+        const gram = words.slice(i, i + n);
+        if (gram.every((word) => STOPWORDS.has(word))) continue;
+        const phrase = gram.join(' ');
+        if (nameKeys.some((name) => containsWords(name, phrase))) continue;
+        grams.add(phrase);
+      }
+    }
+    for (const phrase of grams) {
+      const labels = found.get(phrase) ?? [];
+      if (!labels.includes(label)) labels.push(label);
+      found.set(phrase, labels);
+    }
+  }
+  const reported = [...found]
+    .filter(([, labels]) => labels.length >= minNotes)
+    .map(([phrase, labels]) => ({ phrase, labels, key: labels.join('\u0000') }));
+  return reported
+    .filter((short) => !reported.some((long) =>
+      long.phrase.length > short.phrase.length && long.key === short.key && containsWords(long.phrase, short.phrase)))
+    .sort((a, b) => b.labels.length - a.labels.length || a.phrase.localeCompare(b.phrase))
+    .slice(0, REPEATED_CAP)
+    .map(({ phrase, labels }) => ({ phrase, labels }));
 }
 
 /** Whitespace-separated words, across lines and paragraphs. */

@@ -1,5 +1,5 @@
 // ABOUTME: Tests for scripts/insights-eval-lib.ts: the arguments, the output directory, fixture tags and gold keys, phrases copied
-// ABOUTME: from the voice examples, word counts, and the .dev.vars keys a live run needs.
+// ABOUTME: from the voice examples, counts, phrases repeated across notes, word counts, and the .dev.vars keys a live run needs.
 
 import { describe, it, expect, vi } from 'vitest';
 import { join } from 'node:path';
@@ -9,12 +9,14 @@ import type { WeekInputs } from '@listentomore/insights';
 import may24Json from '../../../../../packages/services/insights/__fixtures__/bordesak-2026-05-24.json';
 import {
   copiedPhrases,
+  countIntegers,
   evalOutputDir,
   fixtureTag,
   goldKey,
   missingDevVarsError,
   parseEvalArgs,
   preflightFixtures,
+  repeatedPhrases,
   requiredDevVars,
   wordCount,
 } from '../../../scripts/insights-eval-lib';
@@ -135,6 +137,67 @@ describe('copiedPhrases', () => {
   it('joins overlapping n-grams into one span and takes a shorter n', () => {
     expect(copiedPhrases('a b c d e f g', ['x a b c d e f g y'])).toEqual(['a b c d e f g']);
     expect(copiedPhrases('one two three', ['zero one two three four'], 3)).toEqual(['one two three']);
+  });
+});
+
+describe('countIntegers', () => {
+  it('counts digit runs, reading a thousands comma between digits as part of the number', () => {
+    expect(countIntegers('39 plays, 1,204 scrobbles and 3 days.')).toBe(3);
+    expect(countIntegers('Three plays, no digits.')).toBe(0);
+    expect(countIntegers('Track 2, 4 plays')).toBe(2);
+  });
+});
+
+describe('repeatedPhrases', () => {
+  const note = (label: string, text: string, names: string[] = []): { label: string; note: string; names: string[] } => ({
+    label,
+    note: text,
+    names,
+  });
+
+  it('reports a phrase found in three of four notes, with those labels', () => {
+    const notes = [
+      note('a', 'Mezzanine ran start to finish, no argument.'),
+      note('b', 'Kid A held the top spot, no argument.'),
+      note('c', 'A quiet week for drone. No argument.'),
+      note('d', 'Nothing much happened on Friday.'),
+    ];
+    expect(repeatedPhrases(notes)).toContainEqual({ phrase: 'no argument', labels: ['a', 'b', 'c'] });
+  });
+
+  it('reports the longest phrase and not the shorter ones inside it with the same labels', () => {
+    const notes = ['a', 'b', 'c', 'd'].map((label, i) =>
+      note(label, `This was a week of ${['drone', 'jazz', 'metal', 'folk'][i]} records.`),
+    );
+    const phrases = repeatedPhrases(notes);
+    const all = ['a', 'b', 'c', 'd'];
+    const long = phrases.filter((p) => p.phrase === 'this was a week' || p.phrase === 'was a week of');
+    expect(long.length).toBeGreaterThan(0);
+    for (const p of long) expect(p.labels).toEqual(all);
+    for (const shorter of ['this was', 'was a', 'a week', 'week of', 'this was a', 'was a week', 'a week of']) {
+      expect(phrases.map((p) => p.phrase)).not.toContain(shorter);
+    }
+  });
+
+  it('skips an artist name each note lists among its own names', () => {
+    // The name is the only phrase the notes share, so no longer phrase can hide it.
+    const notes = [
+      note('a', 'Monday belonged to Nils Frahm.', ['Nils Frahm']),
+      note('b', 'Tuesday went Nils Frahm.', ['Nils Frahm']),
+      note('c', 'Sunday ended with Nils Frahm.', ['Nils Frahm']),
+    ];
+    expect(repeatedPhrases(notes)).toEqual([]);
+  });
+
+  it('skips a phrase made only of stopwords', () => {
+    const notes = [note('a', 'Most of the ambient.'), note('b', 'Some of the jazz.'), note('c', 'Plenty of the rock.')];
+    expect(repeatedPhrases(notes)).toEqual([]);
+  });
+
+  it('reports nothing found in fewer than minNotes notes', () => {
+    const notes = [note('a', 'Still the one, no argument.'), note('b', 'Kid A again, no argument.'), note('c', 'Quiet.')];
+    expect(repeatedPhrases(notes)).toEqual([]);
+    expect(repeatedPhrases(notes, 2)).toContainEqual({ phrase: 'no argument', labels: ['a', 'b'] });
   });
 });
 

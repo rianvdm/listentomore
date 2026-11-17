@@ -11,8 +11,13 @@ export type NoteCheckFailure = 'name-unknown' | 'name-absent' | 'number';
 /** A comma between two digits, as in "1,204". */
 const THOUSANDS_COMMA = /(?<=\d),(?=\d)/g;
 
-/** The digit runs of `text` as numbers, after thousands commas are removed. Numbers written as words are not read. */
-const integersOf = (text: string): number[] => (text.replace(THOUSANDS_COMMA, '').match(/\d+/g) ?? []).map(Number);
+/**
+ * The digit runs of `text` as numbers, after thousands commas are removed. Numbers written as words are not read.
+ * scripts/insights-eval-lib.ts counts a note's numbers with it, so the eval's count and the check read the same digits.
+ */
+export function integersOf(text: string): number[] {
+  return (text.replace(THOUSANDS_COMMA, '').match(/\d+/g) ?? []).map(Number);
+}
 
 /**
  * Checks a note against the week it was written from. A listed name fails as unknown when its match key is neither a

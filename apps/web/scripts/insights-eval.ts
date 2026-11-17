@@ -18,7 +18,9 @@
 // and ms, the final note and its flags) and eval-output/<label>/insights/summary.md. For each fixture, summary.md shows
 // its tag, the attempt outcomes, the final note with the owner's gold summary below it when there is one, and the
 // flags: check failures, em dashes and negation contrast (names masked), phrases of six or more words copied from the
-// voice examples, and the word count, marked when it is outside 120-200. No pass rate gates the run.
+// voice examples, the word count, marked when it is outside 120-200, and the number of integers the note states. After
+// the fixtures, a section lists the phrases of two to four words found in three or more of the run's notes, with the
+// fixtures they are in. No pass rate gates the run.
 //
 // Spends real money and never runs in CI. Keys come from apps/web/.dev.vars only, never process.env. Exit code 0 means
 // the run finished; 2 means it could not start: an unsupported option (the removed --dry-run and --trivia included), a
@@ -39,12 +41,14 @@ import type { NoteAttempt } from '../src/api/internal/insights-note';
 import { MIN_WEEK_PLAYS, NOTE_MIN_PLAYS } from '../src/api/internal/insights-week';
 import {
   copiedPhrases,
+  countIntegers,
   evalOutputDir,
   fixtureTag,
   goldKey,
   missingDevVarsError,
   parseEvalArgs,
   preflightFixtures,
+  repeatedPhrases,
   requiredDevVars,
   wordCount,
 } from './insights-eval-lib';
@@ -104,6 +108,8 @@ interface Flags {
   rubric: RubricHit[];
   copiedPhrases: string[];
   words: number | null;
+  /** The integers the note states, read as checkNote reads them. */
+  counts: number | null;
 }
 
 interface FixtureRecord {
@@ -248,7 +254,7 @@ async function runFixture(
     attempts: [],
     note: null,
     line: wf.plays.deduped < MIN_WEEK_PLAYS ? null : renderLine(wf, 'second'),
-    flags: { checkFailures: [], rubric: [], copiedPhrases: [], words: null },
+    flags: { checkFailures: [], rubric: [], copiedPhrases: [], words: null, counts: null },
     inputTokens: 0,
     outputTokens: 0,
     costUsd: 0,
@@ -272,6 +278,7 @@ async function runFixture(
       rubric: note ? checkEvalRubric(note.note, wf.names) : [],
       copiedPhrases: note ? copiedPhrases(note.note, USER_INSIGHTS_VOICE_EXAMPLES) : [],
       words: note ? wordCount(note.note) : null,
+      counts: note ? countIntegers(note.note) : null,
     },
     inputTokens: sum(attempts.map((a) => a.inputTokens)),
     outputTokens: sum(attempts.map((a) => a.outputTokens)),
@@ -338,6 +345,7 @@ function renderFlags(r: FixtureRecord): string[] {
     `- Rubric: ${listOrNone(flags.rubric)}`,
     `- Copied from the examples: ${listOrNone(flags.copiedPhrases.map((p) => `"${p}"`))}`,
     `- Words: ${words}`,
+    `- Counts: ${flags.counts === null ? 'no note' : flags.counts}`,
     '',
   ];
 }
@@ -364,7 +372,20 @@ function renderFixture(r: FixtureRecord, gold: Record<string, string>): string[]
   return lines;
 }
 
-function renderSummary(label: string, records: FixtureRecord[], runInfo: string, gold: Record<string, string>): string {
+/** The phrases repeated across the run's notes, each with the fixtures it is in, or "none". */
+function renderRepeated(repeated: Array<{ phrase: string; labels: string[] }>): string[] {
+  const lines = ['## Phrases repeated across weeks', ''];
+  if (repeated.length === 0) return [...lines, 'none', ''];
+  return [...lines, ...repeated.map(({ phrase, labels }) => `- "${phrase}": ${labels.join(', ')}`), ''];
+}
+
+function renderSummary(
+  label: string,
+  records: FixtureRecord[],
+  repeated: Array<{ phrase: string; labels: string[] }>,
+  runInfo: string,
+  gold: Record<string, string>,
+): string {
   const attempts = records.flatMap((r) => r.attempts);
   const unpriced = records.filter((r) => r.costUsd === null).length;
   const notes = records.filter((r) => r.note).length;
@@ -378,6 +399,7 @@ function renderSummary(label: string, records: FixtureRecord[], runInfo: string,
     '',
   );
   for (const r of records) lines.push(...renderFixture(r, gold));
+  lines.push(...renderRepeated(repeated));
   return lines.join('\n');
 }
 
@@ -416,11 +438,15 @@ async function main(): Promise<number> {
   const records = await runAll(fixtures, (f) => runFixture(f, keys));
   const wallSeconds = ((performance.now() - started) / 1000).toFixed(0);
   const runInfo = `Run ${new Date().toISOString()} at ${gitRef()}, wall time ${wallSeconds}s.`;
+  // runAll keeps input order, so records[i] is fixtures[i]'s record.
+  const repeated = repeatedPhrases(
+    records.flatMap((r, i) => (r.note ? [{ label: r.fixture, note: r.note.note, names: fixtures[i].wf.names }] : [])),
+  );
 
   const { outDir } = args;
   mkdirSync(outDir, { recursive: true });
   for (const r of records) writeFileSync(join(outDir, `${r.fixture}.json`), `${JSON.stringify(r, null, 2)}\n`);
-  writeFileSync(join(outDir, 'summary.md'), renderSummary(args.label, records, runInfo, gold));
+  writeFileSync(join(outDir, 'summary.md'), renderSummary(args.label, records, repeated, runInfo, gold));
   console.log(`[insights-eval] Wrote ${outDir}/summary.md (${records.length} fixtures, ${usd(sum(records.map((r) => r.costUsd)))})`);
   return 0;
 }
