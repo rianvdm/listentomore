@@ -19,9 +19,9 @@
 // its tag, the attempt outcomes, the final note with the owner's gold summary below it when there is one, and the
 // flags: check failures, em dashes and negation contrast (names masked), phrases of six or more words copied from the
 // voice examples, the word count, marked when it is outside 120-200, and the number of integers the note states. After
-// the fixtures, one section lists the opening frames (first four words, names masked) shared by two or more of the
-// run's notes, and another the phrases of two to four words found in three or more, each with the fixtures they are
-// in. No pass rate gates the run.
+// the fixtures, one section lists the opening frames (first four words, names masked, weekdays and dates made generic)
+// shared by two or more of the run's notes, and another the phrases of two to four words found in three or more, each
+// with the fixtures they are in. No pass rate gates the run.
 //
 // Spends real money and never runs in CI. Keys come from apps/web/.dev.vars only, never process.env. Exit code 0 means
 // the run finished; 2 means it could not start: an unsupported option (the removed --dry-run and --trivia included), a

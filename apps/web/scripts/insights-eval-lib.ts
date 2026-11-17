@@ -204,12 +204,48 @@ export function repeatedPhrases(
 
 const OPENING_WORDS = 4;
 
+const WEEKDAYS: ReadonlySet<string> = new Set([
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]);
+
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+/** Each month's full name and its three-letter abbreviation, as matchKey words. */
+const MONTHS: ReadonlySet<string> = new Set([...MONTH_NAMES, ...MONTH_NAMES.map((m) => m.slice(0, 3))]);
+
+const isDayNumber = (word: string | undefined): boolean =>
+  word !== undefined && /^\d{1,2}$/.test(word) && Number(word) >= 1 && Number(word) <= 31;
+
 /**
- * The note's first four matchKey words after maskNames, so "Siiga owned this week." and "Boards of Canada owned this
- * week." both read "name owned this week": the frame the note opens on, whoever fills it.
+ * matchKey words with each weekday read as "day", each month followed by a day number ("may 29", "aug 7") as "date",
+ * and a "day date" pair as one "day", so "Friday, May 29" and "Sunday" open the same way.
+ */
+function genericDays(words: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (WEEKDAYS.has(word)) {
+      out.push('day');
+    } else if (MONTHS.has(word) && isDayNumber(words[i + 1])) {
+      i++;
+      if (out[out.length - 1] !== 'day') out.push('date');
+    } else {
+      out.push(word);
+    }
+  }
+  return out;
+}
+
+/**
+ * The note's first four matchKey words after maskNames, with weekdays and dates made generic (see genericDays), so
+ * "Siiga owned this week." and "Boards of Canada owned this week." both read "name owned this week", and "Friday Aug 7
+ * belonged to U2." and "Sunday belonged to Mutemath." both read "day belonged to name": the frame the note opens on,
+ * whoever and whenever fills it.
  */
 export function openingFrame(note: string, names: readonly string[]): string {
-  return keyWords(maskNames(note, names)).slice(0, OPENING_WORDS).join(' ');
+  return genericDays(keyWords(maskNames(note, names))).slice(0, OPENING_WORDS).join(' ');
 }
 
 /**

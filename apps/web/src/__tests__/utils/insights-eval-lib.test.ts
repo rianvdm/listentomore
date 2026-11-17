@@ -216,7 +216,7 @@ describe('openingFrame and repeatedOpenings', () => {
   it("reads the first four words with the note's own names masked, lower-cased and without punctuation", () => {
     expect(openingFrame(owned[0].note, owned[0].names)).toBe('name owned this week');
     expect(openingFrame(owned[1].note, owned[1].names)).toBe('name owned this week');
-    expect(openingFrame(distinct[0].note, distinct[0].names)).toBe('friday aug 7 belonged');
+    expect(openingFrame(distinct[0].note, distinct[0].names)).toBe('day belonged to name');
     expect(openingFrame(distinct[1].note, distinct[1].names)).toBe('name was the record');
   });
 
@@ -227,6 +227,23 @@ describe('openingFrame and repeatedOpenings', () => {
   it('reports nothing for openings that differ, or for a single note', () => {
     expect(repeatedOpenings(distinct)).toEqual([]);
     expect(repeatedOpenings([owned[0]])).toEqual([]);
+  });
+
+  it('reads weekdays as day and month-day dates as date, folding "day date" into day', () => {
+    const belonged = [
+      { label: 'p', note: 'Friday, May 29 belonged to Boards of Canada.', names: ['Boards of Canada'] },
+      { label: 'q', note: 'Friday Aug 7 belonged to U2.', names: ['U2'] },
+      { label: 'r', note: 'Friday Sep 25 belonged to Linkin Park.', names: ['Linkin Park'] },
+      { label: 's', note: 'Sunday belonged to Mutemath: 22 plays across the day.', names: ['Mutemath'] },
+      { label: 't', note: 'Friday belonged to Capri (Remastered 2026).', names: ['Capri (Remastered 2026)'] },
+    ];
+    for (const { note, names } of belonged) expect(openingFrame(note, names), note).toBe('day belonged to name');
+    expect(openingFrame('November 8 belonged to U2.', ['U2'])).toBe('date belonged to name');
+    const ethel = { label: 'u', note: 'Ethel Cain ran this week.', names: ['Ethel Cain'] };
+    expect(openingFrame(ethel.note, ethel.names)).toBe('name ran this week');
+    expect(repeatedOpenings([...belonged, ethel])).toEqual([
+      { frame: 'day belonged to name', labels: ['p', 'q', 'r', 's', 't'] },
+    ]);
   });
 
   it('honours minNotes and sorts by the number of notes, most first, then by frame', () => {
