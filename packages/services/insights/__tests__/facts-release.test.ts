@@ -33,7 +33,6 @@ describe('release_week', () => {
     expect([d.salience, d.subject]).toEqual([80, 'Meltt']);
     expect(d.statement).toBe('Eternal Embers by Meltt came out on Mon Nov 2, and you played it start to finish that day.');
     expect(d.entities).toEqual(['Eternal Embers', 'Meltt']);
-    expect(d.albums).toEqual([{ artist: 'Meltt', album: 'Eternal Embers' }]);
     expect(d.dates).toEqual([MON]);
     expectGrounded(d);
   });

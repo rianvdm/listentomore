@@ -37,7 +37,7 @@ const withoutNames = (text: string, wf: WeekFacts): string =>
   [...wf.names].sort((a, b) => b.length - a.length).reduce((t, name) => t.split(name).join('#'), text);
 
 const sample = (kind: FactKind, over: Partial<Fact>): Fact => ({
-  id: 1, kind, salience: 70, subject: null, statement: 'Unused by the line.', entities: [], albums: [], quantities: [], dates: [], edges: [],
+  id: 1, kind, salience: 70, subject: null, statement: 'Unused by the line.', entities: [], quantities: [], dates: [],
   ...over,
 });
 
@@ -151,24 +151,37 @@ function expectPlainLine(line: string): void {
 }
 
 describe('renderPromptView', () => {
-  it('prompt view lists the window line as fact 0 and the top six facts by id', () => {
-    const wf = buildWeekFacts(loadFixture('bordesak-2026-06-12'));
-    expect(wf.facts.length).toBeGreaterThan(6);
+  it('prompt view lists the window line, the top ten facts by id, top artists, top albums and caveats, in that order', () => {
+    const wf = buildWeekFacts(loadFixture('bordesak-heldout-2026-08-02'));
+    expect(wf.facts.length).toBeGreaterThan(10);
     const lines = renderPromptView(wf).split('\n');
     expect(lines[0]).toBe(`0. ${wf.windowFact.statement}`);
     expect(lines[0]).toMatch(/^0\. Week: /);
     const numbered = lines.filter((l) => /^\d+\. /.test(l));
-    expect(numbered).toEqual([`0. ${wf.windowFact.statement}`, ...wf.facts.slice(0, 6).map((f) => `${f.id}. ${f.statement}`)]);
-    expect(lines.some((l) => l.startsWith('7.'))).toBe(false);
-    expect(lines.some((l) => l.startsWith('Top artists this week'))).toBe(true);
-    expect(lines.some((l) => l.startsWith('Caveats: ') && l.includes('counts exclude likely duplicate scrobbles'))).toBe(true);
+    expect(numbered).toEqual([`0. ${wf.windowFact.statement}`, ...wf.facts.slice(0, 10).map((f) => `${f.id}. ${f.statement}`)]);
+    expect(lines.some((l) => l.startsWith('11.'))).toBe(false);
+    const at = (prefix: string): number => lines.findIndex((l) => l.startsWith(prefix));
+    const order = [at('10. '), at('Top artists this week'), at('Top albums this week: '), at('Caveats: ')];
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(lines[at('Caveats: ')]).toContain('counts exclude likely duplicate scrobbles');
+    expect(wf.topAlbums).toHaveLength(5);
+    expect(lines[at('Top albums this week: ')]).toBe(`Top albums this week: ${wf.topAlbums
+      .map((a) => `${a.album} by ${a.artist} ${a.plays} plays`).join(', ')}.`);
+  });
+
+  it('prompt view states each top album with its artist and plays, singular for one', () => {
+    const wf = buildWeekFacts(makeInputs({
+      scrobbles: [...plays('Low', 12, MON, 'Things We Lost in the Fire'), ...plays('Nils Frahm', 1, WED, 'Felt')],
+    }));
+    expect(renderPromptView(wf).split('\n'))
+      .toContain('Top albums this week: Things We Lost in the Fire by Low 12 plays, Felt by Nils Frahm 1 play.');
   });
 
   it('prompt view never contains a question', () => {
     for (const n of FIXTURES) {
       const wf = buildWeekFacts(loadFixture(n));
       const view = renderPromptView(wf);
-      if (wf.question) expect(view).not.toContain(wf.question.text);
       for (const line of view.split('\n')) expect(withoutNames(line, wf)).not.toContain('?');
     }
   });
@@ -184,11 +197,12 @@ describe('renderPromptView', () => {
     const view = renderPromptView(buildWeekFacts(makeInputs({})));
     expect(view).toContain('0. Week: Sun Nov 1 to Sun Nov 8 (rolling 7 days). 0 plays.');
     expect(view).toContain('No ranked facts this week.');
+    expect(view).toContain('Top albums this week: none.');
   });
 });
 
 describe('noteSignature', () => {
-  const wf = buildWeekFacts(loadFixture('bordesak-2026-06-12')); // nine facts, so a seventh exists
+  const wf = buildWeekFacts(loadFixture('bordesak-2026-06-12'));
 
   it('is 16 hex characters and stable', async () => {
     const sig = await noteSignature(wf, 'v1');
@@ -196,17 +210,22 @@ describe('noteSignature', () => {
     expect(await noteSignature(buildWeekFacts(loadFixture('bordesak-2026-06-12')), 'v1')).toBe(sig);
   });
 
-  it('signature ignores the window and pulledAt, changes with any top-six statement', async () => {
+  it('signature ignores the window and pulledAt, changes with any top-ten statement, top artists, top albums or caveats', async () => {
     const sig = await noteSignature(wf, 'v1');
     expect(await noteSignature({ ...wf, window: { from: 1, to: 2 }, pulledAt: 3 }, 'v1')).toBe(sig);
-    const changed = (i: number): WeekFacts => ({
-      ...wf, facts: wf.facts.map((f, j) => (j === i ? { ...f, statement: `${f.statement} More.` } : f)),
-    });
-    for (const i of [0, 5]) expect(await noteSignature(changed(i), 'v1')).not.toBe(sig);
-    expect(wf.facts.length).toBeGreaterThan(6);
-    expect(await noteSignature(changed(6), 'v1')).toBe(sig); // the seventh fact is not in the prompt view
     expect(await noteSignature({ ...wf, caveats: [...wf.caveats, 'another'] }, 'v1')).not.toBe(sig);
     expect(await noteSignature({ ...wf, topArtists: wf.topArtists.slice(1) }, 'v1')).not.toBe(sig);
+    expect(wf.topAlbums.length).toBeGreaterThan(0);
+    expect(await noteSignature({ ...wf, topAlbums: wf.topAlbums.slice(1) }, 'v1')).not.toBe(sig);
+
+    const wide = buildWeekFacts(loadFixture('bordesak-heldout-2026-08-02')); // twelve facts, so an eleventh exists
+    const wideSig = await noteSignature(wide, 'v1');
+    const changed = (i: number): WeekFacts => ({
+      ...wide, facts: wide.facts.map((f, j) => (j === i ? { ...f, statement: `${f.statement} More.` } : f)),
+    });
+    for (const i of [0, 5, 9]) expect(await noteSignature(changed(i), 'v1')).not.toBe(wideSig);
+    expect(wide.facts.length).toBeGreaterThan(10);
+    expect(await noteSignature(changed(10), 'v1')).toBe(wideSig); // the eleventh fact is not in the prompt view
   });
 
   it('signature changes when the window fact\'s play count or average changes', async () => {

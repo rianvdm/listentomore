@@ -1,29 +1,42 @@
-// ABOUTME: Weekly insights note prompt: turns a ranked prompt view of week facts into cited sentences.
-// ABOUTME: No cache here; the insights route guards the sentences and owns caching.
+// ABOUTME: Weekly insights note prompt: turns a ranked prompt view of week facts into a note of two or three paragraphs
+// ABOUTME: and the names it uses. No cache here; the insights route checks the note and owns caching.
 
 import { getTaskConfig } from '@listentomore/config';
 import type { ChatClient, ChatMessage, AIResponseMetadata } from '../types';
 
 /** Bump when the prompt changes so cached notes don't linger. */
-export const USER_INSIGHTS_PROMPT_VERSION = 'v7';
+export const USER_INSIGHTS_PROMPT_VERSION = 'v8';
 
-/**
- * One sentence of the note and the ids of the facts it draws on.
- * Same shape as `NoteSentence` in @listentomore/insights (its guard checks
- * these); declared here too so the AI package takes no dependency on it.
- */
-export interface NoteSentence {
-  text: string;
-  facts: number[];
+/** The note, its paragraphs separated by one blank line, and every artist and album name the model says it used. */
+export interface WeekNote {
+  note: string;
+  names: string[];
 }
 
 export interface UserInsightsNoteResult {
-  /** Parsed sentences, or null when the model's output was not a valid array. */
-  sentences: NoteSentence[] | null;
+  /** The parsed note, or null when the model's output was not a valid `{ note, names }` object. */
+  note: WeekNote | null;
   /** The model's text as returned, for `isCacheableResponse()` and debugging. */
   raw: string;
   metadata?: AIResponseMetadata;
 }
+
+/**
+ * The voice references: the two voice-only notes from the v3 prompt's FEW_SHOT_EXAMPLES (the first is the 2026-06-12
+ * gold week), with their em dashes replaced by colons. Their names and numbers are from other weeks.
+ */
+export const USER_INSIGHTS_VOICE_EXAMPLES: readonly string[] = [
+  `Siiga came out of nowhere and took the top spot in a week: Nostalgia Burns at 39 plays, and it slots right into the ambient pocket you already live in next to Celer, Nils Frahm, and Deserta. The Capri remaster got the full front-to-back treatment too, so a lot of this week was pressing play and letting a record run.
+
+Around the ambient stuff, the familiar names held up. You went back to In Rainbows and ran the whole thing. Still the one, no argument. I Built You A Tower stayed in heavy rotation too, and the Raveonettes binge (Pe'ahi II and Lust Lust Lust back to back) was the one loud stretch this week.
+
+The Police live album is the curveball. Certifiable at 21 plays is a lot of stage banter and crowd noise for someone who mostly listens to drone. But Every Breath You Take live still does the job.`,
+  `This was an I Built You A Tower week, full stop. You wore the whole record down to the grain: Envy the Birds, Full of Stars, Pep Talk, Stone Over Water all sitting around three plays each. When a Death Cab record clicks for you, it clicks.
+
+Underneath it, the usual ambient names were all there: Nils Frahm at 31, plus Ólafur Arnalds, Stars of the Lid, and Sigur Rós. Seasurfer's Stay was the one new thing that stuck.
+
+Then the weird ones, which are the fun part. Evanescence (Beautiful Lie, How Do I Heal), Michael Jackson, and Chris de Burgh all showed up the same week as Stars of the Lid. No notes. That's a healthy week.`,
+];
 
 const SYSTEM_PROMPT =
   "You're a friend who follows someone's scrobbles. Once a week you send them a short note about what they played.";
@@ -33,24 +46,34 @@ const SYSTEM_PROMPT =
  * The prompt view is the only listening data the model sees.
  */
 export function buildUserInsightsNoteMessages(promptView: string): ChatMessage[] {
-  const userPrompt = `Here is this week's listening, already measured and ranked. It is the only thing you know about it.
+  const userPrompt = `Here is this week's listening, already counted and ranked. It is everything you know about the week.
 
 ${promptView}
 
-Write the note in second person, the way a friend who follows your scrobbles would. Four to six sentences, under 150 words.
+Write them this week's note, in second person.
 
-Decide what the story of the week is: the one or two facts that matter most, and how they relate. Say it plainly and early ("The jazz was the story this week"). Then use the other facts to back it up, or to show what sat alongside it. Make calls about the week from what the facts show: what it centred on, what crowded out what, what was new, what came back, what dropped away, how the days split. If nothing connects, say so in your own words and name the two or three things that stood out. Find your own framing for each week; don't reuse stock phrases. No greeting, no sign-off, no emoji, no question.
+- Two or three short paragraphs, 120 to 200 words in all.
+- Lead with what defined the week, by name, in a first sentence that could only belong to this week: a day, a run, a record, or an artist can open it. Then connect the facts that belong together, and say what sat alongside them.
+- Use a count only when the number itself makes the point, one or two per paragraph at most, and say the rest in words.
+- An opinion about a record is welcome when it grows out of what you just said. Phrase it in your own words, as an opinion.
+- Every listening claim (a count, a day, an album played start to finish, a return, a first play) comes from the facts above. Leave out what they don't show, and do no arithmetic they don't state. An artist marked "first plays under this name" may have played under another name, so say it that way. The facts give days, not times of day, so name the day and leave out morning, afternoon, and night.
+- Keep to the facts above about the records themselves: no release years, band members, labels, or who played on what.
+- Leave out guesses about mood or motive.
+- Write artist and album names exactly as they appear above.
+- Say each thing directly. Use no em dashes and no "not X, it's Y" contrasts.
+- No greeting, sign-off, emoji, or question.
 
-Rules:
-- Use only what is in the facts. If something is not listed, it did not happen. Quote no number that is not there, and do no arithmetic beyond what the facts state.
-- Never write "never", "first time" or "first ever". For an artist with no earlier plays, say "first plays under this name".
-- Give a number only for one named artist or album. Don't attach a number to a group ("the other three", "both of those").
-- Say nothing about how the music sounds. No adjectives for music, records or songs. Don't guess why something happened or what mood it reflects.
-- Don't repeat the fact wording; say it the way a friend would. One or two numbers per sentence at most, and only when the number makes the point.
-- Do not contrast by negation ("not X, it's Y", "rather than", "less X, more Y"). No em dashes. No cliches.
-- Plain words. Mix short and long sentences. Use artist and album names exactly as given.
+The two notes below show the voice. Their artists, albums, and numbers come from other weeks, so use none of them here, and find your own way into this week.
 
-Return only a JSON array, one object per sentence: [{"text": "...", "facts": [1]}]. "facts" lists the numbers of the facts that sentence draws on.`;
+<example>
+${USER_INSIGHTS_VOICE_EXAMPLES[0]}
+</example>
+
+<example>
+${USER_INSIGHTS_VOICE_EXAMPLES[1]}
+</example>
+
+Return only JSON: {"note": "<the paragraphs, separated by a blank line>", "names": ["<every artist and album the note names, spelled as above>"]}`;
 
   return [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -59,23 +82,30 @@ Return only a JSON array, one object per sentence: [{"text": "...", "facts": [1]
 }
 
 /**
- * Validate one parsed value as a non-empty list of sentences, each with
- * non-empty text and a list of integer fact ids. Extra keys are dropped. An
- * empty fact list is kept: the guard fails that sentence, not the whole note.
+ * The note's paragraphs, each on one line, separated by exactly one blank line: CRLF becomes LF, paragraphs split on
+ * blank lines, newlines inside a paragraph become spaces, and empty paragraphs are dropped.
  */
-function toNoteSentences(value: unknown): NoteSentence[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
+function normaliseParagraphs(note: string): string {
+  return note
+    .replace(/\r\n/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter((paragraph) => paragraph !== '')
+    .join('\n\n');
+}
 
-  const sentences: NoteSentence[] = [];
-  for (const item of value) {
-    if (typeof item !== 'object' || item === null) return null;
-    const { text, facts } = item as { text?: unknown; facts?: unknown };
-    if (typeof text !== 'string' || text.trim() === '') return null;
-    if (!Array.isArray(facts)) return null;
-    if (!facts.every((id) => Number.isInteger(id))) return null;
-    sentences.push({ text: text.trim(), facts: facts as number[] });
-  }
-  return sentences;
+/**
+ * Validate one parsed value as a week note: an object (not an array) whose `note` is a string with text after
+ * normalising and whose `names` is an array of strings. Names are trimmed and empty ones dropped; extra keys go.
+ */
+function toWeekNote(value: unknown): WeekNote | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const { note, names } = value as { note?: unknown; names?: unknown };
+  if (typeof note !== 'string') return null;
+  if (!Array.isArray(names) || !names.every((name) => typeof name === 'string')) return null;
+  const text = normaliseParagraphs(note);
+  if (text === '') return null;
+  return { note: text, names: (names as string[]).map((name) => name.trim()).filter((name) => name !== '') };
 }
 
 function tryParse(text: string): unknown {
@@ -86,37 +116,48 @@ function tryParse(text: string): unknown {
   }
 }
 
-/**
- * Parse the model's note into sentences. Accepts a bare JSON array, a fenced
- * ```json block, or an array with prose before or after it. Returns null,
- * never throws, for anything else, including an empty array.
- */
-export function parseNoteSentences(raw: string): NoteSentence[] | null {
-  const whole = toNoteSentences(tryParse(raw.trim()));
-  if (whole) return whole;
+/** The indexes in `text` where `char` occurs, in order. */
+function indexesOf(text: string, char: string): number[] {
+  const found: number[] = [];
+  for (let i = 0; i < text.length; i++) if (text[i] === char) found.push(i);
+  return found;
+}
 
-  // Fences and surrounding prose: try each '[' as the array's start against
-  // each ']' as its end, widest first. Prose can hold brackets of its own
-  // ("facts [1] and [2]"), so the first span that parses is not always the note.
-  const starts: number[] = [];
-  const ends: number[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '[') starts.push(i);
-    else if (raw[i] === ']') ends.push(i);
-  }
+/**
+ * Whether the span from `start` to `end` sits inside a JSON array in `raw`: some '[' before it and ']' after it
+ * enclose a span that parses as an array. Brackets in prose ("facts [1] and [2]") enclose nothing that parses.
+ */
+function insideArray(raw: string, start: number, end: number): boolean {
+  const opens = indexesOf(raw.slice(0, start), '[');
+  const closes = indexesOf(raw, ']').filter((i) => i > end);
+  return opens.some((open) => closes.some((close) => Array.isArray(tryParse(raw.slice(open, close + 1)))));
+}
+
+/**
+ * Parse the model's reply into a week note. Accepts bare JSON, a fenced ```json block, or an object with prose
+ * before or after it. Returns null, never throws, for anything else, including an array, bare or wrapped in a fence
+ * or prose: wrapping never changes whether a payload passes.
+ */
+export function parseWeekNote(raw: string): WeekNote | null {
+  const whole = tryParse(raw.trim());
+  if (whole !== undefined) return toWeekNote(whole);
+
+  // Fences and surrounding prose: try each '{' as the object's start against each '}' as its end, widest first.
+  // Prose can hold braces of its own, so the first span that parses is not always the note.
+  const starts = indexesOf(raw, '{');
+  const ends = indexesOf(raw, '}');
   for (const start of starts) {
     for (let e = ends.length - 1; e >= 0 && ends[e] > start; e--) {
-      const sentences = toNoteSentences(tryParse(raw.slice(start, ends[e] + 1)));
-      if (sentences) return sentences;
+      const note = toWeekNote(tryParse(raw.slice(start, ends[e] + 1)));
+      if (note) return insideArray(raw, start, ends[e]) ? null : note;
     }
   }
   return null;
 }
 
 /**
- * Generate the weekly note from a prompt view. One model call, no retry and no
- * cache: the route runs the guard, decides whether to regenerate, and caches
- * only a guarded note through `isCacheableResponse(raw, metadata, ...)`.
+ * Generate the weekly note from a prompt view. One model call, no retry and no cache: the route checks the note,
+ * decides whether to regenerate, and caches only a checked note through `isCacheableResponse(raw, metadata, ...)`.
  */
 export async function generateUserInsightsNote(
   promptView: string,
@@ -141,7 +182,7 @@ export async function generateUserInsightsNote(
   );
 
   return {
-    sentences: parseNoteSentences(response.content),
+    note: parseWeekNote(response.content),
     raw: response.content,
     metadata: response.metadata,
   };

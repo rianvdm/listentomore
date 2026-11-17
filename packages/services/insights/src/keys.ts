@@ -1,7 +1,6 @@
 // ABOUTME: KV keys for the insights pipeline: per-user history partitions and lookups, global tracklists and
-// ABOUTME: tags and making-of facts, the per-user facts, question, marker, last-note and card keys, and delete lists.
+// ABOUTME: tags, the per-user facts, marker and last-note keys, and delete lists.
 
-import { stripEdition } from './match';
 import { norm } from './text';
 
 /** Last.fm usernames are case-insensitive, so every per-user key uses the lower-cased name. */
@@ -30,20 +29,17 @@ export const keys = {
   topTags: (artist: string): string => `lastfm:toptags:${norm(artist)}`,
   /** The user's computed WeekFacts. */
   facts: (user: string): string => `insights:facts:${u(user)}`,
-  /** The owner's last question, for rotation. */
-  question: (user: string): string => `insights:question:${u(user)}`,
   /** Set while a generation runs. */
   generating: (user: string): string => `insights:generating:${u(user)}`,
   /** `{ signature }` of the note last served to the owner. */
   last: (user: string): string => `insights:last:${u(user)}`,
-  /** The profile's card result for its facts signature: the card, or null when the week has none. */
-  card: (user: string): string => `insights:card:${u(user)}`,
-  /**
-   * An album's making-of fact, or `{ none: true }`; global, with no user data. Artist and album are encoded segments,
-   * the album without an edition suffix, so every edition of a record reads, writes and deletes one entry.
-   */
-  trivia: (artist: string, album: string): string => `insights:trivia:${segment(artist)}:${segment(stripEdition(album))}`,
 };
+
+/**
+ * A key's family, its first two segments ('insights:facts', 'lastfm:scrobbles'), for log lines: the rest of a key
+ * holds a username or a name.
+ */
+export const keyFamily = (key: string): string => key.split(':').slice(0, 2).join(':');
 
 /**
  * Prefixes of the multi-key families that hold one user's data. Each ends in ':' so that one user's
@@ -65,5 +61,5 @@ export function userKeyPrefixes(user: string): string[] {
  * 'insights:facts:alice' is a prefix of 'insights:facts:alice2'.
  */
 export function userExactKeys(user: string): string[] {
-  return [keys.facts(user), keys.question(user), keys.generating(user), keys.last(user), keys.card(user)];
+  return [keys.facts(user), keys.generating(user), keys.last(user)];
 }

@@ -1,26 +1,52 @@
-// ABOUTME: Tests for scripts/insights-eval-lib.ts: the output directory, the names the rubric masks, the known tie-back
-// ABOUTME: report, the shared MusicBrainz limiter and the making-of fact-check list.
+// ABOUTME: Tests for scripts/insights-eval-lib.ts: the arguments, the output directory, fixture tags and gold keys, phrases copied
+// ABOUTME: from the voice examples, counts, phrases and openings repeated across notes, word counts, and the .dev.vars keys.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { join } from 'node:path';
-import type { TieBack, WeekFacts } from '@listentomore/insights';
-import { MusicBrainzCredits } from '@listentomore/musicbrainz';
+import { USER_INSIGHTS_VOICE_EXAMPLES } from '@listentomore/ai';
+import { buildWeekFacts, renderPromptView } from '@listentomore/insights';
+import type { WeekInputs } from '@listentomore/insights';
+import may24Json from '../../../../../packages/services/insights/__fixtures__/bordesak-2026-05-24.json';
 import {
-  cardFailure,
-  createLocalLimiter,
-  createSerialQueue,
+  copiedPhrases,
+  countIntegers,
   evalOutputDir,
-  factCheckLines,
-  knownTieBackReport,
+  fixtureTag,
+  goldKey,
   missingDevVarsError,
-  noteNames,
+  openingFrame,
+  parseEvalArgs,
+  preflightFixtures,
+  repeatedOpenings,
+  repeatedPhrases,
   requiredDevVars,
+  wordCount,
 } from '../../../scripts/insights-eval-lib';
-import type { CardVerdict } from '../../../scripts/insights-eval-lib';
-import { createMemoryKV } from '../../../scripts/script-env';
-import type { CheckedAlbum, TriviaCard } from '../../api/internal/insights-card';
 
 const WEB_ROOT = '/repo/apps/web';
+
+describe('parseEvalArgs', () => {
+  it('parses --label and an optional --extra', () => {
+    expect(parseEvalArgs(['--label', 'x'])).toEqual({ label: 'x', extra: null });
+    expect(parseEvalArgs(['--label', 'x', '--extra', 'd'])).toEqual({ label: 'x', extra: 'd' });
+    expect(parseEvalArgs(['--extra', 'd', '--label', 'x'])).toEqual({ label: 'x', extra: 'd' });
+  });
+
+  it('rejects the removed and unknown options by name', () => {
+    expect(() => parseEvalArgs(['--label', 'x', '--dry-run'])).toThrow(/--dry-run/);
+    expect(() => parseEvalArgs(['--label', 'x', '--trivia'])).toThrow(/--trivia/);
+    expect(() => parseEvalArgs(['--foo', '--label', 'x'])).toThrow(/--foo/);
+    expect(() => parseEvalArgs(['--label', 'x', 'stray'])).toThrow(/stray/);
+  });
+
+  it('needs --label, a value after each flag, and each flag once', () => {
+    expect(() => parseEvalArgs([])).toThrow(/--label <name> is required/);
+    expect(() => parseEvalArgs(['--extra', 'd'])).toThrow(/--label <name> is required/);
+    expect(() => parseEvalArgs(['--label'])).toThrow(/--label needs a value/);
+    expect(() => parseEvalArgs(['--label', '--extra', 'd'])).toThrow(/--label needs a value/);
+    expect(() => parseEvalArgs(['--label', 'x', '--label', 'y'])).toThrow(/--label given twice/);
+  });
+});
 
 describe('evalOutputDir', () => {
   it('puts a run under eval-output/<label>/insights', () => {
@@ -35,152 +61,218 @@ describe('evalOutputDir', () => {
   });
 });
 
-describe('noteNames', () => {
-  it('returns the week names and every fact entity, once each', () => {
-    const fact = (entities: string[]) => ({ entities }) as unknown as WeekFacts['facts'][number];
-    const wf = {
-      names: ['Great White', 'Inferno'],
-      windowFact: fact([]),
-      facts: [fact(['Great White', 'Gurriers']), fact(['Boards of Canada'])],
-    } as unknown as WeekFacts;
-    expect(noteNames(wf).sort()).toEqual(['Boards of Canada', 'Great White', 'Gurriers', 'Inferno']);
+describe('fixtureTag and goldKey', () => {
+  it('tags each committed fixture and an extra one, and finds the gold key of a gold week only', () => {
+    const cases: Array<[string, ReturnType<typeof fixtureTag>, string | null]> = [
+      ['bordesak-2026-05-24', 'gold', '2026-05-24'],
+      ['bordesak-2026-05-31', 'gold', '2026-05-31'],
+      ['bordesak-2026-06-12', 'gold, example in prompt', '2026-06-12'],
+      ['bordesak-heldout-2026-08-02', 'held-out', null],
+      ['bordesak-heldout-2026-09-20', 'held-out', null],
+      ['bordesak-live-2026-11-09', 'live', null],
+      ['extra-1', 'extra', null],
+    ];
+    for (const [name, tag, key] of cases) {
+      expect(fixtureTag(name), name).toBe(tag);
+      expect(goldKey(name), name).toBe(key);
+    }
+  });
+
+  it('refuses a fixture name it cannot tag', () => {
+    expect(() => fixtureTag('week-of-plays')).toThrow(/fixture name/);
+    expect(goldKey('week-of-plays')).toBeNull();
   });
 });
 
-describe('knownTieBackReport', () => {
-  it('reports each known tie-back as checked (found or missing), unchecked (cut) or not a candidate, matching names loosely', () => {
-    const tieBack = { band: 'the black keys' } as unknown as TieBack;
-    const losOjos = { artist: 'Hermanos Gutierrez', album: 'Los Ojos del Condor', plays: 22 };
-    const seaChange = { artist: 'Beck', album: 'Sea Change', plays: 12 };
-    const earthling = { artist: 'Eddie Vedder', album: 'Earthling', plays: 14 };
-    const checked: CheckedAlbum[] = [
-      { album: losOjos, tieBacks: [tieBack] },
-      { album: seaChange, tieBacks: null },
-    ];
-    expect(knownTieBackReport([losOjos, seaChange, earthling], checked)).toEqual([
-      { album: 'Los Ojos Del Cóndor', band: 'The Black Keys', status: 'checked: found' },
-      { album: 'Earthling', band: 'Red Hot Chili Peppers', status: 'unchecked (cut)' },
-      { album: 'Earthling', band: 'Tom Petty and the Heartbreakers', status: 'unchecked (cut)' },
-      { album: 'Sea Change', band: 'Nine Inch Nails', status: 'checked: missing' },
-      { album: 'In Rainbows', band: 'The Smile', status: 'not a candidate' },
+describe('preflightFixtures', () => {
+  const MAY24 = may24Json as unknown as WeekInputs;
+  const valid = { name: 'bordesak-2026-05-24', inputs: MAY24 };
+  // Passes the loader's shape check (username, now, scrobbles) but has no history lists, so buildWeekFacts throws.
+  const invalid = {
+    name: 'extra-2',
+    inputs: { username: 'someone-else', now: MAY24.now, scrobbles: MAY24.scrobbles } as unknown as WeekInputs,
+  };
+
+  it("builds every fixture's week facts and prompt view", () => {
+    const [prepared] = preflightFixtures([valid]);
+    const wf = buildWeekFacts(MAY24);
+    expect(prepared.name).toBe(valid.name);
+    expect(prepared.wf).toEqual(wf);
+    expect(prepared.promptView).toBe(renderPromptView(wf));
+  });
+
+  it('stops on a fixture whose facts cannot be built, naming its label and nothing from it', () => {
+    let message = '';
+    try {
+      preflightFixtures([valid, invalid]);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/extra-2/);
+    expect(message).not.toContain('someone-else');
+    expect(message).not.toMatch(/\.json/);
+  });
+
+  it('a run that preflights first makes no model call when one fixture is invalid, even after valid ones', () => {
+    const callModel = vi.fn();
+    const run = (fixtures: Array<{ name: string; inputs: WeekInputs }>): void => {
+      for (const f of preflightFixtures(fixtures)) callModel(f.promptView);
+    };
+
+    expect(() => run([valid, valid, invalid])).toThrow(/extra-2/);
+    expect(callModel).not.toHaveBeenCalled();
+  });
+});
+
+describe('copiedPhrases', () => {
+  it('finds a six-word span copied from an example, whatever its case and punctuation', () => {
+    expect(USER_INSIGHTS_VOICE_EXAMPLES[0]).toContain('You went back to In Rainbows');
+    expect(copiedPhrases('On Tuesday you went back to In Rainbows, twice.', USER_INSIGHTS_VOICE_EXAMPLES)).toEqual([
+      'you went back to in rainbows',
     ]);
   });
+
+  it('returns nothing for a five-word overlap', () => {
+    expect(copiedPhrases('Then you went back to In Utero.', USER_INSIGHTS_VOICE_EXAMPLES)).toEqual([]);
+  });
+
+  it('joins overlapping n-grams into one span and takes a shorter n', () => {
+    expect(copiedPhrases('a b c d e f g', ['x a b c d e f g y'])).toEqual(['a b c d e f g']);
+    expect(copiedPhrases('one two three', ['zero one two three four'], 3)).toEqual(['one two three']);
+  });
 });
 
-describe('knownTieBackReport after a cut', () => {
-  // Regression: the report once read only the checked albums, so a candidate the run never reached read as
-  // 'not a candidate'. Candidates come in separately from the completed checks.
-  it('reports a candidate the cut run never reached as unchecked (cut), never as not a candidate', () => {
-    const candidates = [
-      { artist: 'Hermanos Gutiérrez', album: 'Los Ojos Del Cóndor', plays: 22 },
-      { artist: 'Radiohead', album: 'In Rainbows', plays: 12 },
+describe('countIntegers', () => {
+  it('counts digit runs, reading a thousands comma between digits as part of the number', () => {
+    expect(countIntegers('39 plays, 1,204 scrobbles and 3 days.')).toBe(3);
+    expect(countIntegers('Three plays, no digits.')).toBe(0);
+    expect(countIntegers('Track 2, 4 plays')).toBe(2);
+  });
+});
+
+describe('repeatedPhrases', () => {
+  const note = (label: string, text: string, names: string[] = []): { label: string; note: string; names: string[] } => ({
+    label,
+    note: text,
+    names,
+  });
+
+  it('reports a phrase found in three of four notes, with those labels', () => {
+    const notes = [
+      note('a', 'Mezzanine ran start to finish, no argument.'),
+      note('b', 'Kid A held the top spot, no argument.'),
+      note('c', 'A quiet week for drone. No argument.'),
+      note('d', 'Nothing much happened on Friday.'),
     ];
-    const report = knownTieBackReport(candidates, []);
-    expect(report.filter((r) => r.album === 'Los Ojos Del Cóndor' || r.album === 'In Rainbows').map((r) => r.status))
-      .toEqual(['unchecked (cut)', 'unchecked (cut)']);
-    expect(report.filter((r) => r.album === 'Earthling' || r.album === 'Sea Change').map((r) => r.status))
-      .toEqual(['not a candidate', 'not a candidate', 'not a candidate']);
-  });
-});
-
-describe('createLocalLimiter', () => {
-  afterEach(() => {
-    vi.useRealTimers();
+    expect(repeatedPhrases(notes)).toContainEqual({ phrase: 'no argument', labels: ['a', 'b', 'c'] });
   });
 
-  it('spaces reservations 1.1 s apart for every MusicBrainzCredits client sharing one limiter', async () => {
-    vi.useFakeTimers();
-    vi.mocked(globalThis.fetch).mockImplementation(async () => new Response(JSON.stringify({ 'release-groups': [] })));
-    const t = 0;
-    const limiter = createLocalLimiter(() => t);
-    const [a, b] = [
-      new MusicBrainzCredits(createMemoryKV().kv, limiter, { maxCalls: 5 }),
-      new MusicBrainzCredits(createMemoryKV().kv, limiter, { maxCalls: 5 }),
+  it('reports the longest phrase and not the shorter ones inside it with the same labels', () => {
+    const notes = ['a', 'b', 'c', 'd'].map((label, i) =>
+      note(label, `This was a week of ${['drone', 'jazz', 'metal', 'folk'][i]} records.`),
+    );
+    const phrases = repeatedPhrases(notes);
+    const all = ['a', 'b', 'c', 'd'];
+    const long = phrases.filter((p) => p.phrase === 'this was a week' || p.phrase === 'was a week of');
+    expect(long.length).toBeGreaterThan(0);
+    for (const p of long) expect(p.labels).toEqual(all);
+    for (const shorter of ['this was', 'was a', 'a week', 'week of', 'this was a', 'was a week', 'a week of']) {
+      expect(phrases.map((p) => p.phrase)).not.toContain(shorter);
+    }
+  });
+
+  it('skips an artist name each note lists among its own names', () => {
+    // The name is the only phrase the notes share, so no longer phrase can hide it.
+    const notes = [
+      note('a', 'Monday belonged to Nils Frahm.', ['Nils Frahm']),
+      note('b', 'Tuesday went Nils Frahm.', ['Nils Frahm']),
+      note('c', 'Sunday ended with Nils Frahm.', ['Nils Frahm']),
     ];
-    const reserve = vi.spyOn(limiter, 'reserve');
-    const both = Promise.all([a.findRelease('A', 'X'), b.findRelease('B', 'Y')]);
-    await vi.runAllTimersAsync();
-    expect(await both).toEqual([null, null]);
-    expect(await Promise.all(reserve.mock.results.map((r) => r.value))).toEqual([0, 1100]);
+    expect(repeatedPhrases(notes)).toEqual([]);
+  });
+
+  it('skips a phrase made only of stopwords', () => {
+    const notes = [note('a', 'Most of the ambient.'), note('b', 'Some of the jazz.'), note('c', 'Plenty of the rock.')];
+    expect(repeatedPhrases(notes)).toEqual([]);
+  });
+
+  it('reports nothing found in fewer than minNotes notes', () => {
+    const notes = [note('a', 'Still the one, no argument.'), note('b', 'Kid A again, no argument.'), note('c', 'Quiet.')];
+    expect(repeatedPhrases(notes)).toEqual([]);
+    expect(repeatedPhrases(notes, 2)).toContainEqual({ phrase: 'no argument', labels: ['a', 'b'] });
   });
 });
 
-describe('factCheckLines', () => {
-  it('lists each making-of card with its source URL', () => {
-    const text = 'Boards of Canada recorded Inferno in a farmhouse.';
-    const sourceUrl = 'https://example.com/inferno';
-    const makingOf: TriviaCard = { kind: 'making_of', album: 'Inferno', artist: 'Boards of Canada', text, sourceUrl };
-    const tieBack: TriviaCard = { kind: 'tieback', album: 'Sea Change', artist: 'Beck', text: 'Someone plays on it.' };
-    expect(factCheckLines([
-      { fixture: 'a', card: makingOf },
-      { fixture: 'b', card: tieBack },
-      { fixture: 'c', card: null },
-    ])).toEqual([`- a: Inferno (Boards of Canada): ${text} ${sourceUrl}`]);
+describe('openingFrame and repeatedOpenings', () => {
+  const owned = [
+    { label: 'a', note: 'Boards of Canada owned this week. Geogaddi twice.', names: ['Boards of Canada', 'Geogaddi'] },
+    { label: 'b', note: 'Siiga owned this week.\n\nNostalgia Burns again.', names: ['Siiga', 'Nostalgia Burns'] },
+  ];
+  const distinct = [
+    { label: 'c', note: 'Friday Aug 7 belonged to U2.', names: ['U2'] },
+    { label: 'd', note: 'Los Ojos Del Cóndor was the record of the week.', names: ['Los Ojos Del Cóndor'] },
+  ];
+
+  it("reads the first four words with the note's own names masked, lower-cased and without punctuation", () => {
+    expect(openingFrame(owned[0].note, owned[0].names)).toBe('name owned this week');
+    expect(openingFrame(owned[1].note, owned[1].names)).toBe('name owned this week');
+    expect(openingFrame(distinct[0].note, distinct[0].names)).toBe('day belonged to name');
+    expect(openingFrame(distinct[1].note, distinct[1].names)).toBe('name was the record');
+  });
+
+  it('reports a frame two notes share, with their labels', () => {
+    expect(repeatedOpenings([...owned, ...distinct])).toEqual([{ frame: 'name owned this week', labels: ['a', 'b'] }]);
+  });
+
+  it('reports nothing for openings that differ, or for a single note', () => {
+    expect(repeatedOpenings(distinct)).toEqual([]);
+    expect(repeatedOpenings([owned[0]])).toEqual([]);
+  });
+
+  it('reads weekdays as day and month-day dates as date, folding "day date" into day', () => {
+    const belonged = [
+      { label: 'p', note: 'Friday, May 29 belonged to Boards of Canada.', names: ['Boards of Canada'] },
+      { label: 'q', note: 'Friday Aug 7 belonged to U2.', names: ['U2'] },
+      { label: 'r', note: 'Friday Sep 25 belonged to Linkin Park.', names: ['Linkin Park'] },
+      { label: 's', note: 'Sunday belonged to Mutemath: 22 plays across the day.', names: ['Mutemath'] },
+      { label: 't', note: 'Friday belonged to Capri (Remastered 2026).', names: ['Capri (Remastered 2026)'] },
+    ];
+    for (const { note, names } of belonged) expect(openingFrame(note, names), note).toBe('day belonged to name');
+    expect(openingFrame('November 8 belonged to U2.', ['U2'])).toBe('date belonged to name');
+    const ethel = { label: 'u', note: 'Ethel Cain ran this week.', names: ['Ethel Cain'] };
+    expect(openingFrame(ethel.note, ethel.names)).toBe('name ran this week');
+    expect(repeatedOpenings([...belonged, ethel])).toEqual([
+      { frame: 'day belonged to name', labels: ['p', 'q', 'r', 's', 't'] },
+    ]);
+  });
+
+  it('honours minNotes and sorts by the number of notes, most first, then by frame', () => {
+    const notes = [
+      ...owned,
+      { label: 'e', note: 'Kid A owned this week, again.', names: ['Kid A'] },
+      { label: 'f', note: 'A quiet week for drone.', names: [] },
+      { label: 'g', note: 'A quiet week for jazz.', names: [] },
+    ];
+    expect(repeatedOpenings(notes)).toEqual([
+      { frame: 'name owned this week', labels: ['a', 'b', 'e'] },
+      { frame: 'a quiet week for', labels: ['f', 'g'] },
+    ]);
+    expect(repeatedOpenings(notes, 3)).toEqual([{ frame: 'name owned this week', labels: ['a', 'b', 'e'] }]);
   });
 });
 
-describe('createSerialQueue', () => {
-  it('runs tasks one at a time in call order, and keeps going after a failure', async () => {
-    const serial = createSerialQueue();
-    const events: string[] = [];
-    const task = (name: string, fail = false) => async () => {
-      events.push(`start ${name}`);
-      await Promise.resolve();
-      events.push(`end ${name}`);
-      if (fail) throw new Error(name);
-      return name;
-    };
-    const results = await Promise.allSettled([serial(task('a')), serial(task('b', true)), serial(task('c'))]);
-    expect(events).toEqual(['start a', 'end a', 'start b', 'end b', 'start c', 'end c']);
-    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
-  });
-});
-
-describe('cardFailure', () => {
-  const card = (status: CardVerdict['status'], extra: Partial<CardVerdict> = {}): CardVerdict => ({
-    skipped: null,
-    status,
-    cutReason: null,
-    rubric: [],
-    ...extra,
-  });
-
-  it('passes a card with no rubric hits', () => {
-    expect(cardFailure(card('card'))).toBeNull();
-  });
-
-  it('fails a card that trips the copy rubric', () => {
-    expect(cardFailure(card('card', { rubric: ['overused:delve'] }))).toBe('card rubric: overused:delve');
-  });
-
-  it('passes a week with no card', () => {
-    expect(cardFailure(card('none'))).toBeNull();
-  });
-
-  it('passes a week the card route would skip', () => {
-    expect(cardFailure(card(null, { skipped: 'no candidate albums' }))).toBeNull();
-  });
-
-  it('fails a cut card, naming the reason', () => {
-    expect(cardFailure(card('cut', { cutReason: 'rate_limit' }))).toBe('card cut: rate_limit');
-    expect(cardFailure(card('cut', { cutReason: 'making_of' }))).toBe('card cut: making_of');
-  });
-
-  it('fails a card run that threw', () => {
-    expect(cardFailure(card('error'))).toBe('card error');
-  });
-
-  it('passes a run without --trivia', () => {
-    expect(cardFailure(null)).toBeNull();
+describe('wordCount', () => {
+  it('counts words across lines and paragraphs', () => {
+    expect(wordCount('a b\n\nc')).toBe(3);
+    expect(wordCount('  ')).toBe(0);
   });
 });
 
 describe('requiredDevVars and missingDevVarsError', () => {
-  it('needs the key of each provider the run uses, and the Spotify credentials with --trivia', () => {
-    expect(requiredDevVars(['anthropic'], false)).toEqual(['ANTHROPIC_API_KEY']);
-    expect(requiredDevVars(['anthropic', 'anthropic'], true))
-      .toEqual(['ANTHROPIC_API_KEY', 'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET']);
-    expect(requiredDevVars(['openai', 'anthropic'], false)).toEqual(['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']);
+  it('needs the key of each provider the run uses, once each', () => {
+    expect(requiredDevVars(['anthropic'])).toEqual(['ANTHROPIC_API_KEY']);
+    expect(requiredDevVars(['anthropic', 'anthropic'])).toEqual(['ANTHROPIC_API_KEY']);
+    expect(requiredDevVars(['openai', 'anthropic'])).toEqual(['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']);
   });
 
   it('names each missing or empty key, and never a value', () => {

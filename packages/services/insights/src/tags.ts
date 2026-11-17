@@ -50,7 +50,7 @@ export const BUCKETS: ReadonlyArray<readonly [string, ReadonlySet<string>]> = [
   ['pop', new Set(['pop', 'indie pop', 'electropop'])],
 ];
 
-/** How a bucket reads in a statement: plain words, with no digits or number words for the guard to read as quantities. */
+/** How a bucket reads in a statement: plain words, with no digits or number words to read as untyped quantities. */
 export const BUCKET_LABELS: Readonly<Record<string, string>> = {
   'worship/christian': 'worship and Christian music',
   'ambient/modern classical': 'ambient and modern classical',
@@ -70,7 +70,7 @@ const usable = (raw: string[]): string[] =>
 
 /**
  * An artist's top tags for clusters: raw Last.fm order minus noise tags, tags with digits and tags with a
- * number word (a cluster names its tag, and the guard would read 'two tone' as a quantity), first 3 kept.
+ * number word (a cluster names its tag, and 'two tone' would read as an untyped quantity), first 3 kept.
  */
 export function cleanTags(raw: string[]): string[] {
   return usable(raw).filter((tag) => !NOISE_TAGS.has(tag) && !NUMBER_WORD.test(tag)).slice(0, TOP_TAGS);

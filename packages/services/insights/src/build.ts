@@ -1,7 +1,6 @@
 // ABOUTME: buildWeekFacts - turns one WeekInputs into the ranked WeekFacts object: weeks, dedupe, baseline,
-// ABOUTME: the fact rules, ranking, the question, the window line, top artists, caveats, names and card albums.
+// ABOUTME: the fact rules, ranking, the window line, top artists and albums, caveats and names.
 
-import { cardAlbums } from './card-albums';
 import { dedupe } from './dedupe';
 import { albumFacts } from './facts-album';
 import { artistFacts } from './facts-artist';
@@ -10,12 +9,12 @@ import { plural } from './facts-shared';
 import { weekFacts } from './facts-week';
 import { artistWeeks } from './history';
 import type { ArtistWeek } from './history';
-import { QUIET_THRESHOLD, chooseQuestion, rankFacts } from './rank';
+import { QUIET_THRESHOLD, rankFacts } from './rank';
 import { albumRuns } from './runs';
 import type { AlbumRun } from './runs';
 import { StatementBuilder } from './statement';
 import { RULE_VERSION, albumKey } from './types';
-import type { FactContext, FactKind, QuestionKind, Scrobble, WeekFacts, WeekInputs } from './types';
+import type { FactContext, FactKind, Scrobble, WeekFacts, WeekInputs } from './types';
 import { weekWindow } from './window';
 
 /** This week plus the four before it: the 35 days of scrobbles the inputs carry. */
@@ -23,6 +22,7 @@ const WEEKS = 5;
 /** Prior weeks with plays, and usable baseline weeks, an account needs for a baseline (spec section 1, "Provenance"). */
 const MIN_BASELINE_WEEKS = 4;
 const TOP_ARTISTS = 8;
+const TOP_ALBUMS = 5;
 const WINDOW_DAYS = 7;
 /** Facts that state a share of the week, which a truncated week cannot support (spec section 1, caps). */
 const SHARE_KINDS: ReadonlySet<FactKind> = new Set<FactKind>(['album_mode', 'themed_block']);
@@ -60,7 +60,25 @@ function windowFact(inputs: WeekInputs, plays: number, priorAverage: number | nu
     .add(' (rolling ').number(WINDOW_DAYS, 'days').add(' days). ').number(plays, 'plays').add(plural(plays, ' play', ' plays'));
   if (priorAverage !== null) b.add('; the usual week is about ').number(priorAverage, 'plays');
   b.add('.');
-  return { id: 0, kind: 'volume', salience: 0, subject: null, ...b.build(), edges: [] };
+  return { id: 0, kind: 'volume', salience: 0, subject: null, ...b.build() };
+}
+
+/**
+ * This week's albums by deduped plays, then album name, then artist name, capped at TOP_ALBUMS. Scrobbles with a
+ * blank album are skipped; each album appears once by albumKey, spelled as first seen. `week` is deduped, ascending.
+ */
+function topAlbumsOf(week: Scrobble[]): WeekFacts['topAlbums'] {
+  const byKey = new Map<string, WeekFacts['topAlbums'][number]>();
+  for (const { artist, album } of week) {
+    if (!album.trim()) continue;
+    const key = albumKey(artist, album);
+    const seen = byKey.get(key);
+    if (seen) seen.plays += 1;
+    else byKey.set(key, { artist, album, plays: 1 });
+  }
+  return [...byKey.values()]
+    .sort((a, b) => b.plays - a.plays || a.album.localeCompare(b.album) || a.artist.localeCompare(b.artist))
+    .slice(0, TOP_ALBUMS);
 }
 
 /** Mislabelled runs (one caveat per album, in run order), truncation, and the dedupe note. */
@@ -78,14 +96,8 @@ function caveatsOf(inputs: WeekInputs, runs: AlbumRun[]): string[] {
   return caveats;
 }
 
-/**
- * The week's facts, ranked, with everything the prompt view, the guard and the code lines read.
- * `lastQuestion` is the owner's stored last question, for rotation; visitors pass nothing.
- */
-export function buildWeekFacts(
-  inputs: WeekInputs,
-  opts: { lastQuestion?: { kind: QuestionKind; subject: string } | null } = {},
-): WeekFacts {
+/** The week's facts, ranked, with everything the prompt view, the note check and the code lines read. */
+export function buildWeekFacts(inputs: WeekInputs): WeekFacts {
   const rawWeeks = Array.from({ length: WEEKS }, (_, back) => {
     const { from, to } = weekWindow(inputs.now, back);
     return inputs.scrobbles.filter((s) => s.ts >= from && s.ts < to);
@@ -122,12 +134,10 @@ export function buildWeekFacts(
     facts,
     topArtists: [...artists.values()].sort(byPlaysThenName).slice(0, TOP_ARTISTS)
       .map(({ artist, plays, tier, nameUncertain }) => ({ artist, plays, tier, nameUncertain })),
+    topAlbums: topAlbumsOf(weeks[0]),
     caveats: caveatsOf(inputs, ctx.runs),
     quiet,
-    // A quiet week gets the code sentence and no note, so nothing for a question to follow.
-    question: quiet ? null : chooseQuestion(facts, opts.lastQuestion ?? null),
     names: [...names].sort((a, b) => a.localeCompare(b)),
     releasesChecked: inputs.releases !== undefined,
-    cardAlbums: cardAlbums(facts, ctx.runs, weeks[0]),
   };
 }

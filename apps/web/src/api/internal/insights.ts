@@ -11,7 +11,6 @@ import { requireSessionAuth } from '../../middleware/require-session-auth';
 import { getCurrentUser } from '../../middleware/session';
 import { errorKind } from '../../utils/error-kind';
 import { getWeekInsights } from './insights-week';
-import { getTriviaCard } from './insights-card-route';
 
 const app = new Hono<InternalAppContext>();
 
@@ -59,8 +58,9 @@ async function getUserWithInsightsAccess(
 }
 
 // The refresh cooldown is keyed on the resolved Last.fm username, so a profile's site
-// username and Last.fm name share one cooldown
-const refreshKey = (lastfmUsername: string): string => `insights-refresh:${lastfmUsername.toLowerCase()}`;
+// username and Last.fm name share one cooldown. Log lines carry the family only, never the key
+const REFRESH_KEY_FAMILY = 'insights-refresh';
+const refreshKey = (lastfmUsername: string): string => `${REFRESH_KEY_FAMILY}:${lastfmUsername.toLowerCase()}`;
 
 // Check and enforce refresh rate limit. A failed read allows the refresh rather than failing the request
 async function checkRefreshRateLimit(
@@ -72,7 +72,7 @@ async function checkRefreshRateLimit(
   try {
     lastRefresh = await c.env.CACHE.get(cacheKey);
   } catch (error) {
-    console.error('[Insights] Refresh cooldown read failed:', error instanceof Error ? error.message : String(error));
+    console.error(`[Insights] cache-read:error ${REFRESH_KEY_FAMILY} kind=${errorKind(error)}`);
     return { allowed: true };
   }
 
@@ -101,7 +101,7 @@ async function setRefreshTimestamp(
   try {
     await c.env.CACHE.put(cacheKey, Date.now().toString(), { expirationTtl: ttl });
   } catch (error) {
-    console.error('[Insights] Refresh cooldown write failed:', error instanceof Error ? error.message : String(error));
+    console.error(`[Insights] cache-write:error ${REFRESH_KEY_FAMILY} kind=${errorKind(error)}`);
   }
 }
 
@@ -154,33 +154,9 @@ app.get('/user-insights-summary', requireSessionAuth, async (c) => {
     }
     return c.json({ data: week });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Internal user-insights-summary error:', errorMessage, error);
+    // The error class only: a message can quote a KV key, a username or cached data
+    console.error(`[Insights] summary:error kind=${errorKind(error)}`);
     return c.json({ error: 'Failed to generate insights' }, 500);
-  }
-});
-
-// The "Did you know" card. Reads the cached week facts only; the owner's view alone can generate a card.
-app.get('/user-insights-trivia', requireSessionAuth, async (c) => {
-  const username = c.req.query('username');
-
-  if (!username) {
-    return c.json({ error: 'Missing username parameter' }, 400);
-  }
-
-  // Check access before any cache read, on every request
-  const accessResult = await getUserWithInsightsAccess(c, username);
-  if ('error' in accessResult) {
-    return c.json({ error: accessResult.error }, accessResult.status as 403 | 404);
-  }
-
-  try {
-    const data = await getTriviaCard(c, { user: accessResult.user, isOwner: accessResult.isOwner });
-    return c.json({ data });
-  } catch (error) {
-    // A known error class only: a message from the card path can carry an album, artist or MusicBrainz path.
-    console.error(`[Insights] card-route:error kind=${errorKind(error)}`);
-    return c.json({ error: 'Failed to load the card' }, 500);
   }
 });
 

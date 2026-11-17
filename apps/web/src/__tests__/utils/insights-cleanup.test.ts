@@ -25,7 +25,6 @@ describe('deleteUserInsightsData', () => {
     'lastfm:scrobbles:alice:2026-11-01',
     'lastfm:toplist:alice:6month',
     'insights:facts:alice',
-    'insights:question:alice',
     'ai:userInsightsSummary:alice:abcd',
   ];
   const ALICE2 = ['lastfm:scrobbles:alice2:2026-11-01', 'insights:facts:alice2'];
@@ -37,19 +36,35 @@ describe('deleteUserInsightsData', () => {
 
     const deleted = await deleteUserInsightsData(kv, 'alice');
 
-    expect(deleted).toBe(5);
+    expect(deleted).toBe(4);
     expect(await remaining(kv)).toEqual([...ALICE2, ...GLOBAL].sort());
   });
 
-  it('deletes insights:card:<lower> by exact key', async () => {
+  it('deletes insights:last:<lower> by exact key', async () => {
     const kv = createMockKV();
-    await seed(kv, ['insights:card:alice', 'insights:card:alice2']);
+    await seed(kv, ['insights:last:alice', 'insights:last:alice2']);
 
     const deleted = await deleteUserInsightsData(kv, 'Alice');
 
     expect(deleted).toBe(1);
-    expect(await remaining(kv)).toEqual(['insights:card:alice2']);
+    expect(await remaining(kv)).toEqual(['insights:last:alice2']);
+    expect(kv.delete).toHaveBeenCalledWith('insights:last:alice');
+  });
+
+  it('deletes the retired insights:card and insights:question keys by exact key, never by prefix', async () => {
+    const kv = createMockKV();
+    const neighbours = ['insights:card:alice2', 'insights:question:alice2'];
+    await seed(kv, ['insights:card:alice', 'insights:question:alice', ...neighbours]);
+
+    const deleted = await deleteUserInsightsData(kv, 'Alice');
+
+    expect(deleted).toBe(2);
+    expect(await remaining(kv)).toEqual(neighbours);
     expect(kv.delete).toHaveBeenCalledWith('insights:card:alice');
+    expect(kv.delete).toHaveBeenCalledWith('insights:question:alice');
+    const prefixes = (kv.list as ReturnType<typeof vi.fn>).mock.calls
+      .map(([options]) => (options as { prefix?: string } | undefined)?.prefix ?? '');
+    expect(prefixes.filter((p) => p.startsWith('insights:card') || p.startsWith('insights:question'))).toEqual([]);
   });
 
   it("never deletes a user whose name starts with this user's name", async () => {

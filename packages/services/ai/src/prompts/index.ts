@@ -31,19 +31,12 @@ export {
 export {
   generateUserInsightsNote,
   buildUserInsightsNoteMessages,
-  parseNoteSentences,
+  parseWeekNote,
   USER_INSIGHTS_PROMPT_VERSION,
+  USER_INSIGHTS_VOICE_EXAMPLES,
   type UserInsightsNoteResult,
-  type NoteSentence,
+  type WeekNote,
 } from './user-insights-note';
-
-export {
-  generateAlbumTrivia,
-  buildAlbumTriviaMessages,
-  parseAlbumTrivia,
-  ALBUM_TRIVIA_NONE,
-  type AlbumTriviaResult,
-} from './album-trivia';
 
 export {
   generateUserInsightsRecommendations,

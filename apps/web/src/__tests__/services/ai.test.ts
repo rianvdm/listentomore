@@ -3,9 +3,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
 import * as aiExports from '@listentomore/ai';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, ALBUM_TRIVIA_NONE, buildAlbumTriviaMessages, generateAlbumTrivia, parseAlbumTrivia, buildUserInsightsNoteMessages, generateUserInsightsNote, generateUserInsightsRecommendations, parseNoteSentences, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsNoteMessages, generateUserInsightsNote, generateUserInsightsRecommendations, parseWeekNote, USER_INSIGHTS_PROMPT_VERSION, USER_INSIGHTS_VOICE_EXAMPLES, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS, type AITask } from '@listentomore/config';
-import { makingOfFact } from '../../api/internal/insights-making-of';
 import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
 describe('OpenAIClient', () => {
@@ -455,16 +454,6 @@ describe('AnthropicClient.chatCompletion', () => {
     expect('tools' in lastBody(mockFetch)).toBe(false);
   });
 
-  it('sizes max_uses from webSearchMaxUses when a task sets it', async () => {
-    const mockFetch = setupFetchMock([
-      { pattern: /api\.anthropic\.com/, response: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'x' }] } },
-    ]);
-    await new AnthropicClient('key').chatCompletion({
-      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true, webSearchMaxUses: 3,
-    });
-    expect(lastBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
-  });
-
   it('uses the 60s timeout preset for web search tasks', () => {
     expect(timeoutPresetFor(true)).toBe('verySlow');
     expect(timeoutPresetFor(false)).toBe('slow');
@@ -730,7 +719,11 @@ const notePromptView = [
   'Top artists this week: Meltt (31), A$AP Rocky (14), Nils Frahm (9)',
 ].join('\n');
 
-const noteJson = '[{"text": "You played Eternal Embers start to finish three times.", "facts": [1]}, {"text": "A$AP Rocky showed up with 14 plays.", "facts": [2]}]';
+const noteJson = '{"note": "You played Eternal Embers start to finish three times.\\n\\nA$AP Rocky showed up with 14 plays.", "names": ["Eternal Embers", "A$AP Rocky"]}';
+const parsedNote = {
+  note: 'You played Eternal Embers start to finish three times.\n\nA$AP Rocky showed up with 14 plays.',
+  names: ['Eternal Embers', 'A$AP Rocky'],
+};
 
 describe('buildUserInsightsNoteMessages', () => {
   it('system prompt is the friend-who-follows-scrobbles line', () => {
@@ -741,98 +734,105 @@ describe('buildUserInsightsNoteMessages', () => {
     });
   });
 
-  it('user prompt carries the prompt view, asks for JSON sentences with cited fact ids, and contains no example note', () => {
-    const msgs = buildUserInsightsNoteMessages(notePromptView);
+  it('user prompt carries the prompt view verbatim, both voice examples and the { note, names } contract', () => {
+    const msgs = buildUserInsightsNoteMessages('VIEW');
     expect(msgs).toHaveLength(2);
     expect(msgs[1].role).toBe('user');
     const user = msgs[1].content;
-    expect(user).toContain(`It is the only thing you know about it.\n\n${notePromptView}\n\nWrite the note in second person, the way a friend who follows your scrobbles would.`);
-    expect(user).toContain('"facts"');
-    expect(user).toContain('Return only a JSON array, one object per sentence: [{"text": "...", "facts": [1]}].');
-    expect(user).not.toContain('Boards of Canada immersion');
-    expect(user).not.toContain('Here are a few summaries');
-    expect(user).not.toContain('{PROMPT_VIEW}');
+    expect(user).toContain('It is everything you know about the week.\n\nVIEW\n\nWrite them this week\'s note, in second person.');
+    expect(user).toContain(`<example>\n${USER_INSIGHTS_VOICE_EXAMPLES[0]}\n</example>`);
+    expect(user).toContain(`<example>\n${USER_INSIGHTS_VOICE_EXAMPLES[1]}\n</example>`);
+    expect(user.endsWith(
+      'Return only JSON: {"note": "<the paragraphs, separated by a blank line>", "names": ["<every artist and album the note names, spelled as above>"]}',
+    )).toBe(true);
+    // A String.replace template would read "$A" as a pattern.
+    expect(buildUserInsightsNoteMessages(notePromptView)[1].content).toContain(notePromptView);
   });
 
-  // The prompt bans questions ("no question."), so the word itself appears.
-  // What must not appear is any instruction to ask one: the code picks it.
-  it('user prompt has no question instruction', () => {
-    const user = buildUserInsightsNoteMessages(notePromptView)[1].content.toLowerCase();
-    for (const ask of ['question to end with', 'end with a question', 'ask them', 'ask the listener']) {
-      expect(user).not.toContain(ask);
-    }
-    expect(user).toContain('no emoji, no question.');
-  });
-
-  it('bans "never", "first time" and "first ever" and names the allowed phrase, right after the facts-only rule', () => {
-    const user = buildUserInsightsNoteMessages(notePromptView)[1].content;
-    const rule = '- Never write "never", "first time" or "first ever". For an artist with no earlier plays, say "first plays under this name".';
-    const lines = user.split('\n');
-    const factsOnly = lines.findIndex((line) => line.startsWith('- Use only what is in the facts.'));
-    expect(factsOnly).toBeGreaterThan(-1);
-    expect(lines[factsOnly + 1]).toBe(rule);
-  });
-
-  it('keeps numbers off groups of artists, right after the "never" rule', () => {
-    const lines = buildUserInsightsNoteMessages(notePromptView)[1].content.split('\n');
-    const never = lines.findIndex((line) => line.startsWith('- Never write "never"'));
-    expect(never).toBeGreaterThan(-1);
-    expect(lines[never + 1]).toBe(
-      '- Give a number only for one named artist or album. Don\'t attach a number to a group ("the other three", "both of those").',
+  it('rules lead with what defined the week, ration counts, and leave opinions to the model\'s own words', () => {
+    const user = buildUserInsightsNoteMessages('VIEW')[1].content;
+    expect(user).toContain(
+      '- Lead with what defined the week, by name, in a first sentence that could only belong to this week: a day, a run, a record, or an artist can open it. Then connect the facts that belong together, and say what sat alongside them.\n',
     );
+    expect(user).toContain(
+      'so say it that way. The facts give days, not times of day, so name the day and leave out morning, afternoon, and night.\n',
+    );
+    expect(user).not.toContain('say what made the week theirs');
+    expect(user).toContain(
+      '- Use a count only when the number itself makes the point, one or two per paragraph at most, and say the rest in words.\n',
+    );
+    expect(user).toContain(
+      '- An opinion about a record is welcome when it grows out of what you just said. Phrase it in your own words, as an opinion.\n',
+    );
+    expect(user).not.toContain('Open with what the week was about');
+    // The rules no longer quote an opinion to copy; the Siiga voice example still says "Still the one, no argument."
+    expect(user).not.toContain('no argument.")');
+  });
+
+  it('user prompt has no em dash, and neither do the examples', () => {
+    expect(buildUserInsightsNoteMessages('VIEW')[1].content).not.toContain('\u2014');
+    for (const example of USER_INSIGHTS_VOICE_EXAMPLES) expect(example).not.toContain('\u2014');
+  });
+
+  it('carries the two v3 voice-only examples, three paragraphs each', () => {
+    expect(USER_INSIGHTS_VOICE_EXAMPLES).toHaveLength(2);
+    expect(USER_INSIGHTS_VOICE_EXAMPLES[0].startsWith('Siiga came out of nowhere and took the top spot in a week: Nostalgia Burns at 39 plays,')).toBe(true);
+    expect(USER_INSIGHTS_VOICE_EXAMPLES[1].startsWith('This was an I Built You A Tower week, full stop. You wore the whole record down to the grain: Envy the Birds,')).toBe(true);
+    for (const example of USER_INSIGHTS_VOICE_EXAMPLES) expect(example.split('\n\n')).toHaveLength(3);
   });
 
   it('exposes a bumped prompt version for cache busting', () => {
-    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v7');
+    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v8');
   });
 });
 
-describe('parseNoteSentences', () => {
-  const expected = [
-    { text: 'You played Eternal Embers start to finish three times.', facts: [1] },
-    { text: 'A$AP Rocky showed up with 14 plays.', facts: [2] },
-  ];
-
-  it('parses a bare JSON array', () => {
-    expect(parseNoteSentences(noteJson)).toEqual(expected);
-    expect(parseNoteSentences(`\n  ${noteJson}\n`)).toEqual(expected);
+describe('parseWeekNote', () => {
+  it('parses bare JSON', () => {
+    expect(parseWeekNote(noteJson)).toEqual(parsedNote);
+    expect(parseWeekNote(`\n  ${noteJson}\n`)).toEqual(parsedNote);
   });
 
-  it('parses fenced and prefixed JSON', () => {
-    expect(parseNoteSentences('```json\n' + noteJson + '\n```')).toEqual(expected);
-    expect(parseNoteSentences('```\n' + noteJson + '\n```')).toEqual(expected);
-    expect(parseNoteSentences('Here is the note:\n' + noteJson)).toEqual(expected);
-    expect(parseNoteSentences(noteJson + '\nHope that works [1].')).toEqual(expected);
-    expect(parseNoteSentences('Facts cited [1] and [2]:\n' + noteJson)).toEqual(expected);
+  it('parses a fenced block and an object with prose before and after', () => {
+    expect(parseWeekNote('```json\n' + noteJson + '\n```')).toEqual(parsedNote);
+    expect(parseWeekNote('```\n' + noteJson + '\n```')).toEqual(parsedNote);
+    expect(parseWeekNote('Here is the note:\n' + noteJson + '\nHope that works {ok}.')).toEqual(parsedNote);
+    expect(parseWeekNote('Fields {note} and {names}:\n' + noteJson)).toEqual(parsedNote);
+    expect(parseWeekNote('Facts [1] and [2]:\n' + noteJson + '\nSee [3].')).toEqual(parsedNote);
+    expect(parseWeekNote('[Draft] ' + noteJson + ' [end]')).toEqual(parsedNote);
   });
 
-  it('keeps only text and facts from each item', () => {
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1, 3], "note": "x"}]')).toEqual([
-      { text: 'One.', facts: [1, 3] },
-    ]);
+  it('normalises paragraph breaks to exactly one blank line and joins lines inside a paragraph', () => {
+    const raw = JSON.stringify({ note: '  One.\r\n\r\nTwo starts\nand ends.\n\n\nThree.\n \n\n', names: [] });
+    expect(parseWeekNote(raw)).toEqual({ note: 'One.\n\nTwo starts and ends.\n\nThree.', names: [] });
   });
 
-  it('keeps a sentence with an empty facts list', () => {
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, {"text": "Two.", "facts": []}]')).toEqual([
-      { text: 'One.', facts: [1] },
-      { text: 'Two.', facts: [] },
-    ]);
+  it('trims names and drops empty ones', () => {
+    expect(parseWeekNote(JSON.stringify({ note: 'One.', names: ['  Meltt ', '', '   ', 'Eternal Embers'] })))
+      .toEqual({ note: 'One.', names: ['Meltt', 'Eternal Embers'] });
   });
 
-  it('returns null for prose, for an empty array, and for items missing text or facts', () => {
-    expect(parseNoteSentences('You played Eternal Embers three times this week.')).toBeNull();
-    expect(parseNoteSentences('')).toBeNull();
-    expect(parseNoteSentences('[]')).toBeNull();
-    expect(parseNoteSentences('[{"facts": [1]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One."}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "   ", "facts": [1]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1.5]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": ["1"]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": 1, "facts": [1]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, null]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, "Two."]')).toBeNull();
-    expect(parseNoteSentences('{"text": "One.", "facts": [1]}')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]')).toBeNull();
+  it('keeps only note and names', () => {
+    expect(parseWeekNote('{"note": "One.", "names": [], "facts": [1]}')).toEqual({ note: 'One.', names: [] });
+  });
+
+  it('returns null for prose, an empty note, missing or non-array names, a non-string name, or an array reply', () => {
+    expect(parseWeekNote('You played Eternal Embers three times this week.')).toBeNull();
+    expect(parseWeekNote('')).toBeNull();
+    expect(parseWeekNote('{"note": "", "names": []}')).toBeNull();
+    expect(parseWeekNote('{"note": " \\n\\n ", "names": []}')).toBeNull();
+    expect(parseWeekNote('{"note": 1, "names": []}')).toBeNull();
+    expect(parseWeekNote('{"note": "One."}')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": "Meltt"}')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": ["Meltt", 2]}')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": [null]}')).toBeNull();
+    expect(parseWeekNote('[{"note": "One.", "names": []}]')).toBeNull();
+    // Wrapping an array in a fence or prose doesn't change the verdict.
+    expect(parseWeekNote('```json\n[{"note": "One.", "names": []}]\n```')).toBeNull();
+    expect(parseWeekNote('```\n[{"note": "One.", "names": []}, {"note": "Two.", "names": []}]\n```')).toBeNull();
+    expect(parseWeekNote('Here is the note:\n[{"note": "One.", "names": []}]\nHope that works.')).toBeNull();
+    expect(parseWeekNote('Facts [1] and [2]:\n[ {"note": "One.", "names": []} ] (see [3])')).toBeNull();
+    expect(parseWeekNote('[{"text": "One.", "facts": [1]}]')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": []')).toBeNull();
   });
 });
 
@@ -868,14 +868,14 @@ describe('generateUserInsightsNote', () => {
     expect(client.chatCompletion).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-opus-5-5',
-        reasoning: 'low',
+        reasoning: 'medium',
         maxTokens: 5000,
         messages: buildUserInsightsNoteMessages(notePromptView),
       })
     );
   });
 
-  it('returns the parsed sentences, the raw text and the response metadata', async () => {
+  it('returns the parsed note, the raw text and the response metadata', async () => {
     const metadata = { provider: 'anthropic' as const, model: 'claude-opus-5-5', api: 'messages' as const };
     const client = {
       chatCompletion: vi.fn(async () => ({ content: noteJson, metadata })),
@@ -883,20 +883,19 @@ describe('generateUserInsightsNote', () => {
 
     const result = await generateUserInsightsNote(notePromptView, client);
 
-    expect(result.sentences).toHaveLength(2);
-    expect(result.sentences?.[0].facts).toEqual([1]);
+    expect(result.note).toEqual(parsedNote);
     expect(result.raw).toBe(noteJson);
     expect(result.metadata).toBe(metadata);
   });
 
-  it('returns null sentences, not a throw, when the model writes prose', async () => {
+  it('returns a null note, not a throw, when the model writes prose', async () => {
     const client = {
       chatCompletion: vi.fn(async () => ({ content: 'You played a lot of Meltt.' })),
     } as unknown as AnthropicClient;
 
     const result = await generateUserInsightsNote(notePromptView, client);
 
-    expect(result.sentences).toBeNull();
+    expect(result.note).toBeNull();
     expect(result.raw).toBe('You played a lot of Meltt.');
   });
 
@@ -911,7 +910,7 @@ describe('generateUserInsightsNote', () => {
     const result = await ai.getUserInsightsNote(notePromptView);
 
     expect(spy).toHaveBeenCalledWith('userInsightsSummary');
-    expect(result.sentences).toHaveLength(2);
+    expect(result.note).toEqual(parsedNote);
     expect(result.metadata?.provider).toBe('anthropic');
     // The rate limiter keeps its counters in the same KV; nothing else may.
     const keys = [...vi.mocked(mockKV.get).mock.calls, ...vi.mocked(mockKV.put).mock.calls].map(([key]) => String(key));
@@ -1180,26 +1179,26 @@ describe('truncated responses are not cached', () => {
   it("passes a truncated note's metadata through so the route refuses to cache it", async () => {
     const client = {
       chatCompletion: vi.fn(async () => ({
-        content: '[{"text": "You played Eternal',
+        content: '{"note": "You played Eternal',
         metadata: { ...truncatedResponse.metadata },
       })),
     } as unknown as AnthropicClient;
 
     const result = await generateUserInsightsNote('1. A fact.', client);
 
-    expect(result.sentences).toBeNull();
+    expect(result.note).toBeNull();
     expect(isCacheableResponse(result.raw, result.metadata, 'userInsightsSummary', 'bordesak')).toBe(false);
   });
 });
 
 describe('AI task token budgets', () => {
-  // randomFact stays on OpenAI after eval round 3, and
-  // userInsightsRecommendations runs at medium effort (eval round 2). See
-  // their notes in packages/config/src/ai.ts.
+  // randomFact stays on OpenAI after eval round 3; userInsightsRecommendations
+  // (eval round 2) and userInsightsSummary (the v8 note) run at medium effort.
+  // See their notes in packages/config/src/ai.ts.
   const OPENAI_TASKS: AITask[] = ['randomFact'];
 
   it('every Claude task runs with explicit effort, low unless noted', () => {
-    const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsRecommendations'];
+    const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsSummary', 'userInsightsRecommendations'];
     for (const task of Object.keys(AI_TASKS) as AITask[]) {
       if (OPENAI_TASKS.includes(task)) continue;
       expect(getTaskConfig(task).provider).toBe('anthropic');
@@ -1487,141 +1486,12 @@ describe('playlist cover removal', () => {
   });
 });
 
-describe('album trivia', () => {
+describe('web search tool errors', () => {
   type Block = { type: string; [key: string]: unknown };
-  /** A web_search_result_location citation as the Messages API puts it on a text block. */
-  const cite = (url: string, title: string): Block => ({
-    type: 'web_search_result_location', url, title, encrypted_index: 'Eo8BCioIAhgB', cited_text: 'Recorded in Vancouver.',
+  const chat = () => new AnthropicClient('key').chatCompletion({
+    model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
   });
-  const searched = (...answer: Block[]) => ({
-    id: 'msg_01',
-    type: 'message',
-    role: 'assistant',
-    model: 'claude-opus-5-5',
-    content: [
-      { type: 'text', text: "I'll look up Eternal Embers." },
-      { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Meltt Eternal Embers' } },
-      {
-        type: 'web_search_tool_result',
-        tool_use_id: 'srvtoolu_1',
-        content: [{ type: 'web_search_result', url: 'https://a.example/x', title: 'A', encrypted_content: 'EqgfCioIARgB', page_age: 'March 2, 2025' }],
-      },
-      { type: 'text', text: 'Let me confirm the date.', citations: [cite('https://b.example', 'B')] },
-      { type: 'server_tool_use', id: 'srvtoolu_2', name: 'web_search', input: { query: 'Eternal Embers release date' } },
-      {
-        type: 'web_search_tool_result',
-        tool_use_id: 'srvtoolu_2',
-        content: [{ type: 'web_search_result', url: 'https://b.example', title: 'B', encrypted_content: 'EqgfCioIARgC', page_age: null }],
-      },
-      ...answer,
-    ],
-    stop_reason: 'end_turn',
-    usage: { input_tokens: 4000, output_tokens: 150, server_tool_use: { web_search_requests: 2 } },
-  });
-  const FACT = 'Meltt recorded Eternal Embers in Vancouver and released it in 2025.';
   const anthropicFetch = (response: unknown) => setupFetchMock([{ pattern: /api\.anthropic\.com/, response }]);
-  const requestBody = (mockFetch: ReturnType<typeof setupFetchMock>, call = 0) =>
-    JSON.parse((mockFetch.mock.calls[call][1] as RequestInit).body as string);
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-  });
-  // The console spies are per test.
-  afterEach(() => vi.restoreAllMocks());
-
-  it('is an uncached Opus task at low effort with web search capped at 2 searches', () => {
-    // The insights making-of route caches the result under CACHE_CONFIG.albumTrivia; the task itself never does.
-    expect(getTaskConfig('albumTrivia')).toMatchObject({
-      provider: 'anthropic', model: 'claude-opus-5-5', reasoning: 'low', webSearch: true, webSearchMaxUses: 2, maxTokens: 3000, cacheTtlDays: 0,
-    });
-  });
-
-  it('asks for one verifiable fact about the album, or exactly NONE', () => {
-    const [system, user] = buildAlbumTriviaMessages('Meltt', 'Eternal Embers');
-    expect(system.role).toBe('system');
-    expect(system.content.split('\n')).toHaveLength(1);
-    expect(user.content).toBe(
-      'Find one specific, verifiable fact about the album "Eternal Embers" by Meltt: how or where it was made, when it came out, who played on it, or something notable that happened around it. Write it in one or two plain sentences. No opinions about the music, no adjectives describing how it sounds, no em dashes, no hedging. If you can\'t find a fact you can verify, reply with exactly NONE.',
-    );
-  });
-
-  it('parseAlbumTrivia reads "NONE. I could not..." as null and keeps "None of the songs..."', () => {
-    expect(ALBUM_TRIVIA_NONE).toBe('NONE');
-    for (const reply of ['NONE', ' NONE.\n', 'NONE. I could not verify anything about this album.', '', '   ']) {
-      expect(parseAlbumTrivia(reply), reply).toBeNull();
-    }
-    expect(parseAlbumTrivia(`  ${FACT}\n`)).toBe(FACT);
-    // Only an upper-case NONE is the sentinel.
-    expect(parseAlbumTrivia('None of the songs were recorded live.')).toBe('None of the songs were recorded live.');
-  });
-
-  it("sends the task's max_uses", async () => {
-    let mockFetch = anthropicFetch(searched({ type: 'text', text: FACT }));
-    await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(requestBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }]);
-
-    // albumRecommendations sets no webSearchMaxUses, so the client's default of 5 applies.
-    const recs = getTaskConfig('albumRecommendations');
-    expect(recs.webSearchMaxUses).toBeUndefined();
-    mockFetch = anthropicFetch(searched({ type: 'text', text: FACT }));
-    await new AnthropicClient('key').chatCompletion({
-      model: recs.model, messages: [{ role: 'user', content: 'hi' }], webSearch: recs.webSearch, webSearchMaxUses: recs.webSearchMaxUses,
-    });
-    expect(requestBody(mockFetch).tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]);
-  });
-
-  it('keeps only the text after the last search result and logs how many text blocks it dropped', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT }));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result.text).toBe(FACT);
-    expect(result.metadata?.features?.webSearchRequests).toBe(2);
-    expect(vi.mocked(console.log).mock.calls.map((c) => String(c[0])).filter((m) => m.includes('pre-search')))
-      .toEqual(['[Anthropic] Dropped 2 text blocks (52 chars) of pre-search text']);
-  });
-
-  it("returns the answer's citations once each, ignoring blocks before the last search result", async () => {
-    anthropicFetch(searched(
-      { type: 'text', text: 'Meltt recorded the album in Vancouver', citations: [cite('https://a.example/x', 'A')] },
-      { type: 'text', text: ' and released it in 2025.', citations: [cite('https://a.example/x', 'A again')] },
-    ));
-    const res = await new AnthropicClient('key').chatCompletion({
-      model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], webSearch: true,
-    });
-    expect(res.content).toBe('Meltt recorded the album in Vancouver and released it in 2025.');
-    expect(res.citations).toEqual([{ url: 'https://a.example/x', title: 'A' }]);
-  });
-
-  it('generateAlbumTrivia is uncached and takes the first https citation as sourceUrl', async () => {
-    const mockFetch = anthropicFetch(searched({
-      type: 'text', text: FACT, citations: [cite('http://plain.example/y', 'Plain'), cite('https://a.example/x', 'A'), cite('https://c.example/z', 'C')],
-    }));
-    const client = new AnthropicClient('key');
-    const first = await generateAlbumTrivia('Meltt', 'Eternal Embers', client);
-    expect(first).toMatchObject({ text: FACT, sourceUrl: 'https://a.example/x', raw: FACT });
-    expect(first.metadata?.provider).toBe('anthropic');
-    // No cache: the same album asked twice is two model calls.
-    await generateAlbumTrivia('Meltt', 'Eternal Embers', client);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    // Errors from this call log no upstream body.
-    const chat = vi.fn(async () => ({ content: FACT }));
-    await generateAlbumTrivia('Meltt', 'Eternal Embers', { chatCompletion: chat });
-    expect(chat).toHaveBeenCalledWith(expect.objectContaining({ quietErrors: true, webSearch: true, webSearchMaxUses: 2 }));
-    // The only log line names the model, never the album.
-    const logged = vi.mocked(console.log).mock.calls.map((c) => c.map(String).join(' ')).filter((m) => m.includes('[Album Trivia]'));
-    expect(logged).toEqual([
-      '[Album Trivia] Model: anthropic/claude-opus-5-5',
-      '[Album Trivia] Model: anthropic/claude-opus-5-5',
-      '[Album Trivia] Model: unknown/claude-opus-5-5',
-    ]);
-  });
-
-  it('an http-only citation gives sourceUrl null', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT, citations: [cite('http://plain.example/y', 'Plain')] }));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result).toMatchObject({ text: FACT, sourceUrl: null });
-  });
 
   /** A search that failed inside a 200, as the Messages API returns it. */
   const searchError = (id: string, errorCode: string): Block => ({
@@ -1640,13 +1510,39 @@ describe('album trivia', () => {
     stop_reason: stopReason,
     usage: { input_tokens: 900, output_tokens: 20, server_tool_use: { web_search_requests: 1 } },
   });
+  /** A search that returned results, then the answer. */
+  const searched = (stopReason = 'end_turn', answer: Block[] = [{ type: 'text', text: 'NONE' }]) => ({
+    id: 'msg_01',
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-opus-5-5',
+    content: [
+      { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'Meltt Eternal Embers' } },
+      {
+        type: 'web_search_tool_result',
+        tool_use_id: 'srvtoolu_1',
+        content: [{ type: 'web_search_result', url: 'https://a.example/x', title: 'A', encrypted_content: 'EqgfCioIARgB', page_age: null }],
+      },
+      ...answer,
+    ],
+    stop_reason: stopReason,
+    usage: { input_tokens: 900, output_tokens: 20, server_tool_use: { web_search_requests: 1 } },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  // The console spies are per test.
+  afterEach(() => vi.restoreAllMocks());
 
   it.each(['too_many_requests', 'unavailable', 'max_uses_exceeded'])(
-    'reports a %s web search tool error inside a 200 reply that then says NONE',
+    'reports a %s web search tool error inside a 200 reply',
     async (code) => {
       anthropicFetch(failedSearch(code));
-      const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-      expect(result.text).toBeNull();
+      const result = await chat();
+      expect(result.content).toBe('NONE');
       expect(result.metadata?.truncated).toBe(false);
       expect(result.metadata?.features?.webSearchErrors).toEqual([code]);
       expect(vi.mocked(console.warn).mock.calls.map((c) => String(c[0])))
@@ -1655,98 +1551,31 @@ describe('album trivia', () => {
   );
 
   it('reports no web search errors when every search returned results', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT }));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
+    anthropicFetch(searched());
+    const result = await chat();
     expect(result.metadata?.features).not.toHaveProperty('webSearchErrors');
   });
 
   it('keeps web search errors from both requests of a resumed pause_turn', async () => {
     const paused = failedSearch('unavailable', 'pause_turn', []);
-    const resumedClean = { ...searched({ type: 'text', text: 'NONE' }), content: [{ type: 'text', text: 'NONE' }] };
+    const resumedClean = { ...searched(), content: [{ type: 'text', text: 'NONE' }] };
     let fetchMock = vi.fn()
       .mockResolvedValueOnce(mockFetchResponse(paused))
       .mockResolvedValueOnce(mockFetchResponse(resumedClean));
     globalThis.fetch = fetchMock as typeof fetch;
-    let result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
+    let result = await chat();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.metadata?.features?.webSearchErrors).toEqual(['unavailable']);
 
     // A clean first request, then a failed search on the resumed turn.
-    const pausedClean = { ...searched(), stop_reason: 'pause_turn' };
+    const pausedClean = searched('pause_turn', []);
     fetchMock = vi.fn()
       .mockResolvedValueOnce(mockFetchResponse(pausedClean))
       .mockResolvedValueOnce(mockFetchResponse(failedSearch('too_many_requests')));
     globalThis.fetch = fetchMock as typeof fetch;
-    result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
+    result = await chat();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.metadata?.truncated).toBe(false);
     expect(result.metadata?.features?.webSearchErrors).toEqual(['too_many_requests']);
-  });
-
-  it('a transient failed search makes the making-of helper return error and write nothing, through the real client', async () => {
-    const kv = createMockKV();
-    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: kv });
-    anthropicFetch(failedSearch('too_many_requests'));
-    expect(await makingOfFact(ai, kv, 'Meltt', 'Eternal Embers')).toMatchObject({ status: 'error' });
-
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(mockFetchResponse(failedSearch('unavailable', 'pause_turn', [])))
-      .mockResolvedValueOnce(mockFetchResponse({ ...searched(), content: [{ type: 'text', text: 'NONE' }] }));
-    globalThis.fetch = fetchMock as typeof fetch;
-    expect(await makingOfFact(ai, kv, 'Meltt', 'Eternal Embers')).toMatchObject({ status: 'error' });
-
-    const written = vi.mocked(kv.put).mock.calls.map((c) => String(c[0]));
-    expect(written.filter((key) => key !== 'ai:ratelimit:anthropic')).toEqual([]);
-
-    // A spent search budget is not transient: NONE after it is cached as none.
-    anthropicFetch(failedSearch('max_uses_exceeded'));
-    expect(await makingOfFact(ai, kv, 'Meltt', 'Eternal Embers')).toMatchObject({ status: 'none' });
-    expect(await kv.get('insights:trivia:meltt:eternal%20embers', 'json')).toEqual({ none: true });
-  });
-
-  it('an answer with no citation gives sourceUrl null', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT }));
-    expect((await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'))).sourceUrl).toBeNull();
-  });
-
-  it.each([
-    ['NONE', [{ type: 'text', text: 'NONE' }]],
-    ['NONE with a reason', [{ type: 'text', text: 'NONE. Nothing verifiable turned up.' }]],
-    ['an empty reply', []],
-  ])('returns null text for %s, with the raw reply', async (_label, answer) => {
-    anthropicFetch(searched(...answer));
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result.text).toBeNull();
-    expect(result.raw).toBe(answer.map((b) => b.text).join(''));
-  });
-
-  it.each(['max_tokens', 'refusal'])('marks a reply that stopped on %s as truncated', async (stop) => {
-    anthropicFetch({ ...searched({ type: 'text', text: FACT }), stop_reason: stop });
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(result.text).toBe(FACT);
-    expect(result.metadata?.truncated).toBe(true);
-    expect(isCacheableResponse(result.raw, result.metadata, 'albumTrivia')).toBe(false);
-  });
-
-  it('marks a turn still paused after its one resume as truncated', async () => {
-    const paused = { model: 'claude-opus-5-5', stop_reason: 'pause_turn', content: [{ type: 'text', text: FACT }] };
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(mockFetchResponse(paused))
-      .mockResolvedValueOnce(mockFetchResponse(paused));
-    globalThis.fetch = fetchMock as typeof fetch;
-    const result = await generateAlbumTrivia('Meltt', 'Eternal Embers', new AnthropicClient('key'));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.metadata?.truncated).toBe(true);
-    expect(isCacheableResponse(result.raw, result.metadata, 'albumTrivia')).toBe(false);
-  });
-
-  it('is reached through AIService.getAlbumTrivia on the anthropic client and writes nothing to KV', async () => {
-    anthropicFetch(searched({ type: 'text', text: FACT, citations: [cite('https://a.example/x', 'A')] }));
-    const kv = createMockKV();
-    const ai = new AIService({ openaiApiKey: 'o', anthropicApiKey: 'a', cache: kv });
-    expect(await ai.getAlbumTrivia('Meltt', 'Eternal Embers')).toMatchObject({ text: FACT, sourceUrl: 'https://a.example/x' });
-    // The rate limiter's counters are the only KV traffic: nothing under the AI cache.
-    const touched = [...vi.mocked(kv.get).mock.calls, ...vi.mocked(kv.put).mock.calls].map((c) => String(c[0]));
-    expect(touched.filter((key) => key !== 'ai:ratelimit:anthropic')).toEqual([]);
   });
 });

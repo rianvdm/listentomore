@@ -1,13 +1,15 @@
-// ABOUTME: Ranks fact drafts into the week's facts (the single-listen fold, clamping, order, ids) and chooses
-// ABOUTME: the closing question in code. Follows spec section 2, "Merging", "Quiet week" and "Question".
+// ABOUTME: Ranks fact drafts into the week's facts: the single-listen fold, clamping, order and ids.
+// ABOUTME: Follows spec section 2, "Merging" and "Quiet week".
 
-import type { Draft, Fact, QuestionKind, WeekFacts } from './types';
+import type { Draft, Fact } from './types';
 
-/** A week whose top fact scores under this is quiet: no model call, a code sentence instead. */
+/**
+ * A week whose top fact scores under this is quiet (`WeekFacts.quiet`). Its code-rendered line, which is the visitor's
+ * line and the owner's fallback when no note is written or none passes, is the quiet sentence rather than the lead
+ * fact's, and a visitor's response carries mode `quiet`. It does not gate the owner's model call; NOTE_MIN_PLAYS in
+ * apps/web/src/api/internal/insights-week.ts does.
+ */
 export const QUIET_THRESHOLD = 50;
-
-/** How many ranked facts can carry the question: rank 1, or rank 2 when rank 1 has none. */
-const QUESTION_RANKS = 2;
 
 const clamp = (salience: number): number => Math.min(100, Math.max(0, salience));
 
@@ -41,7 +43,7 @@ function covers(host: Draft, artist: string): boolean {
  * Appends a single listen to a volume fact, as build.py lines 469-480 do: "<volume statement minus its final
  * period>; includes <run and reasons>." The listen's statement is "<artist> on <day>: <run and reasons>."; its run
  * phrase never repeats the artist, so there is no " by <artist>" to remove. The host takes on the listen's entities,
- * albums, quantities and dates. When the host does not already name the listen's day, the day is written in
+ * quantities and dates. When the host does not already name the listen's day, the day is written in
  * ("; includes, on <day>, <run and reasons>"), so every date the host carries is in its statement.
  */
 function foldInto(host: Draft, single: Draft): Draft {
@@ -56,7 +58,6 @@ function foldInto(host: Draft, single: Draft): Draft {
     ...host,
     statement: `${host.statement.replace(/\.$/, '')}; ${includes}`,
     entities: unique([...host.entities, ...single.entities], (a, b) => a === b),
-    albums: unique([...host.albums, ...single.albums], (a, b) => a.artist === b.artist && a.album === b.album),
     quantities: unique([...host.quantities, ...single.quantities],
       (a, b) => a.value === b.value && a.unit === b.unit && a.entity === b.entity),
     dates: unique([...host.dates, ...single.dates], (a, b) => a === b),
@@ -107,21 +108,4 @@ export function rankFacts(drafts: Draft[], plays: ReadonlyMap<string, number> = 
     .map((d) => ({ ...d, salience: clamp(d.salience) }))
     .sort((a, b) => b.salience - a.salience || tiePlays(b, plays) - tiePlays(a, plays) || tieName(a).localeCompare(tieName(b)))
     .map((d, i) => ({ id: i + 1, ...d }));
-}
-
-/**
- * The closing question (spec section 2, "Question"), from rank 1's edges or, when rank 1 has none, rank 2's.
- * With the same subject as the last question, the same question is kept; otherwise its kind rotates away from
- * the last kind. A fact whose only edges repeat the last kind for a new subject passes to rank 2.
- */
-export function chooseQuestion(facts: Fact[], last: { kind: QuestionKind; subject: string } | null): WeekFacts['question'] {
-  for (const fact of facts.slice(0, QUESTION_RANKS)) {
-    if (fact.edges.length === 0) continue;
-    const subject = fact.subject ?? '';
-    const option = last !== null && last.subject === subject
-      ? fact.edges.find((e) => e.kind === last.kind) ?? fact.edges[0]
-      : fact.edges.find((e) => e.kind !== last?.kind);
-    if (option) return { ...option, subject };
-  }
-  return null;
 }

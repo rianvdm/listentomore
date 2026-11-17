@@ -32,12 +32,6 @@ export type FactKind = 'discovery' | 'repeat_album' | 'volume_vs_normal' | 'volu
   | 'breadth' | 'single_listen' | 'album_chain' | 'album_mode' | 'last_week_faded' | 'themed_block' | 'volume' | 'release_week';
 export type Unit = 'plays' | 'tracks' | 'times' | 'days' | 'months' | 'percent' | 'artists' | 'albums' | 'weeks';
 export interface Quantity { value: number; unit: Unit; entity?: string }
-export type QuestionKind = 'after' | 'where_from' | 'started' | 'one_sitting';
-export interface QuestionOption { kind: QuestionKind; text: string }
-/** An album a statement names, with the artist it is by, so no later step has to guess which name is an album. */
-export interface AlbumRef { artist: string; album: string }
-/** A candidate album for the week's card, with its deduped plays this week. */
-export interface CardAlbum { artist: string; album: string; plays: number }
 export interface Fact {
   id: number;                 // 1-based rank, assigned in rank.ts; 0 is the window line
   kind: FactKind;
@@ -45,10 +39,8 @@ export interface Fact {
   subject: string | null;     // artist name, tag, or null
   statement: string;          // the sentence the model reads
   entities: string[];         // every artist and album name in the statement
-  albums: AlbumRef[];         // every album the statement names, with its artist, in statement order
   quantities: Quantity[];     // every number in the statement
   dates: number[];            // epoch seconds of every day or time the statement names
-  edges: QuestionOption[];
 }
 /** A fact before ranking; rank.ts assigns `id`. */
 export type Draft = Omit<Fact, 'id'>;
@@ -75,12 +67,11 @@ export interface WeekFacts {
   windowFact: Fact;                    // id 0
   facts: Fact[];                       // ranked, ids 1..n
   topArtists: Array<{ artist: string; plays: number; tier: Tier; nameUncertain: boolean }>;
+  topAlbums: Array<{ artist: string; album: string; plays: number }>; // by deduped plays this week, blank albums skipped
   caveats: string[];
   quiet: boolean;
-  question: (QuestionOption & { subject: string }) | null;
   names: string[];                     // every artist and album name in the week's scrobbles
   releasesChecked: boolean;            // the inputs carried release lookups, so release_week could fire
-  cardAlbums: CardAlbum[];             // the card's candidate albums, most played this week first
 }
 export interface LastfmHistoryClient {
   getRecentTracksPage(from: number, to: number, page: number): Promise<{ tracks: Scrobble[]; totalPages: number }>;
@@ -92,5 +83,5 @@ export interface LastfmHistoryClient {
   getAlbumInfo(artist: string, album: string): Promise<{ tracklist: string[] | null; userPlaycount: number | null }>;
   getArtistTopTags(artist: string): Promise<string[]>;
 }
-export const RULE_VERSION = 'r2';
+export const RULE_VERSION = 'r3';
 export const albumKey = (artist: string, album: string): string => `${norm(artist)}\u0000${norm(album)}`;

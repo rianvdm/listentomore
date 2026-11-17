@@ -30,19 +30,11 @@ export interface ChatCompletionOptions {
   verbosity?: Verbosity;
   /** Enable web search tool (Responses API) */
   webSearch?: boolean;
-  /** Claude only: cap on searches per request; the client's default applies when unset */
-  webSearchMaxUses?: number;
   /**
    * Claude only: on a non-2xx response, log and throw with the status alone, never the upstream body. For calls
    * whose prompt names a listener's artists or albums, which the API can echo back in its error body.
    */
   quietErrors?: boolean;
-}
-
-/** A web page the answer cites (Claude web search). */
-export interface WebCitation {
-  url: string;
-  title: string | null;
 }
 
 /**
@@ -104,11 +96,6 @@ export interface ChatCompletionResponse {
   content: string;
   /** Metadata about the API call (for debugging/testing) */
   metadata?: AIResponseMetadata;
-  /**
-   * Claude web search: the pages the answer's text cites, once each in order of first citation. Only text after the
-   * last search result counts, like `content`. Absent when the answer cites nothing.
-   */
-  citations?: WebCitation[];
 }
 
 /**

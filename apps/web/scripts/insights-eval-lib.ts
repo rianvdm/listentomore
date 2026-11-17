@@ -1,12 +1,39 @@
-// ABOUTME: Pure helpers for scripts/insights-eval.ts: the output directory kept inside eval-output/, the names the
-// ABOUTME: rubric masks, the shared MusicBrainz limiter, the known tie-back report and the making-of fact-check list.
+// ABOUTME: Pure helpers for scripts/insights-eval.ts: its arguments, the output directory kept inside eval-output/,
+// ABOUTME: the fixture preflight, tags and gold keys, copied and repeated phrases, repeated openings, counts, .dev.vars keys.
 
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { matchKey } from '@listentomore/insights';
-import type { CardAlbum, WeekFacts } from '@listentomore/insights';
-import { MUSICBRAINZ_INTERVAL_MS, reserveSlot } from '@listentomore/musicbrainz';
-import type { MusicBrainzRateLimiter } from '@listentomore/musicbrainz';
-import type { CheckedAlbum, TriviaCard } from '../src/api/internal/insights-card';
+import { buildWeekFacts, integersOf, matchKey, renderPromptView } from '@listentomore/insights';
+import type { WeekFacts, WeekInputs } from '@listentomore/insights';
+import { maskNames } from './insights-rubric';
+
+/** The eval's arguments as given: the run label and the --extra directory, unchecked on disk. */
+export interface EvalArgs {
+  label: string;
+  extra: string | null;
+}
+
+const EVAL_FLAGS = ['--label', '--extra'] as const;
+type EvalFlag = (typeof EVAL_FLAGS)[number];
+const isEvalFlag = (arg: string): arg is EvalFlag => (EVAL_FLAGS as readonly string[]).includes(arg);
+
+/**
+ * `--label <name> [--extra <dir>]`, in either order. Throws, naming the argument, for anything else: an unknown or
+ * removed option such as --dry-run or --trivia, a stray value, a flag without a value or a flag given twice. The run
+ * must never go ahead with an option it ignores, since it spends money.
+ */
+export function parseEvalArgs(argv: string[]): EvalArgs {
+  const values: Partial<Record<EvalFlag, string>> = {};
+  for (let i = 0; i < argv.length; i += 2) {
+    const flag = argv[i];
+    if (!isEvalFlag(flag)) throw new Error(`unsupported argument ${flag}: the eval takes --label <name> [--extra <dir>]`);
+    if (values[flag] !== undefined) throw new Error(`${flag} given twice`);
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
+    values[flag] = value;
+  }
+  if (!values['--label']) throw new Error('--label <name> is required');
+  return { label: values['--label'], extra: values['--extra'] ?? null };
+}
 
 /**
  * `<webRoot>/eval-output/<label>/insights`. Throws for a label that is empty, holds anything but letters, digits, dot,
@@ -26,74 +53,225 @@ export function evalOutputDir(webRoot: string, label: string): string {
   return dir;
 }
 
-/** Every artist and album name of the week the note may name: the scrobbles' names and every fact's entities. */
-export function noteNames(wf: WeekFacts): string[] {
-  return [...new Set([...wf.names, ...[wf.windowFact, ...wf.facts].flatMap((f) => f.entities)])];
+/**
+ * Where a fixture stands against the owner's gold summaries: a gold week has one, and the 2026-06-12 gold week is also
+ * the first voice example in the prompt (USER_INSIGHTS_VOICE_EXAMPLES[0]), so its note is no test of the voice.
+ * Held-out and live weeks carry the decision; extra weeks are other fixtures passed with --extra.
+ */
+export type FixtureTag = 'gold' | 'gold, example in prompt' | 'held-out' | 'live' | 'extra';
+
+/** The gold week whose summary is the prompt's first voice example. */
+const PROMPT_EXAMPLE_DATE = '2026-06-12';
+
+/** A committed fixture name: `<user>-<date>`, `<user>-heldout-<date>` or `<user>-live-<date>`. */
+const COMMITTED_NAME = /^.+?-(?:(heldout|live)-)?(\d{4}-\d{2}-\d{2})$/;
+const EXTRA_NAME = /^extra-\d+$/;
+
+/** The tag of a fixture by its name. Throws for a name that is neither a committed fixture's nor `extra-<n>`. */
+export function fixtureTag(name: string): FixtureTag {
+  if (EXTRA_NAME.test(name)) return 'extra';
+  const match = COMMITTED_NAME.exec(name);
+  if (!match) throw new Error(`fixture name ${name} is not <user>-<date>, <user>-heldout-<date> or <user>-live-<date>`);
+  const [, kind, date] = match;
+  if (kind === 'heldout') return 'held-out';
+  if (kind === 'live') return 'live';
+  return date === PROMPT_EXAMPLE_DATE ? 'gold, example in prompt' : 'gold';
 }
 
-/** A tie-back the recon found by hand, which the eval looks for whenever its album is a card candidate. */
-export interface KnownTieBack { album: string; bands: string[] }
+/** The gold.json key of a gold week, its date; null for held-out, live, extra and unrecognised names. */
+export function goldKey(name: string): string | null {
+  if (EXTRA_NAME.test(name)) return null;
+  const match = COMMITTED_NAME.exec(name);
+  return match && !match[1] ? match[2] : null;
+}
 
-/** The known tie-backs from the recon (spec "Tests and eval"). */
-export const KNOWN_TIEBACKS: KnownTieBack[] = [
-  { album: 'Los Ojos Del Cóndor', bands: ['The Black Keys'] },
-  { album: 'Earthling', bands: ['Red Hot Chili Peppers', 'Tom Petty and the Heartbreakers'] },
-  { album: 'Sea Change', bands: ['Nine Inch Nails'] },
-  { album: 'In Rainbows', bands: ['The Smile'] },
-];
-
-/** Where a known tie-back's album got to in a week's card run, and for a checked album whether the tie-back appeared. */
-export type KnownTieBackStatus = 'checked: found' | 'checked: missing' | 'unchecked (cut)' | 'not a candidate';
+/** A fixture with the week facts and prompt view the run sends to the model. */
+export type PreparedFixture<F> = F & { wf: WeekFacts; promptView: string };
 
 /**
- * One row per known album and band, in list order, matching titles by matchKey. An album among the week's candidates
- * (`wf.cardAlbums`) is checked when the card run reached it, found when it has a tie-back to that band and missing
- * when not, and unchecked (cut) when the run stopped first (a cut request, or an exhaustive run that stopped at an
- * error past its tie-back). A week with no tie-back is an acceptable result; this only says which known ones appeared.
+ * Builds every fixture's week facts and prompt view before the run makes its first model call, so a fixture that
+ * passes the loader's shape check but cannot be built stops the run before any money is spent, not part-way through
+ * it. Throws naming the fixture's label (`extra-<n>` for --extra fixtures, never the file name) and nothing from the
+ * fixture or the error, whose message can quote listening data.
  */
-export function knownTieBackReport(
-  candidates: CardAlbum[],
-  checked: CheckedAlbum[],
-  known: KnownTieBack[] = KNOWN_TIEBACKS,
-): Array<{ album: string; band: string; status: KnownTieBackStatus }> {
-  return known.flatMap(({ album, bands }) => {
-    const key = matchKey(album);
-    const matches = checked.filter((c) => matchKey(c.album.album) === key);
-    const found = new Set(matches.flatMap((c) => (c.tieBacks ?? []).map((t) => matchKey(t.band))));
-    const candidate = candidates.some((c) => matchKey(c.album) === key);
-    return bands.map((band): { album: string; band: string; status: KnownTieBackStatus } => {
-      if (matches.length > 0) return { album, band, status: found.has(matchKey(band)) ? 'checked: found' : 'checked: missing' };
-      return { album, band, status: candidate ? 'unchecked (cut)' : 'not a candidate' };
-    });
+export function preflightFixtures<F extends { name: string; inputs: WeekInputs }>(fixtures: F[]): Array<PreparedFixture<F>> {
+  return fixtures.map((fixture) => {
+    try {
+      const wf = buildWeekFacts(fixture.inputs);
+      return { ...fixture, wf, promptView: renderPromptView(wf) };
+    } catch {
+      throw new Error(`fixture ${fixture.name} failed preflight: its week facts or prompt view could not be built`);
+    }
   });
 }
 
+/** `text` as matchKey words: lowercase, accents and punctuation dropped. */
+const keyWords = (text: string): string[] => matchKey(text).split(' ').filter(Boolean);
+
 /**
- * The production slot reservation over in-memory state, for scripts: one instance shared by every MusicBrainzCredits
- * client in a process keeps all their requests MUSICBRAINZ_INTERVAL_MS apart, as the Durable Object does in the Worker.
+ * Every run of `n` or more words the note shares with one of the examples, compared as matchKey words so case and
+ * punctuation don't hide a copy. Overlapping shared n-grams join into one span, so an eight-word copy is one phrase.
  */
-export function createLocalLimiter(now: () => number = Date.now): MusicBrainzRateLimiter {
-  let nextSlotAt = 0;
-  return {
-    async reserve(maxWaitMs: number): Promise<number | null> {
-      const result = reserveSlot(nextSlotAt, now(), maxWaitMs, MUSICBRAINZ_INTERVAL_MS);
-      nextSlotAt = result.nextSlotAt;
-      return result.waitMs;
-    },
-  };
+export function copiedPhrases(note: string, examples: readonly string[], n = 6): string[] {
+  const exampleGrams = new Set<string>();
+  for (const example of examples) {
+    const words = keyWords(example);
+    for (let i = 0; i + n <= words.length; i++) exampleGrams.add(words.slice(i, i + n).join(' '));
+  }
+  const words = keyWords(note);
+  const spans: string[] = [];
+  let start = -1;
+  let end = -1;
+  for (let i = 0; i + n <= words.length; i++) {
+    if (!exampleGrams.has(words.slice(i, i + n).join(' '))) continue;
+    if (start >= 0 && i < end) {
+      end = i + n;
+      continue;
+    }
+    if (start >= 0) spans.push(words.slice(start, end).join(' '));
+    start = i;
+    end = i + n;
+  }
+  if (start >= 0) spans.push(words.slice(start, end).join(' '));
+  return [...new Set(spans)];
+}
+
+/** How many integers the note states, read the way checkNote reads them: digit runs, thousands commas removed. */
+export function countIntegers(note: string): number {
+  return integersOf(note).length;
 }
 
 /**
- * Runs tasks one at a time in call order. The eval runs fixtures concurrently, and MusicBrainz callers decline a slot
- * more than a few seconds away, so each fixture's MusicBrainz work goes through one of these.
+ * Words too common to make a repeated phrase on their own: articles, prepositions, pronouns, forms of be and have,
+ * and conjunctions. A phrase made only of these ("of the", "this was") is never reported.
  */
-export function createSerialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
-  let tail: Promise<unknown> = Promise.resolve();
-  return <T>(task: () => Promise<T>): Promise<T> => {
-    const run = tail.then(task, task);
-    tail = run.catch(() => undefined);
-    return run;
-  };
+const STOPWORDS: ReadonlySet<string> = new Set([
+  'a', 'an', 'the',
+  'of', 'to', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'as', 'into', 'about',
+  'and', 'or', 'but',
+  'that', 'this', 'it', 'its', 'you', 'your', 'i', 'me', 'my', 'we', 'our', 'they', 'them', 'their',
+  'be', 'is', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had',
+]);
+
+const REPEATED_MIN_WORDS = 2;
+const REPEATED_MAX_WORDS = 4;
+const REPEATED_CAP = 15;
+
+/** Whether the words of `inner` run, whole, inside the words of `outer`. Both are space-joined matchKey words. */
+const containsWords = (outer: string, inner: string): boolean => ` ${outer} `.includes(` ${inner} `);
+
+/**
+ * Phrases of two to four matchKey words that turn up in `minNotes` or more of the notes, each with the labels of the
+ * notes it is in, in note order: a tic the model carries from week to week. A phrase counts once per note. Skipped: a
+ * phrase made only of stopwords, and in each note a phrase inside one of that note's own names, since artist and album
+ * names repeat legitimately. A shorter phrase goes when a longer reported one contains it in the same notes. Sorted
+ * by the number of notes, most first, then by phrase; at most 15.
+ */
+export function repeatedPhrases(
+  notes: ReadonlyArray<{ label: string; note: string; names: readonly string[] }>,
+  minNotes = 3,
+): Array<{ phrase: string; labels: string[] }> {
+  const found = new Map<string, string[]>();
+  for (const { label, note, names } of notes) {
+    const nameKeys = names.map(matchKey).filter(Boolean);
+    const words = keyWords(note);
+    const grams = new Set<string>();
+    for (let n = REPEATED_MIN_WORDS; n <= REPEATED_MAX_WORDS; n++) {
+      for (let i = 0; i + n <= words.length; i++) {
+        const gram = words.slice(i, i + n);
+        if (gram.every((word) => STOPWORDS.has(word))) continue;
+        const phrase = gram.join(' ');
+        if (nameKeys.some((name) => containsWords(name, phrase))) continue;
+        grams.add(phrase);
+      }
+    }
+    for (const phrase of grams) {
+      const labels = found.get(phrase) ?? [];
+      if (!labels.includes(label)) labels.push(label);
+      found.set(phrase, labels);
+    }
+  }
+  const reported = [...found]
+    .filter(([, labels]) => labels.length >= minNotes)
+    .map(([phrase, labels]) => ({ phrase, labels, key: labels.join('\u0000') }));
+  return reported
+    .filter((short) => !reported.some((long) =>
+      long.phrase.length > short.phrase.length && long.key === short.key && containsWords(long.phrase, short.phrase)))
+    .sort((a, b) => b.labels.length - a.labels.length || a.phrase.localeCompare(b.phrase))
+    .slice(0, REPEATED_CAP)
+    .map(({ phrase, labels }) => ({ phrase, labels }));
+}
+
+const OPENING_WORDS = 4;
+
+const WEEKDAYS: ReadonlySet<string> = new Set([
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]);
+
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+/** Each month's full name and its three-letter abbreviation, as matchKey words. */
+const MONTHS: ReadonlySet<string> = new Set([...MONTH_NAMES, ...MONTH_NAMES.map((m) => m.slice(0, 3))]);
+
+const isDayNumber = (word: string | undefined): boolean =>
+  word !== undefined && /^\d{1,2}$/.test(word) && Number(word) >= 1 && Number(word) <= 31;
+
+/**
+ * matchKey words with each weekday read as "day", each month followed by a day number ("may 29", "aug 7") as "date",
+ * and a "day date" pair as one "day", so "Friday, May 29" and "Sunday" open the same way.
+ */
+function genericDays(words: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (WEEKDAYS.has(word)) {
+      out.push('day');
+    } else if (MONTHS.has(word) && isDayNumber(words[i + 1])) {
+      i++;
+      if (out[out.length - 1] !== 'day') out.push('date');
+    } else {
+      out.push(word);
+    }
+  }
+  return out;
+}
+
+/**
+ * The note's first four matchKey words after maskNames, with weekdays and dates made generic (see genericDays), so
+ * "Siiga owned this week." and "Boards of Canada owned this week." both read "name owned this week", and "Friday Aug 7
+ * belonged to U2." and "Sunday belonged to Mutemath." both read "day belonged to name": the frame the note opens on,
+ * whoever and whenever fills it.
+ */
+export function openingFrame(note: string, names: readonly string[]): string {
+  return genericDays(keyWords(maskNames(note, names))).slice(0, OPENING_WORDS).join(' ');
+}
+
+/**
+ * The opening frames shared by `minNotes` or more of the notes, each with the labels of the notes that open on it, in
+ * note order: the run-wide habit the repeated-phrase list can miss when generic phrases fill its slots. Sorted by the
+ * number of notes, most first, then by frame.
+ */
+export function repeatedOpenings(
+  notes: ReadonlyArray<{ label: string; note: string; names: readonly string[] }>,
+  minNotes = 2,
+): Array<{ frame: string; labels: string[] }> {
+  const found = new Map<string, string[]>();
+  for (const { label, note, names } of notes) {
+    const frame = openingFrame(note, names);
+    if (!frame) continue;
+    found.set(frame, [...(found.get(frame) ?? []), label]);
+  }
+  return [...found]
+    .filter(([, labels]) => labels.length >= minNotes)
+    .map(([frame, labels]) => ({ frame, labels }))
+    .sort((a, b) => b.labels.length - a.labels.length || a.frame.localeCompare(b.frame));
+}
+
+/** Whitespace-separated words, across lines and paragraphs. */
+export function wordCount(note: string): number {
+  return note.split(/\s+/).filter(Boolean).length;
 }
 
 /** The .dev.vars key holding each provider's API key. */
@@ -102,10 +280,9 @@ const PROVIDER_KEYS: Record<'openai' | 'anthropic', string> = {
   anthropic: 'ANTHROPIC_API_KEY',
 };
 
-/** The .dev.vars keys a live run needs: the key of each provider its tasks use, plus Spotify's credentials with --trivia. */
-export function requiredDevVars(providers: Array<'openai' | 'anthropic'>, trivia: boolean): string[] {
-  const keys = [...new Set(providers.map((p) => PROVIDER_KEYS[p]))];
-  return trivia ? [...keys, 'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET'] : keys;
+/** The .dev.vars keys a live run needs: the key of each provider its tasks use, once each. */
+export function requiredDevVars(providers: Array<'openai' | 'anthropic'>): string[] {
+  return [...new Set(providers.map((p) => PROVIDER_KEYS[p]))];
 }
 
 /**
@@ -115,35 +292,4 @@ export function requiredDevVars(providers: Array<'openai' | 'anthropic'>, trivia
 export function missingDevVarsError(devVars: Record<string, string>, required: string[]): string | null {
   const missing = required.filter((key) => !devVars[key]);
   return missing.length > 0 ? `apps/web/.dev.vars is missing ${missing.join(', ')}` : null;
-}
-
-/** What the eval's verdict reads from one week's card record. */
-export interface CardVerdict {
-  /** Why the card route would not generate for this week, or null. */
-  skipped: string | null;
-  /** 'error' when the card run threw; null when it never ran. */
-  status: 'card' | 'none' | 'cut' | 'error' | null;
-  cutReason: string | null;
-  /** Copy rubric hits on the card text. */
-  rubric: string[];
-}
-
-/**
- * Why a week's card fails the eval, or null. A cut or an error means the card is unknown, so an outage on
- * MusicBrainz or the making-of call fails the run instead of passing as a week without a card. A card that trips
- * the copy rubric fails too. No card ('none'), a week the route would skip, and a run without --trivia pass.
- */
-export function cardFailure(card: CardVerdict | null): string | null {
-  if (card === null || card.skipped !== null) return null;
-  if (card.status === 'cut') return `card cut: ${card.cutReason ?? 'unknown'}`;
-  if (card.status === 'error') return 'card error';
-  if (card.rubric.length > 0) return `card rubric: ${card.rubric.join(', ')}`;
-  return null;
-}
-
-/** The making-of facts to spot-check, one line each with the source URL: '- <fixture>: <album> (<artist>): <text> <url>'. */
-export function factCheckLines(cards: Array<{ fixture: string; card: TriviaCard | null }>): string[] {
-  return cards.flatMap(({ fixture, card }) =>
-    card?.kind === 'making_of' ? [`- ${fixture}: ${card.album} (${card.artist}): ${card.text} ${card.sourceUrl ?? ''}`] : [],
-  );
 }

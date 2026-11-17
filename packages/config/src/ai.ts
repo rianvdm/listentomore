@@ -45,8 +45,6 @@ export interface AITaskConfig {
   cacheTtlDays: number;
   /** Enable web search for grounded responses (OpenAI Responses API or Claude) */
   webSearch?: boolean;
-  /** Claude only: the most searches one request may run (the client's default is 5). Size it to the job. */
-  webSearchMaxUses?: number;
   /** Reasoning effort: GPT-5 (Responses API) or Claude (mapped to output_config.effort) */
   reasoning?: ReasoningEffort;
   /** Output verbosity for GPT-5 models (Responses API only; ignored by Claude) */
@@ -54,14 +52,14 @@ export interface AITaskConfig {
 }
 
 /**
- * AI task configurations. Nine tasks run on Anthropic Claude; randomFact
+ * AI task configurations. Eight tasks run on Anthropic Claude; randomFact
  * stays on OpenAI after the migration eval (see its entry). The OpenAI client
  * stays wired up as a switch-back path: flip a task's `provider` and `model`
  * to the GPT-5.6 row below and it works without code changes.
  *
- * Eight tasks run on claude-opus-5-5 (artistSummary, artistSentence,
+ * Seven tasks run on claude-opus-5-5 (artistSummary, artistSentence,
  * albumDetail, genreSummary, albumRecommendations, userInsightsSummary,
- * userInsightsRecommendations, albumTrivia). One runs on claude-sonnet-5-5 (listenAi):
+ * userInsightsRecommendations). One runs on claude-sonnet-5-5 (listenAi):
  * uncached chat the user waits on, where the cheaper tier earns its keep.
  * randomFact runs on gpt-5.6-luna.
  *
@@ -84,7 +82,8 @@ export interface AITaskConfig {
  *   entry because AITaskConfig requires it and it still applies if a task is
  *   flipped back to OpenAI. `verbosity` is left where it was set.
  * - Opus 5.5 defaults to 'medium' effort, which is why every Claude task sets
- *   `reasoning` explicitly ('low', except userInsightsRecommendations). AnthropicClient maps `reasoning` to
+ *   `reasoning` explicitly ('low', except userInsightsSummary and
+ *   userInsightsRecommendations). AnthropicClient maps `reasoning` to
  *   output_config.effort; 'none', 'minimal', and unset all map to 'low'.
  * - On OpenAI, temperature is ignored when reasoning is set, and GPT-5.x only
  *   supports temperature=1.
@@ -210,16 +209,19 @@ export const AI_TASKS = {
   userInsightsSummary: {
     provider: 'anthropic',
     model: 'claude-opus-5-5',
-    // The weekly note: two to four sentences as a JSON array with cited fact
-    // ids. 5000 gives headroom for adaptive thinking (thinking tokens count
-    // against max_tokens, display-omitted so invisible); measured output runs
-    // 80 to 540 tokens including thinking. Only tokens generated are billed.
+    // The weekly note: two or three short paragraphs (120 to 200 words) as
+    // JSON { note, names }. 5000 gives headroom for adaptive thinking (thinking
+    // tokens count against max_tokens, display-omitted so invisible); the
+    // earlier sentence-array note measured 80 to 540 tokens including thinking.
+    // Only tokens generated are billed.
     maxTokens: 5000,
     // temperature is inert on Claude (the AnthropicClient omits it) and is kept
     // only because the AITaskConfig shape requires it.
     temperature: 0.8,
     cacheTtlDays: 1,
-    reasoning: 'low',
+    // Medium: from v8 the note is free prose that frames and connects the
+    // week, set with the insights-simplify plan (2026-11-16).
+    reasoning: 'medium',
   },
 
   userInsightsRecommendations: {
@@ -233,26 +235,6 @@ export const AI_TASKS = {
     // artist, skip."), producing 16 bold entries instead of 4 (eval round 2).
     reasoning: 'medium',
     verbosity: 'low',
-  },
-
-  albumTrivia: {
-    // The making-of card under the weekly insights note: one cited fact about
-    // the week's standout album.
-    provider: 'anthropic',
-    model: 'claude-opus-5-5',
-    // One or two sentences after one to three search hops, each of which
-    // reasons; the same headroom as albumRecommendations.
-    maxTokens: 3000,
-    temperature: 1,
-    // Uncached here: the insights route checks the copy first, then caches
-    // the fact (or its absence) per album for every listener, with the TTLs
-    // in CACHE_CONFIG.albumTrivia.
-    cacheTtlDays: 0,
-    webSearch: true,
-    // One search per album to find the fact, plus one spare to confirm it:
-    // the sizing albumRecommendations uses (4 entities, max_uses 5).
-    webSearchMaxUses: 2,
-    reasoning: 'low',
   },
 } as const satisfies Record<string, AITaskConfig>;
 

@@ -1,5 +1,5 @@
 // ABOUTME: Tests for album-level week facts - repeat albums, single listens, album chains and album mode.
-// ABOUTME: Follows spec section 2 (fact table, "Album runs", "Question"); every fact is checked for grounding.
+// ABOUTME: Follows spec section 2 (fact table, "Album runs"); every fact is checked for grounding.
 
 import { albumFacts, albumKey, albumRuns } from '../src';
 import type { AlbumInfo, ArtistWeek, Scrobble } from '../src';
@@ -62,7 +62,6 @@ describe('repeat album', () => {
     expect(d.salience).toBe(74); // 40 + 30 + 40*0.1
     expect(d.statement).toBe('Eternal Embers by Meltt played start to finish 3 times (Mon Nov 2, Wed Nov 4, Sat Nov 7), '
       + "30 plays of Meltt this week. The album had about 10 full listens' worth of plays before this week.");
-    expect(d.edges).toEqual([]); // last play Sat 10:36, under 72 hours before Sun 21:17
     expectGrounded(d);
   });
 
@@ -115,20 +114,21 @@ describe('repeat album', () => {
     expect(inconsistent.statement).not.toContain('The album had');
   });
 
-  it('asks what happened after the last play when an album played on 2+ days goes quiet for 72+ hours', () => {
+  it('states the last play when an album played on 2+ days goes quiet for 72+ hours', () => {
     const lists = albums(['Meltt', 'Eternal Embers', TEN, 23]);
-    const edgesFor = (week: Scrobble[]) =>
-      only(albumFacts(graded({ week, artists: [regular('Meltt', week.length)], albums: lists })), 'repeat_album').edges;
+    const statementFor = (week: Scrobble[]) =>
+      only(albumFacts(graded({ week, artists: [regular('Meltt', week.length)], albums: lists })), 'repeat_album').statement;
+    const LAST_PLAY = 'Last play of it this week';
 
     const monThu = [...listen('Meltt', 'Eternal Embers', TEN, MON), ...listen('Meltt', 'Eternal Embers', TEN, THU)];
     // Last play Thu 10:36, 82.7 h before Sun 21:17.
-    expect(edgesFor(monThu)).toEqual([{ kind: 'after', text: 'What happened with Eternal Embers after Thu Nov 5?' }]);
+    expect(statementFor(monThu)).toContain(`${LAST_PLAY}: Thu Nov 5.`);
 
     const wedTwice = [...listen('Meltt', 'Eternal Embers', TEN, WED), ...listen('Meltt', 'Eternal Embers', TEN, WED + 3 * 3600)];
-    expect(edgesFor(wedTwice)).toEqual([]); // one day only
+    expect(statementFor(wedTwice)).not.toContain(LAST_PLAY); // one day only
 
     const monFri = [...listen('Meltt', 'Eternal Embers', TEN, MON), ...listen('Meltt', 'Eternal Embers', TEN, FRI)];
-    expect(edgesFor(monFri)).toEqual([]); // last play Fri 10:36, 58.6 h before Sun 21:17: an edge under the old 36 h rule
+    expect(statementFor(monFri)).not.toContain(LAST_PLAY); // last play Fri 10:36, 58.6 h before Sun 21:17
   });
 });
 
@@ -218,14 +218,13 @@ describe('single listen', () => {
     expect(albumFacts(ctx)).toEqual([]);
   });
 
-  it('a 12-month return asks what brought the artist back', () => {
+  it('an album new to a 12-month return scores as new', () => {
     const d = only(albumFacts(graded({
       week: listen('Tracy Chapman', 'Crossroads', TEN, MON),
       artists: [artist({ artist: 'Tracy Chapman', tier: 'lapsed', plays: 10, lifetimeBefore: 200, absentMonths: 12 })],
       albums: albums(['Tracy Chapman', 'Crossroads', TEN, 10 + 2]),
     })), 'single_listen');
     expect(d.salience).toBe(70); // 45 + 25 new
-    expect(d.edges).toEqual([{ kind: 'started', text: 'What brought Tracy Chapman back after more than a year?' }]);
     expectGrounded(d);
   });
 });
@@ -247,7 +246,7 @@ describe('album chain', () => {
       ),
     });
     const d = only(albumFacts(ctx), 'album_chain');
-    expect(d).toMatchObject({ salience: 60, subject: null, edges: [] });
+    expect(d).toMatchObject({ salience: 60, subject: null });
     expect(d.statement).toBe('Thu Nov 5: 3 albums back to back, start to finish: Oblivion Hymns (Hammock), '
       + 'And Their Refinement (Stars of the Lid), Universalis (Hammock).');
     expect(d.entities).toEqual(['Oblivion Hymns', 'Hammock', 'And Their Refinement', 'Stars of the Lid', 'Universalis']);
@@ -257,43 +256,12 @@ describe('album chain', () => {
 });
 
 describe('album identities', () => {
-  it('repeat, single-listen and chain facts record their albums with artists', () => {
-    const repeat = only(albumFacts(graded({
-      week: [...listen('Meltt', 'Eternal Embers', TEN, MON), ...listen('Meltt', 'Eternal Embers', TEN, WED)],
-      artists: [regular('Meltt', 20)], albums: albums(['Meltt', 'Eternal Embers', TEN, 20]),
-    })), 'repeat_album');
-    expect(repeat.albums).toEqual([{ artist: 'Meltt', album: 'Eternal Embers' }]);
-
-    const single = only(albumFacts(graded({
-      week: plays('Brijean', 36, MON, 'Capri (Remastered 2026)'),
-      artists: [regular('Brijean', 36)], albums: albums(['Brijean', 'Capri (Remastered 2026)', null, 36]),
-    })), 'single_listen');
-    expect(single.albums).toEqual([{ artist: 'Brijean', album: 'Capri (Remastered 2026)' }]);
-
-    // A chain is three or more albums; the third is Def Leppard again, so its artist is written twice.
-    const chain = only(albumFacts(graded({
-      week: [
-        ...listen('Def Leppard', 'Hysteria', TEN, SAT),
-        ...listen('Khruangbin', 'A La Sala', TEN, SAT + 10 * 240 + 600),
-        ...listen('Def Leppard', 'Pyromania', TEN, SAT + 20 * 240 + 1200),
-      ],
-      artists: [regular('Def Leppard', 20), regular('Khruangbin', 10)],
-      albums: albums(['Def Leppard', 'Hysteria', TEN, null], ['Khruangbin', 'A La Sala', TEN, null], ['Def Leppard', 'Pyromania', TEN, null]),
-    })), 'album_chain');
-    expect(chain.albums).toEqual([
-      { artist: 'Def Leppard', album: 'Hysteria' },
-      { artist: 'Khruangbin', album: 'A La Sala' },
-      { artist: 'Def Leppard', album: 'Pyromania' },
-    ]);
-  });
-
-  it('a self-titled album is one album and one entity', () => {
+  it('a self-titled album is one entity', () => {
     const d = only(albumFacts(graded({
       week: [...listen('Weezer', 'Weezer', TEN, MON), ...listen('Weezer', 'Weezer', TEN, WED)],
       artists: [regular('Weezer', 20)], albums: albums(['Weezer', 'Weezer', TEN, 20]),
     })), 'repeat_album');
     expect(d.entities).toEqual(['Weezer']);
-    expect(d.albums).toEqual([{ artist: 'Weezer', album: 'Weezer' }]);
   });
 });
 
@@ -314,7 +282,7 @@ describe('album mode', () => {
       prior: [weekWith(weekStart(1), 8, 24), weekWith(weekStart(2), 0, 20), weekWith(weekStart(3), 8, 12), weekWith(weekStart(4), 2, 18)],
     });
     const d = only(albumFacts(ctx), 'album_mode');
-    expect(d).toMatchObject({ salience: 50, subject: null, edges: [] });
+    expect(d).toMatchObject({ salience: 50, subject: null });
     expect(d.statement).toBe('1 start-to-finish album listen across 1 album; 50% of plays came in runs of 8 or more tracks '
       + 'from one album, the highest share of the last 5 weeks (the 4 weeks before, most recent first: 25%, 0%, 40%, 0%).');
     expectGrounded(d);

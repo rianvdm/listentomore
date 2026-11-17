@@ -82,7 +82,7 @@ export function releaseWeekFacts(ctx: FactContext): Draft[] {
     const releaseDay = onTheDay ? run.from : tsOnLocalDate(release.date, tz, window.from, run.from);
     if (releaseDay === null) continue;
 
-    const b = new StatementBuilder(tz).album(run.artist, run.album).add(' by ').name(run.artist).add(' came out on ').day(releaseDay)
+    const b = new StatementBuilder(tz).name(run.album).add(' by ').name(run.artist).add(' came out on ').day(releaseDay)
       .add(', and you played ');
     if (tracks === null) b.add('it start to finish ');
     else b.number(tracks.covered, 'tracks', run.album).add(' of ').number(tracks.length, 'tracks', run.album).add(' tracks of it, in order, ');
@@ -93,7 +93,6 @@ export function releaseWeekFacts(ctx: FactContext): Draft[] {
       salience: score(RELEASE_SALIENCE + (onTheDay ? RELEASE_DAY_BONUS : 0)),
       subject: run.artist,
       ...b.build(),
-      edges: [],
     });
   }
   return drafts;
