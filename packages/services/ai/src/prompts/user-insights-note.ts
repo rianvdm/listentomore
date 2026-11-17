@@ -53,10 +53,10 @@ ${promptView}
 Write them this week's note, in second person.
 
 - Two or three short paragraphs, 120 to 200 words in all.
-- Open on the artist or record that defined the week, by name, and say what made the week theirs. Then connect the facts that belong together, and say what sat alongside them.
+- Lead with what defined the week, by name, in a first sentence that could only belong to this week: a day, a run, a record, or an artist can open it. Then connect the facts that belong together, and say what sat alongside them.
 - Use a count only when the number itself makes the point, one or two per paragraph at most, and say the rest in words.
 - An opinion about a record is welcome when it grows out of what you just said. Phrase it in your own words, as an opinion.
-- Every listening claim (a count, a day, an album played start to finish, a return, a first play) comes from the facts above. Leave out what they don't show, and do no arithmetic they don't state. An artist marked "first plays under this name" may have played under another name, so say it that way.
+- Every listening claim (a count, a day, an album played start to finish, a return, a first play) comes from the facts above. Leave out what they don't show, and do no arithmetic they don't state. An artist marked "first plays under this name" may have played under another name, so say it that way. The facts give days, not times of day, so name the day and leave out morning, afternoon, and night.
 - Keep to the facts above about the records themselves: no release years, band members, labels, or who played on what.
 - Leave out guesses about mood or motive.
 - Write artist and album names exactly as they appear above.

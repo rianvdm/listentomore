@@ -749,11 +749,15 @@ describe('buildUserInsightsNoteMessages', () => {
     expect(buildUserInsightsNoteMessages(notePromptView)[1].content).toContain(notePromptView);
   });
 
-  it('rules open on the week\'s artist or record, ration counts, and leave opinions to the model\'s own words', () => {
+  it('rules lead with what defined the week, ration counts, and leave opinions to the model\'s own words', () => {
     const user = buildUserInsightsNoteMessages('VIEW')[1].content;
     expect(user).toContain(
-      '- Open on the artist or record that defined the week, by name, and say what made the week theirs. Then connect the facts that belong together, and say what sat alongside them.\n',
+      '- Lead with what defined the week, by name, in a first sentence that could only belong to this week: a day, a run, a record, or an artist can open it. Then connect the facts that belong together, and say what sat alongside them.\n',
     );
+    expect(user).toContain(
+      'so say it that way. The facts give days, not times of day, so name the day and leave out morning, afternoon, and night.\n',
+    );
+    expect(user).not.toContain('say what made the week theirs');
     expect(user).toContain(
       '- Use a count only when the number itself makes the point, one or two per paragraph at most, and say the rest in words.\n',
     );
