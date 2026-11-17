@@ -68,7 +68,6 @@ export function UserInsightsPage({
               <span class="loading-inline">{loadingText}</span>
             </p>
           </div>
-          <p id="insights-question" class="insights-question" hidden></p>
           <p id="insights-meta" class="insights-meta text-muted" hidden></p>
 
           <h2 style={{ marginTop: '3em' }}>💿 Albums to Explore</h2>
@@ -119,13 +118,11 @@ export function UserInsightsPage({
           }
 
           function hideWeekDetails() {
-            ['insights-question', 'insights-meta'].forEach(function(id) {
-              var el = document.getElementById(id);
-              if (el) {
-                el.hidden = true;
-                el.textContent = '';
-              }
-            });
+            var metaEl = document.getElementById('insights-meta');
+            if (metaEl) {
+              metaEl.hidden = true;
+              metaEl.textContent = '';
+            }
           }
 
           // The pulled time in the viewer's locale and timezone, or '' when the value is not a date.
@@ -139,30 +136,26 @@ export function UserInsightsPage({
             var summaryEl = document.getElementById('insights-summary');
             if (!summaryEl) return;
 
-            var noteEl = document.createElement('p');
-            noteEl.className = 'insights-note';
-            noteEl.textContent = week.note;
-            if (week.refreshing) {
+            // One paragraph element per paragraph of the note; blank lines separate them. The regex is escaped
+            // twice because this script sits in a template literal.
+            var paragraphs = String(week.note).split(/\\n\\s*\\n/).filter(function(text) {
+              return text.trim() !== '';
+            });
+            summaryEl.textContent = '';
+            var noteEl = null;
+            paragraphs.forEach(function(text) {
+              noteEl = document.createElement('p');
+              noteEl.className = 'insights-note';
+              noteEl.textContent = text.trim();
+              summaryEl.appendChild(noteEl);
+            });
+            if (week.refreshing && noteEl) {
               // Another request is generating; this is the note last served.
               var updatingEl = document.createElement('span');
               updatingEl.className = 'insights-updating text-muted';
               updatingEl.textContent = 'Updating...';
               noteEl.appendChild(document.createTextNode(' '));
               noteEl.appendChild(updatingEl);
-            }
-            summaryEl.textContent = '';
-            summaryEl.appendChild(noteEl);
-
-            // The route sends a question to the owner only; the page also checks, so a visitor never sees one.
-            var questionEl = document.getElementById('insights-question');
-            if (questionEl) {
-              if (isOwner && week.question) {
-                questionEl.textContent = week.question;
-                questionEl.hidden = false;
-              } else {
-                questionEl.textContent = '';
-                questionEl.hidden = true;
-              }
             }
 
             var metaEl = document.getElementById('insights-meta');
@@ -350,10 +343,6 @@ export function UserInsightsPage({
 
         .section-header h2 {
           margin: 0;
-        }
-
-        .insights-question {
-          font-style: italic;
         }
 
         .insights-meta,

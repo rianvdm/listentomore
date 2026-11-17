@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReasoningEffort } from '@listentomore/ai';
 import * as aiExports from '@listentomore/ai';
-import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsNoteMessages, generateUserInsightsNote, generateUserInsightsRecommendations, parseNoteSentences, USER_INSIGHTS_PROMPT_VERSION, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
+import { OpenAIClient, AICache, AIRateLimiter, AnthropicClient, AIService, buildUserInsightsNoteMessages, generateUserInsightsNote, generateUserInsightsRecommendations, parseWeekNote, USER_INSIGHTS_PROMPT_VERSION, USER_INSIGHTS_VOICE_EXAMPLES, generateArtistSummary, generateArtistSentence, generateAlbumDetail, isCacheableResponse, timeoutPresetFor, RegionUnsupportedError, withAgentTracing } from '@listentomore/ai';
 import { getTaskConfig, AI_TASKS, type AITask } from '@listentomore/config';
 import { createMockKV, setupFetchMock, mockFetchResponse } from '../utils/mocks';
 
@@ -719,7 +719,11 @@ const notePromptView = [
   'Top artists this week: Meltt (31), A$AP Rocky (14), Nils Frahm (9)',
 ].join('\n');
 
-const noteJson = '[{"text": "You played Eternal Embers start to finish three times.", "facts": [1]}, {"text": "A$AP Rocky showed up with 14 plays.", "facts": [2]}]';
+const noteJson = '{"note": "You played Eternal Embers start to finish three times.\\n\\nA$AP Rocky showed up with 14 plays.", "names": ["Eternal Embers", "A$AP Rocky"]}';
+const parsedNote = {
+  note: 'You played Eternal Embers start to finish three times.\n\nA$AP Rocky showed up with 14 plays.',
+  names: ['Eternal Embers', 'A$AP Rocky'],
+};
 
 describe('buildUserInsightsNoteMessages', () => {
   it('system prompt is the friend-who-follows-scrobbles line', () => {
@@ -730,98 +734,78 @@ describe('buildUserInsightsNoteMessages', () => {
     });
   });
 
-  it('user prompt carries the prompt view, asks for JSON sentences with cited fact ids, and contains no example note', () => {
-    const msgs = buildUserInsightsNoteMessages(notePromptView);
+  it('user prompt carries the prompt view verbatim, both voice examples and the { note, names } contract', () => {
+    const msgs = buildUserInsightsNoteMessages('VIEW');
     expect(msgs).toHaveLength(2);
     expect(msgs[1].role).toBe('user');
     const user = msgs[1].content;
-    expect(user).toContain(`It is the only thing you know about it.\n\n${notePromptView}\n\nWrite the note in second person, the way a friend who follows your scrobbles would.`);
-    expect(user).toContain('"facts"');
-    expect(user).toContain('Return only a JSON array, one object per sentence: [{"text": "...", "facts": [1]}].');
-    expect(user).not.toContain('Boards of Canada immersion');
-    expect(user).not.toContain('Here are a few summaries');
-    expect(user).not.toContain('{PROMPT_VIEW}');
+    expect(user).toContain('It is everything you know about the week.\n\nVIEW\n\nWrite them this week\'s note, in second person.');
+    expect(user).toContain(`<example>\n${USER_INSIGHTS_VOICE_EXAMPLES[0]}\n</example>`);
+    expect(user).toContain(`<example>\n${USER_INSIGHTS_VOICE_EXAMPLES[1]}\n</example>`);
+    expect(user.endsWith(
+      'Return only JSON: {"note": "<the paragraphs, separated by a blank line>", "names": ["<every artist and album the note names, spelled as above>"]}',
+    )).toBe(true);
+    // A String.replace template would read "$A" as a pattern.
+    expect(buildUserInsightsNoteMessages(notePromptView)[1].content).toContain(notePromptView);
   });
 
-  // The prompt bans questions ("no question."), so the word itself appears.
-  // What must not appear is any instruction to ask one: the code picks it.
-  it('user prompt has no question instruction', () => {
-    const user = buildUserInsightsNoteMessages(notePromptView)[1].content.toLowerCase();
-    for (const ask of ['question to end with', 'end with a question', 'ask them', 'ask the listener']) {
-      expect(user).not.toContain(ask);
-    }
-    expect(user).toContain('no emoji, no question.');
+  it('user prompt has no em dash, and neither do the examples', () => {
+    expect(buildUserInsightsNoteMessages('VIEW')[1].content).not.toContain('\u2014');
+    for (const example of USER_INSIGHTS_VOICE_EXAMPLES) expect(example).not.toContain('\u2014');
   });
 
-  it('bans "never", "first time" and "first ever" and names the allowed phrase, right after the facts-only rule', () => {
-    const user = buildUserInsightsNoteMessages(notePromptView)[1].content;
-    const rule = '- Never write "never", "first time" or "first ever". For an artist with no earlier plays, say "first plays under this name".';
-    const lines = user.split('\n');
-    const factsOnly = lines.findIndex((line) => line.startsWith('- Use only what is in the facts.'));
-    expect(factsOnly).toBeGreaterThan(-1);
-    expect(lines[factsOnly + 1]).toBe(rule);
-  });
-
-  it('keeps numbers off groups of artists, right after the "never" rule', () => {
-    const lines = buildUserInsightsNoteMessages(notePromptView)[1].content.split('\n');
-    const never = lines.findIndex((line) => line.startsWith('- Never write "never"'));
-    expect(never).toBeGreaterThan(-1);
-    expect(lines[never + 1]).toBe(
-      '- Give a number only for one named artist or album. Don\'t attach a number to a group ("the other three", "both of those").',
-    );
+  it('carries the two v3 voice-only examples, three paragraphs each', () => {
+    expect(USER_INSIGHTS_VOICE_EXAMPLES).toHaveLength(2);
+    expect(USER_INSIGHTS_VOICE_EXAMPLES[0].startsWith('Siiga came out of nowhere and took the top spot in a week: Nostalgia Burns at 39 plays,')).toBe(true);
+    expect(USER_INSIGHTS_VOICE_EXAMPLES[1].startsWith('This was an I Built You A Tower week, full stop. You wore the whole record down to the grain: Envy the Birds,')).toBe(true);
+    for (const example of USER_INSIGHTS_VOICE_EXAMPLES) expect(example.split('\n\n')).toHaveLength(3);
   });
 
   it('exposes a bumped prompt version for cache busting', () => {
-    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v7');
+    expect(USER_INSIGHTS_PROMPT_VERSION).toBe('v8');
   });
 });
 
-describe('parseNoteSentences', () => {
-  const expected = [
-    { text: 'You played Eternal Embers start to finish three times.', facts: [1] },
-    { text: 'A$AP Rocky showed up with 14 plays.', facts: [2] },
-  ];
-
-  it('parses a bare JSON array', () => {
-    expect(parseNoteSentences(noteJson)).toEqual(expected);
-    expect(parseNoteSentences(`\n  ${noteJson}\n`)).toEqual(expected);
+describe('parseWeekNote', () => {
+  it('parses bare JSON', () => {
+    expect(parseWeekNote(noteJson)).toEqual(parsedNote);
+    expect(parseWeekNote(`\n  ${noteJson}\n`)).toEqual(parsedNote);
   });
 
-  it('parses fenced and prefixed JSON', () => {
-    expect(parseNoteSentences('```json\n' + noteJson + '\n```')).toEqual(expected);
-    expect(parseNoteSentences('```\n' + noteJson + '\n```')).toEqual(expected);
-    expect(parseNoteSentences('Here is the note:\n' + noteJson)).toEqual(expected);
-    expect(parseNoteSentences(noteJson + '\nHope that works [1].')).toEqual(expected);
-    expect(parseNoteSentences('Facts cited [1] and [2]:\n' + noteJson)).toEqual(expected);
+  it('parses a fenced block and an object with prose before and after', () => {
+    expect(parseWeekNote('```json\n' + noteJson + '\n```')).toEqual(parsedNote);
+    expect(parseWeekNote('```\n' + noteJson + '\n```')).toEqual(parsedNote);
+    expect(parseWeekNote('Here is the note:\n' + noteJson + '\nHope that works {ok}.')).toEqual(parsedNote);
+    expect(parseWeekNote('Fields {note} and {names}:\n' + noteJson)).toEqual(parsedNote);
   });
 
-  it('keeps only text and facts from each item', () => {
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1, 3], "note": "x"}]')).toEqual([
-      { text: 'One.', facts: [1, 3] },
-    ]);
+  it('normalises paragraph breaks to exactly one blank line and joins lines inside a paragraph', () => {
+    const raw = JSON.stringify({ note: '  One.\r\n\r\nTwo starts\nand ends.\n\n\nThree.\n \n\n', names: [] });
+    expect(parseWeekNote(raw)).toEqual({ note: 'One.\n\nTwo starts and ends.\n\nThree.', names: [] });
   });
 
-  it('keeps a sentence with an empty facts list', () => {
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, {"text": "Two.", "facts": []}]')).toEqual([
-      { text: 'One.', facts: [1] },
-      { text: 'Two.', facts: [] },
-    ]);
+  it('trims names and drops empty ones', () => {
+    expect(parseWeekNote(JSON.stringify({ note: 'One.', names: ['  Meltt ', '', '   ', 'Eternal Embers'] })))
+      .toEqual({ note: 'One.', names: ['Meltt', 'Eternal Embers'] });
   });
 
-  it('returns null for prose, for an empty array, and for items missing text or facts', () => {
-    expect(parseNoteSentences('You played Eternal Embers three times this week.')).toBeNull();
-    expect(parseNoteSentences('')).toBeNull();
-    expect(parseNoteSentences('[]')).toBeNull();
-    expect(parseNoteSentences('[{"facts": [1]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One."}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "   ", "facts": [1]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1.5]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": ["1"]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": 1, "facts": [1]}]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, null]')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]}, "Two."]')).toBeNull();
-    expect(parseNoteSentences('{"text": "One.", "facts": [1]}')).toBeNull();
-    expect(parseNoteSentences('[{"text": "One.", "facts": [1]')).toBeNull();
+  it('keeps only note and names', () => {
+    expect(parseWeekNote('{"note": "One.", "names": [], "facts": [1]}')).toEqual({ note: 'One.', names: [] });
+  });
+
+  it('returns null for prose, an empty note, missing or non-array names, a non-string name, or an array reply', () => {
+    expect(parseWeekNote('You played Eternal Embers three times this week.')).toBeNull();
+    expect(parseWeekNote('')).toBeNull();
+    expect(parseWeekNote('{"note": "", "names": []}')).toBeNull();
+    expect(parseWeekNote('{"note": " \\n\\n ", "names": []}')).toBeNull();
+    expect(parseWeekNote('{"note": 1, "names": []}')).toBeNull();
+    expect(parseWeekNote('{"note": "One."}')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": "Meltt"}')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": ["Meltt", 2]}')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": [null]}')).toBeNull();
+    expect(parseWeekNote('[{"note": "One.", "names": []}]')).toBeNull();
+    expect(parseWeekNote('[{"text": "One.", "facts": [1]}]')).toBeNull();
+    expect(parseWeekNote('{"note": "One.", "names": []')).toBeNull();
   });
 });
 
@@ -857,14 +841,14 @@ describe('generateUserInsightsNote', () => {
     expect(client.chatCompletion).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-opus-5-5',
-        reasoning: 'low',
+        reasoning: 'medium',
         maxTokens: 5000,
         messages: buildUserInsightsNoteMessages(notePromptView),
       })
     );
   });
 
-  it('returns the parsed sentences, the raw text and the response metadata', async () => {
+  it('returns the parsed note, the raw text and the response metadata', async () => {
     const metadata = { provider: 'anthropic' as const, model: 'claude-opus-5-5', api: 'messages' as const };
     const client = {
       chatCompletion: vi.fn(async () => ({ content: noteJson, metadata })),
@@ -872,20 +856,19 @@ describe('generateUserInsightsNote', () => {
 
     const result = await generateUserInsightsNote(notePromptView, client);
 
-    expect(result.sentences).toHaveLength(2);
-    expect(result.sentences?.[0].facts).toEqual([1]);
+    expect(result.note).toEqual(parsedNote);
     expect(result.raw).toBe(noteJson);
     expect(result.metadata).toBe(metadata);
   });
 
-  it('returns null sentences, not a throw, when the model writes prose', async () => {
+  it('returns a null note, not a throw, when the model writes prose', async () => {
     const client = {
       chatCompletion: vi.fn(async () => ({ content: 'You played a lot of Meltt.' })),
     } as unknown as AnthropicClient;
 
     const result = await generateUserInsightsNote(notePromptView, client);
 
-    expect(result.sentences).toBeNull();
+    expect(result.note).toBeNull();
     expect(result.raw).toBe('You played a lot of Meltt.');
   });
 
@@ -900,7 +883,7 @@ describe('generateUserInsightsNote', () => {
     const result = await ai.getUserInsightsNote(notePromptView);
 
     expect(spy).toHaveBeenCalledWith('userInsightsSummary');
-    expect(result.sentences).toHaveLength(2);
+    expect(result.note).toEqual(parsedNote);
     expect(result.metadata?.provider).toBe('anthropic');
     // The rate limiter keeps its counters in the same KV; nothing else may.
     const keys = [...vi.mocked(mockKV.get).mock.calls, ...vi.mocked(mockKV.put).mock.calls].map(([key]) => String(key));
@@ -1169,26 +1152,26 @@ describe('truncated responses are not cached', () => {
   it("passes a truncated note's metadata through so the route refuses to cache it", async () => {
     const client = {
       chatCompletion: vi.fn(async () => ({
-        content: '[{"text": "You played Eternal',
+        content: '{"note": "You played Eternal',
         metadata: { ...truncatedResponse.metadata },
       })),
     } as unknown as AnthropicClient;
 
     const result = await generateUserInsightsNote('1. A fact.', client);
 
-    expect(result.sentences).toBeNull();
+    expect(result.note).toBeNull();
     expect(isCacheableResponse(result.raw, result.metadata, 'userInsightsSummary', 'bordesak')).toBe(false);
   });
 });
 
 describe('AI task token budgets', () => {
-  // randomFact stays on OpenAI after eval round 3, and
-  // userInsightsRecommendations runs at medium effort (eval round 2). See
-  // their notes in packages/config/src/ai.ts.
+  // randomFact stays on OpenAI after eval round 3; userInsightsRecommendations
+  // (eval round 2) and userInsightsSummary (the v8 note) run at medium effort.
+  // See their notes in packages/config/src/ai.ts.
   const OPENAI_TASKS: AITask[] = ['randomFact'];
 
   it('every Claude task runs with explicit effort, low unless noted', () => {
-    const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsRecommendations'];
+    const MEDIUM_EFFORT_TASKS: AITask[] = ['userInsightsSummary', 'userInsightsRecommendations'];
     for (const task of Object.keys(AI_TASKS) as AITask[]) {
       if (OPENAI_TASKS.includes(task)) continue;
       expect(getTaskConfig(task).provider).toBe('anthropic');

@@ -1,39 +1,39 @@
 // ABOUTME: The week note for /api/internal/user-insights-summary: computes or reuses a user's WeekFacts, then serves
-// ABOUTME: the owner a guarded Claude note (or the code line) and a visitor the third-person line (spec sections 3-5).
+// ABOUTME: the owner a checked Claude note (or the code line) and a visitor the third-person line.
 
 import type { Context } from 'hono';
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { USER_INSIGHTS_PROMPT_VERSION, aiCacheKey, isCacheableResponse } from '@listentomore/ai';
-import type { AIService, UserInsightsNoteResult } from '@listentomore/ai';
+import type { AIService } from '@listentomore/ai';
 import type { User } from '@listentomore/db';
 import {
   RULE_VERSION,
   buildWeekFacts,
-  chooseQuestion,
   collectWeekInputs,
-  guardNote,
   keys,
   noteSignature,
   renderLine,
-  renderPromptView,
 } from '@listentomore/insights';
-import type { LastfmHistoryClient, NoteSentence, QuestionKind, ReleaseLookup, WeekFacts } from '@listentomore/insights';
+import type { LastfmHistoryClient, ReleaseLookup, WeekFacts } from '@listentomore/insights';
 import { createServiceDefer } from '@listentomore/shared';
 import type { SpotifyService } from '@listentomore/spotify';
 import type { InternalAppContext } from '../../types';
-import { errorKind } from '../../utils/error-kind';
 import { getWaitUntil } from '../../utils/wait-until';
+import { writeWeekNote } from './insights-note';
+import type { NoteAttempt } from './insights-note';
 
 /** Under this many deduplicated plays this week, the route keeps its sparse message (spec section 2, "Quiet week"). */
 export const MIN_WEEK_PLAYS = 5;
-/** One regeneration after a failed guard, then the code line (spec section 3). */
-const NOTE_ATTEMPTS = 2;
-/** The facts named in the generation log line: the six the prompt view shows. */
+/**
+ * Under this many deduplicated plays the owner gets the code line and no model call, whatever `wf.quiet` says
+ * (simplify spec, "Quiet weeks and visitors").
+ */
+export const NOTE_MIN_PLAYS = 30;
+/** The facts named in the generation log line. */
 const LOGGED_FACTS = 6;
 
 export interface WeekInsightsResponse {
-  note: string;                 // sentences joined by a space, or the code line
-  question: string | null;      // owner only
+  note: string;                 // the model's paragraphs separated by a blank line, or the code line
   header: string;               // 'Your week' | "<username>'s week"
   pulledAt: string;             // ISO
   mode: 'note' | 'line' | 'quiet';
@@ -54,32 +54,6 @@ export interface WeekInsightsArgs {
 interface CachedNote { note: string }
 /** The pointer to the note last served to the owner, read while another request is generating. */
 interface LastNote { signature: string; pulledAt: string }
-/**
- * The owner's last question, for rotation, with the note signature it was served with. Older entries may lack the
- * signature; they rotate as usual.
- */
-interface StoredQuestion { kind: QuestionKind; subject: string; signature?: string }
-
-
-/** Guard failure types that end in a fixed word, kept for the log ('shape:lead', 's2:banned:never'). */
-const NAMED_FAILURES: ReadonlySet<string> = new Set(['shape', 'banned', 'punctuation']);
-/** Guard failure types whose payload is a value, unit, date or fact id, logged as the type alone. */
-const VALUED_FAILURES: ReadonlySet<string> = new Set(['quantity', 'quantity-unit', 'quantity-entity', 'name', 'date', 'day', 'month']);
-
-/**
- * Guard failure codes reduced to what a log line may carry: the sentence position and the failure type, with every
- * value, unit, date and fact id dropped ('s2:quantity-entity:41:plays' -> 's2:quantity-entity'). A type the guard
- * adds later reads as 'other' until it is listed here. The guard's own result is not changed.
- */
-export function logSafeFailures(failures: readonly string[]): string[] {
-  return failures.map((failure) => {
-    const parts = failure.split(':');
-    const position = /^s\d+$/.test(parts[0]) ? `${parts.shift()}:` : '';
-    const [type, word] = parts;
-    if (NAMED_FAILURES.has(type)) return `${position}${type}${word && /^[a-z-]+$/.test(word) ? `:${word}` : ''}`;
-    return `${position}${VALUED_FAILURES.has(type) ? type : 'other'}`;
-  });
-}
 
 /**
  * A key's family, its first two segments ('insights:facts', 'lastfm:toplist'), for log lines: the rest of a key holds
@@ -172,22 +146,6 @@ async function previousNote(kv: KVNamespace, user: string): Promise<(CachedNote 
   return cached ? { note: cached.note, ...last } : null;
 }
 
-/**
- * The owner's question. Under the same note signature the stored question is served again, so reloads of the same
- * facts never flip it; otherwise it rotates against the stored one (chooseQuestion). Chosen at serve time, so facts a
- * visitor computed (without the question state) still rotate correctly for the owner.
- */
-function ownerQuestion(wf: WeekFacts, stored: StoredQuestion | null, signature: string): WeekFacts['question'] {
-  if (stored && stored.signature === signature) {
-    for (const fact of wf.facts) {
-      if ((fact.subject ?? '') !== stored.subject) continue;
-      const edge = fact.edges.find((e) => e.kind === stored.kind);
-      if (edge) return { ...edge, subject: stored.subject };
-    }
-  }
-  return chooseQuestion(wf.facts, stored);
-}
-
 /** Cached facts are reused only when this code computed them: a rule change recomputes instead of serving old facts. */
 export const isCurrentFacts = (wf: WeekFacts | null): wf is WeekFacts =>
   wf !== null && wf.schema === 'week-facts/v1' && wf.ruleVersion === RULE_VERSION;
@@ -211,39 +169,24 @@ export function spotifyReleaseLookup(spotify: SpotifyService): ReleaseLookup {
 }
 
 /**
- * Calls the model up to twice and returns the first note that passes the guard, or null. A thrown call, an
- * unparseable reply and a guard failure each use one attempt. Logs failure types only, never the text or a value.
+ * One log line per note attempt: its number, its outcome and then the error kind or the check's failure codes. Never
+ * the reply: it holds the note and names.
  */
-async function guardedNote(
-  ai: AIService,
-  wf: WeekFacts,
-): Promise<{ sentences: NoteSentence[]; result: UserInsightsNoteResult } | null> {
-  const promptView = renderPromptView(wf);
-  for (let attempt = 1; attempt <= NOTE_ATTEMPTS; attempt++) {
-    let result: UserInsightsNoteResult;
-    try {
-      result = await ai.getUserInsightsNote(promptView);
-    } catch (error) {
-      console.error(`[Insights] note-attempt:${attempt} call-failed kind=${errorKind(error)}`);
-      continue;
-    }
-    if (result.sentences === null) {
-      console.log(`[Insights] note-attempt:${attempt} unparseable`);
-      continue;
-    }
-    const verdict = guardNote(result.sentences, wf);
-    if (verdict.ok) return { sentences: result.sentences, result };
-    console.log(`[Insights] note-attempt:${attempt} guard-failed ${logSafeFailures(verdict.failures).join(', ')}`);
-  }
-  return null;
+function logNoteAttempts(attempts: readonly NoteAttempt[]): void {
+  attempts.forEach((attempt, i) => {
+    const line = `[Insights] note-attempt:${i + 1} ${attempt.outcome}`;
+    if (attempt.outcome === 'call-failed') console.error(`${line} kind=${attempt.kind}`);
+    else if (attempt.outcome === 'check-failed') console.log(`${line} ${attempt.failures.join(',')}`);
+    else console.log(line);
+  });
 }
 
 /**
  * The week for one profile. Returns null when the week has under MIN_WEEK_PLAYS deduplicated plays (the route's
  * sparse message). Throws InsightsFetchError when the current week cannot be read; nothing is cached then.
  *
- * Visitors get the code-rendered third-person line and never touch the note, the last-note pointer or the question
- * state. Only the owner gets a model call, and only on a week that is not quiet and whose note is not cached.
+ * Visitors get the code-rendered third-person line and never touch the note or the last-note pointer. Only the owner
+ * gets a model call, and only on a week of NOTE_MIN_PLAYS or more whose note is not cached.
  */
 export async function getWeekInsights(
   c: Context<InternalAppContext>,
@@ -256,14 +199,6 @@ export async function getWeekInsights(
   // The profile's display name, the one the insights page shows.
   const displayName = user.username || lastfmUser;
   const header = isOwner ? 'Your week' : `${displayName}'s week`;
-
-  // The owner's last question: read once, only for the owner; visitors never touch question state.
-  let storedQuestion: StoredQuestion | null | undefined;
-  const lastQuestion = async (): Promise<StoredQuestion | null> => {
-    if (!isOwner) return null;
-    if (storedQuestion === undefined) storedQuestion = await readJson<StoredQuestion>(kv, keys.question(lastfmUser));
-    return storedQuestion;
-  };
 
   // Refresh discards the cached facts. The delete is best effort: this request skips them whether or not it worked,
   // and the recomputed facts overwrite them below.
@@ -278,7 +213,7 @@ export async function getWeekInsights(
       // Visitors never get the note, so they carry on.
       const previous = isOwner ? await previousNote(kv, lastfmUser) : null;
       if (previous) {
-        return { note: previous.note, question: null, header, pulledAt: previous.pulledAt, mode: 'note', refreshing: true };
+        return { note: previous.note, header, pulledAt: previous.pulledAt, mode: 'note', refreshing: true };
       }
 
       // Best effort: correctness never depends on the marker (spec section 5, "Concurrency").
@@ -305,7 +240,7 @@ export async function getWeekInsights(
         // Only the owner's view starts Spotify lookups; a visitor's facts carry no release dates.
         releases: isOwner ? spotifyReleaseLookup(c.get('spotify') as SpotifyService) : undefined,
       });
-      wf = buildWeekFacts(inputs, { lastQuestion: await lastQuestion() });
+      wf = buildWeekFacts(inputs);
       await writeJson(kv, keys.facts(lastfmUser), wf, getTtlSeconds(CACHE_CONFIG.userInsights.weekFacts));
 
       // Kinds, saliences and call counts only: never statements, the prompt view, names or listening counts.
@@ -321,11 +256,11 @@ export async function getWeekInsights(
     if (!isOwner) {
       // The visitor line names the profile as the header does.
       const note = renderLine({ ...wf, username: displayName }, 'third');
-      return { note, question: null, header, pulledAt, mode: wf.quiet ? 'quiet' : 'line' };
+      return { note, header, pulledAt, mode: wf.quiet ? 'quiet' : 'line' };
     }
 
-    if (wf.quiet) {
-      return { note: renderLine(wf, 'second'), question: null, header, pulledAt, mode: 'quiet' };
+    if (wf.plays.deduped < NOTE_MIN_PLAYS) {
+      return { note: renderLine(wf, 'second'), header, pulledAt, mode: 'quiet' };
     }
 
     const signature = await noteSignature(wf, USER_INSIGHTS_PROMPT_VERSION);
@@ -337,11 +272,12 @@ export async function getWeekInsights(
       note = cached.note;
       mode = 'note';
     } else {
-      const generated = await guardedNote(ai, wf);
-      if (generated) {
-        note = generated.sentences.map((s) => s.text.trim()).join(' ');
+      const run = await writeWeekNote(ai, wf);
+      logNoteAttempts(run.attempts);
+      if (run.note && run.result) {
+        note = run.note.note;
         mode = 'note';
-        const { raw, metadata } = generated.result;
+        const { raw, metadata } = run.result;
         // No key params: isCacheableResponse puts them in its log line, and they hold the username.
         if (isCacheableResponse(raw, metadata, 'userInsightsSummary')) {
           await writeJson(kv, noteKey(lastfmUser, signature), { note } satisfies CachedNote, getTtlSeconds(CACHE_CONFIG.userInsights.note));
@@ -352,10 +288,7 @@ export async function getWeekInsights(
       }
     }
 
-    const stored = await lastQuestion();
-    const question = ownerQuestion(wf, stored, signature);
-
-    // Write the pointer and the question state only when they change: a warm reload writes nothing.
+    // Write the pointer only when it changes: a warm reload writes nothing.
     const last = await readJson<LastNote>(kv, keys.last(lastfmUser));
     if (last?.signature !== signature || last.pulledAt !== pulledAt) {
       await writeJson(
@@ -365,16 +298,8 @@ export async function getWeekInsights(
         getTtlSeconds(CACHE_CONFIG.userInsights.note),
       );
     }
-    if (question && (stored?.kind !== question.kind || stored.subject !== question.subject || stored.signature !== signature)) {
-      await writeJson(
-        kv,
-        keys.question(lastfmUser),
-        { kind: question.kind, subject: question.subject, signature } satisfies StoredQuestion,
-        getTtlSeconds(CACHE_CONFIG.userInsights.questionState),
-      );
-    }
 
-    return { note, question: question?.text ?? null, header, pulledAt, mode };
+    return { note, header, pulledAt, mode };
   } finally {
     if (markerSet) await deleteKey(kv, keys.generating(lastfmUser));
   }

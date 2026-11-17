@@ -1,5 +1,5 @@
 // ABOUTME: Endpoint tests for /api/internal/user-insights-summary - visibility before any cache read, owner note
-// ABOUTME: versus visitor line, guard regeneration and fallback, the note reuse rule, refresh, the marker and logs.
+// ABOUTME: versus visitor line, check regeneration and fallback, the note reuse rule, refresh, the marker and logs.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
@@ -7,11 +7,10 @@ import { Hono } from 'hono';
 import { AICache } from '@listentomore/ai';
 import type { Database, Session, User } from '@listentomore/db';
 import * as insights from '@listentomore/insights';
-import type { NoteSentence, WeekFacts, WeekInputs } from '@listentomore/insights';
+import type { WeekFacts, WeekInputs } from '@listentomore/insights';
 import may24Json from '../../../../../packages/services/insights/__fixtures__/bordesak-2026-05-24.json';
 import jun12Json from '../../../../../packages/services/insights/__fixtures__/bordesak-2026-06-12.json';
 import { insightsInternalRoutes } from '../../api/internal/insights';
-import { logSafeFailures } from '../../api/internal/insights-week';
 import type { InternalAppContext } from '../../types';
 import { createMockKV } from '../utils/mocks';
 
@@ -41,25 +40,31 @@ const SIGNED_IN = { headers: { Cookie: 'ltm_session=token' } };
 const URL_SUMMARY = '/api/internal/user-insights-summary?username=bordesak';
 const URL_REFRESH = `${URL_SUMMARY}&refresh=true`;
 
-// The May 24 facts: fact 1 is the jazz cluster, fact 2 Boards of Canada (the guard's round 2 acceptance note).
-const S1: NoteSentence = {
-  text: 'Four jazz names came back to you this week: Wes Montgomery with 8 plays, Wayne Shorter and Joe Henderson with 6 each, and Grant Green with 5, and Joe Henderson had been gone for 12+ months.',
-  facts: [1],
-};
-const S2: NoteSentence = { text: 'Boards of Canada took over Friday with 41 plays, including Inferno start to finish.', facts: [2] };
-const GOOD = { sentences: [S1, S2], raw: JSON.stringify([S1, S2]), metadata: { truncated: false } };
-// Names a count the cited fact does not hold.
-const BAD = {
-  sentences: [S1, { text: 'Grant Green had 41 plays.', facts: [1, 2] }],
-  raw: '[...]',
+// Two paragraphs about the May 24 facts: the jazz returns and the Boards of Canada day. Every name is this week's and
+// every number is in the prompt view, so the note passes the check.
+const P1 = 'Four jazz names came back this week, led by Wes Montgomery with 8 plays, and Joe Henderson had been gone for 12+ months.';
+const P2 = 'Boards of Canada took over Friday with 41 plays, including Inferno start to finish.';
+const NOTE = `${P1}\n\n${P2}`;
+const GOOD = {
+  note: { note: NOTE, names: ['Wes Montgomery', 'Joe Henderson', 'Boards of Canada', 'Inferno'] },
+  raw: JSON.stringify({ note: NOTE, names: ['Wes Montgomery', 'Joe Henderson', 'Boards of Canada', 'Inferno'] }),
   metadata: { truncated: false },
 };
-const UNPARSEABLE = { sentences: null, raw: 'not json', metadata: { truncated: false } };
-const NOTE = `${S1.text} ${S2.text}`;
+// Fails the check on a name the week never played and a count the prompt view does not hold.
+const BAD_TEXT = 'Quillon Varga had 9999 plays this week.';
+const BAD = {
+  note: { note: BAD_TEXT, names: ['Quillon Varga'] },
+  raw: JSON.stringify({ note: BAD_TEXT, names: ['Quillon Varga'] }),
+  metadata: { truncated: false },
+};
+const UNPARSEABLE = { note: null, raw: 'not json', metadata: { truncated: false } };
+/** Names nothing and states no number, so it passes the check on any week. */
+const PLAIN_NOTE = 'A short week, mostly the usual names.\n\nNothing new broke through.';
+const PLAIN = { note: { note: PLAIN_NOTE, names: [] }, raw: JSON.stringify({ note: PLAIN_NOTE, names: [] }), metadata: { truncated: false } };
 
 /**
  * The inputs with only this week's first `n` scrobbles and no earlier ones, like a new account: no baseline, so no
- * baseline facts, and too few plays for a discovery. Six plays make a quiet week; under five, a sparse one.
+ * baseline facts, and too few plays for a discovery. These weeks are quiet; under five plays, a sparse one.
  */
 function onlyWeekPlays(inputs: WeekInputs, n: number): WeekInputs {
   const weekFrom = insights.weekWindow(inputs.now).from;
@@ -150,7 +155,7 @@ describe('/user-insights-summary', () => {
   });
 
   describe('owner', () => {
-    it('owner gets the guarded note, the code question and "Your week"', async () => {
+    it('owner gets the checked note, in paragraphs, and "Your week"', async () => {
       const services = createServices(OWNER, OWNER);
       const res = await buildApp(services)(URL_SUMMARY);
 
@@ -158,7 +163,6 @@ describe('/user-insights-summary', () => {
       const { data } = await res.json() as { data: Record<string, unknown> };
       expect(data).toEqual({
         note: NOTE,
-        question: 'What got you back into jazz this week?',
         header: 'Your week',
         pulledAt: new Date(MAY24.now * 1000).toISOString(),
         mode: 'note',
@@ -172,11 +176,22 @@ describe('/user-insights-summary', () => {
         signature,
         pulledAt: new Date(MAY24.now * 1000).toISOString(),
       });
-      expect(await services.kv.get('insights:question:bordesak', 'json')).toEqual({ kind: 'started', subject: 'jazz', signature });
       expect(await services.kv.get('insights:generating:bordesak')).toBeNull();
     });
 
-    it('caches the note, facts, last pointer and question with the configured TTLs', async () => {
+    it('no response carries a question, and no question state is read or written', async () => {
+      for (const user of [OWNER, VISITOR]) {
+        const services = createServices(user, OWNER);
+        const { data } = await (await buildApp(services)(URL_SUMMARY)).json() as { data: Record<string, unknown> };
+        expect(data).not.toHaveProperty('question');
+        expect(readKeys(services.kv).filter((k) => k.startsWith('insights:question:'))).toEqual([]);
+        expect(writtenKeys(services.kv).filter((k) => k.startsWith('insights:question:'))).toEqual([]);
+      }
+      expect(insights.buildWeekFacts).toHaveBeenCalledWith(MAY24);
+      expect(vi.mocked(insights.buildWeekFacts).mock.calls.every((args) => args.length === 1)).toBe(true);
+    });
+
+    it('caches the note, facts and last pointer with the configured TTLs', async () => {
       const services = createServices(OWNER, OWNER);
       await buildApp(services)(URL_SUMMARY);
 
@@ -185,11 +200,10 @@ describe('/user-insights-summary', () => {
       expect(ttlOf('insights:facts:bordesak')).toBe(24 * 3600);
       expect(ttlOf('ai:userInsightsSummary:bordesak:')).toBe(8 * 86400);
       expect(ttlOf('insights:last:bordesak')).toBe(8 * 86400);
-      expect(ttlOf('insights:question:bordesak')).toBe(60 * 86400);
       expect(ttlOf('insights:generating:bordesak')).toBe(60);
     });
 
-    it('regenerates once when the guard fails, then serves the second note', async () => {
+    it('regenerates once when the check fails, then serves the second note', async () => {
       const services = createServices(OWNER, OWNER);
       services.ai.getUserInsightsNote.mockResolvedValueOnce(BAD).mockResolvedValueOnce(GOOD);
       const res = await buildApp(services)(URL_SUMMARY);
@@ -201,21 +215,20 @@ describe('/user-insights-summary', () => {
       expect(writtenKeys(services.kv).some((k) => k.startsWith('ai:userInsightsSummary:bordesak:'))).toBe(true);
     });
 
-    it('falls back to the code line when the guard fails twice', async () => {
+    it('falls back to the code line when the check fails twice', async () => {
       const services = createServices(OWNER, OWNER);
       services.ai.getUserInsightsNote.mockResolvedValue(BAD);
       const res = await buildApp(services)(URL_SUMMARY);
 
-      const { data } = await res.json() as { data: { note: string; mode: string; question: string | null } };
+      const { data } = await res.json() as { data: { note: string; mode: string } };
       expect(services.ai.getUserInsightsNote).toHaveBeenCalledTimes(2);
       expect(data.mode).toBe('line');
       expect(data.note).toBe(insights.renderLine(await factsOf(MAY24), 'second'));
-      expect(data.question).toBe('What got you back into jazz this week?');
       expect(writtenKeys(services.kv).filter((k) => k.startsWith('ai:userInsightsSummary'))).toEqual([]);
       expect(await services.kv.get('insights:last:bordesak', 'json')).toMatchObject({ signature: expect.any(String) });
     });
 
-    it('falls back to the code line when the model returns no parseable sentences', async () => {
+    it('falls back to the code line when the model returns no parseable note', async () => {
       const services = createServices(OWNER, OWNER);
       services.ai.getUserInsightsNote.mockResolvedValue(UNPARSEABLE);
       const res = await buildApp(services)(URL_SUMMARY);
@@ -261,7 +274,7 @@ describe('/user-insights-summary', () => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
-    it('a warm reload writes nothing: the pointer and the question state are unchanged', async () => {
+    it('a warm reload writes nothing: the pointer is unchanged', async () => {
       const services = createServices(OWNER, OWNER);
       const request = buildApp(services);
       await request(URL_SUMMARY);
@@ -269,30 +282,6 @@ describe('/user-insights-summary', () => {
 
       expect((await request(URL_SUMMARY)).status).toBe(200);
       expect(services.kv.put).not.toHaveBeenCalled();
-    });
-
-    it('two loads of the same facts return the same question, even when rotation moved off the lead', async () => {
-      // Stored: a "started" question about another subject. The lead's only edge is "started", so the first load
-      // rotates to a later fact; rotating again from that would flip back to the lead on the reload.
-      // No committed week has edges on both of its top two facts, so fact 2 gets one here.
-      const real = await factsOf(MAY24);
-      const [lead, second, ...rest] = real.facts;
-      // releasesChecked as the owner's own generation sets it, so the reload reuses these facts.
-      const wf = {
-        ...real, releasesChecked: true, facts: [lead, { ...second, edges: [{ kind: 'after' as const, text: 'What came after?' }] }, ...rest],
-      };
-      vi.mocked(insights.buildWeekFacts).mockReturnValueOnce(wf);
-      const services = createServices(OWNER, OWNER);
-      await services.kv.put('insights:question:bordesak', JSON.stringify({ kind: 'started', subject: 'Some Other Artist' }));
-      const first = insights.chooseQuestion(wf.facts, { kind: 'started', subject: 'Some Other Artist' });
-      expect(first).not.toBeNull();
-      expect(insights.chooseQuestion(wf.facts, first)?.text).not.toBe(first?.text);
-
-      const request = buildApp(services);
-      const one = await (await request(URL_SUMMARY)).json() as { data: { question: string | null } };
-      const two = await (await request(URL_SUMMARY)).json() as { data: { question: string | null } };
-      expect(one.data.question).toBe(first?.text);
-      expect(two.data.question).toBe(first?.text);
     });
 
     it('recomputes cached facts from another rule version instead of serving them', async () => {
@@ -322,7 +311,7 @@ describe('/user-insights-summary', () => {
       const regenerated = await request(URL_REFRESH);
       expect(regenerated.status).toBe(200);
       expect(collectWeekInputs).toHaveBeenCalledTimes(3);
-      // The stub still replies with the May 24 note, which fails the guard on Jun 12's facts: two new calls.
+      // The stub still replies with the May 24 note, which fails the check on Jun 12's facts: two new calls.
       expect(services.ai.getUserInsightsNote).toHaveBeenCalledTimes(3);
       expect(services.ai.getUserInsightsNote).toHaveBeenLastCalledWith(insights.renderPromptView(await factsOf(JUN12)));
     });
@@ -358,16 +347,32 @@ describe('/user-insights-summary', () => {
       expect(writtenKeys(services.kv).filter((k) => k.startsWith('insights-refresh:'))).toEqual(['insights-refresh:bordesak']);
     });
 
-    it('a quiet week makes no model call', async () => {
+    it('a week of 30 or more plays gets a note even when the facts call it quiet', async () => {
       const services = createServices(OWNER, OWNER);
-      const quiet = onlyWeekPlays(MAY24, 6);
+      services.ai.getUserInsightsNote.mockResolvedValue(PLAIN);
+      const quiet = onlyWeekPlays(MAY24, 30);
       const wf = await factsOf(quiet);
+      expect(wf.plays.deduped).toBe(30);
       expect(wf.quiet).toBe(true);
       collectWeekInputs.mockResolvedValue(quiet);
 
+      const { data } = await (await buildApp(services)(URL_SUMMARY)).json() as { data: { note: string; mode: string } };
+      expect(services.ai.getUserInsightsNote).toHaveBeenCalledTimes(1);
+      expect(data.mode).toBe('note');
+      expect(data.note).toBe(PLAIN_NOTE);
+      expect(data.note.split('\n\n')).toHaveLength(2);
+    });
+
+    it('a week of 29 plays makes no model call and gets the code line', async () => {
+      const services = createServices(OWNER, OWNER);
+      const short = onlyWeekPlays(MAY24, 29);
+      const wf = await factsOf(short);
+      expect(wf.plays.deduped).toBe(29);
+      collectWeekInputs.mockResolvedValue(short);
+
       const res = await buildApp(services)(URL_SUMMARY);
       const { data } = await res.json() as { data: Record<string, unknown> };
-      expect(data).toMatchObject({ note: insights.renderLine(wf, 'second'), question: null, mode: 'quiet', header: 'Your week' });
+      expect(data).toMatchObject({ note: insights.renderLine(wf, 'second'), mode: 'quiet', header: 'Your week' });
       expect(services.ai.getUserInsightsNote).not.toHaveBeenCalled();
       expect(writtenKeys(services.kv).filter((k) => k.startsWith('ai:'))).toEqual([]);
     });
@@ -413,7 +418,7 @@ describe('/user-insights-summary', () => {
       const res = await request(URL_SUMMARY);
 
       expect(await res.json()).toEqual({
-        data: { note: NOTE, question: null, header: 'Your week', pulledAt: first.data.pulledAt, mode: 'note', refreshing: true },
+        data: { note: NOTE, header: 'Your week', pulledAt: first.data.pulledAt, mode: 'note', refreshing: true },
       });
       expect(collectWeekInputs).toHaveBeenCalledTimes(1);
       expect(services.ai.getUserInsightsNote).toHaveBeenCalledTimes(1);
@@ -506,7 +511,7 @@ describe('/user-insights-summary', () => {
   });
 
   describe('visitor', () => {
-    it('visitor gets the third-person line, no question, "<username>\'s week", and no model call', async () => {
+    it('visitor gets the third-person line, "<username>\'s week", and no model call', async () => {
       const services = createServices(VISITOR, OWNER);
       const res = await buildApp(services)(URL_SUMMARY);
 
@@ -515,7 +520,6 @@ describe('/user-insights-summary', () => {
       const wf = await factsOf(MAY24);
       expect(data).toEqual({
         note: insights.renderLine({ ...wf, username: 'rian' }, 'third'),
-        question: null,
         header: "rian's week",
         pulledAt: new Date(MAY24.now * 1000).toISOString(),
         mode: 'line',
@@ -525,42 +529,13 @@ describe('/user-insights-summary', () => {
       expect(writtenKeys(services.kv).filter((k) => k.startsWith('ai:') || k.startsWith('insights:last'))).toEqual([]);
     });
 
-    it('a visitor on a quiet week gets the quiet line', async () => {
+    it('a visitor on a quiet week of 30 or more plays gets the third-person quiet line and no model call', async () => {
       const services = createServices(VISITOR, OWNER);
-      collectWeekInputs.mockResolvedValue(onlyWeekPlays(MAY24, 6));
-      const { data } = await (await buildApp(services)(URL_SUMMARY)).json() as { data: { mode: string } };
-      expect(data.mode).toBe('quiet');
-    });
-
-    it('a visitor request never reads or writes the question state', async () => {
-      const services = createServices(VISITOR, OWNER);
-      await services.kv.put('insights:question:bordesak', JSON.stringify({ kind: 'after', subject: 'jazz' }));
-      vi.mocked(services.kv.put).mockClear();
-      await buildApp(services)(URL_SUMMARY);
-
-      expect(readKeys(services.kv)).not.toContain('insights:question:bordesak');
-      expect(writtenKeys(services.kv)).not.toContain('insights:question:bordesak');
-      expect(insights.buildWeekFacts).toHaveBeenCalledWith(MAY24, { lastQuestion: null });
-    });
-
-    it('the owner\'s question still follows the stored state when a visitor computed the facts', async () => {
-      // The owner was last asked a "started" question about another subject, so this week rotates away from it.
-      const stored = { kind: 'started' as const, subject: 'Some Other Artist' };
-      const wf = await factsOf(MAY24);
-      const rotated = insights.chooseQuestion(wf.facts, stored);
-      expect(rotated?.text ?? null).not.toBe(wf.question?.text ?? null);
-
-      const visitor = createServices(VISITOR, OWNER);
-      await buildApp(visitor)(URL_SUMMARY);
-      const owner = createServices(OWNER, OWNER);
-      owner.kv = visitor.kv;
-      owner.ai.cache = new AICache(visitor.kv);
-      await owner.kv.put('insights:question:bordesak', JSON.stringify(stored));
-
-      const { data } = await (await buildApp(owner)(URL_SUMMARY)).json() as { data: { question: string | null } };
-      // The visitor's facts carry no release dates, so the owner recomputes them once.
-      expect(collectWeekInputs).toHaveBeenCalledTimes(2);
-      expect(data.question).toBe(rotated?.text ?? null);
+      const quiet = onlyWeekPlays(MAY24, 30);
+      collectWeekInputs.mockResolvedValue(quiet);
+      const { data } = await (await buildApp(services)(URL_SUMMARY)).json() as { data: { note: string; mode: string } };
+      expect(data).toMatchObject({ note: insights.renderLine({ ...(await factsOf(quiet)), username: 'rian' }, 'third'), mode: 'quiet' });
+      expect(services.ai.getUserInsightsNote).not.toHaveBeenCalled();
     });
 
     it('passes a release lookup to the collector for the owner and none for a visitor', async () => {
@@ -631,31 +606,35 @@ describe('/user-insights-summary', () => {
       }
     });
 
-    it('logs no statement, prompt-view line, note sentence, name, value or date over a full owner generation', async () => {
+    it('logs no statement, prompt-view line, reply text, name, value or date over a full owner generation', async () => {
       const services = createServices(OWNER, OWNER);
-      // Fails on a count, then on a name and a day outside the cited fact (Fri May 29 is the Boards of Canada fact's).
-      // Slow Crush is in the shoegaze fact and not a top artist, whose names count as cited by every sentence.
-      const badName = { ...BAD, sentences: [S1, { text: 'Slow Crush came up too, on Fri May 29.', facts: [1] }] };
-      services.ai.getUserInsightsNote.mockResolvedValueOnce(BAD).mockResolvedValueOnce(badName);
+      // Both replies fail the check: the second names a real artist absent from its text and states a day's count.
+      const absent = {
+        note: { note: 'Slow Crush came up too, 455 times.', names: ['Slow Crush', 'Spotlight Kid'] },
+        raw: JSON.stringify({ note: 'Slow Crush came up too, 455 times.', names: ['Slow Crush', 'Spotlight Kid'] }),
+        metadata: { truncated: false },
+      };
+      services.ai.getUserInsightsNote.mockResolvedValueOnce(BAD).mockResolvedValueOnce(absent);
       const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((level) =>
         vi.spyOn(console, level).mockImplementation(() => {}));
 
       const res = await buildApp(services)(URL_SUMMARY);
       expect(res.status).toBe(200);
+      expect((await res.json() as { data: { mode: string } }).data.mode).toBe('line');
 
       const logged = spies.flatMap((spy) => spy.mock.calls.map((args) => args.map((a) =>
         typeof a === 'string' ? a : a instanceof Error ? `${a.message} ${a.stack}` : JSON.stringify(a)).join(' ')));
       expect(logged.length).toBeGreaterThan(0);
-      // The log carries the fact kinds and the guard failure codes.
+      // The log carries the fact kinds and the check failure codes.
       expect(logged.join('\n')).toContain('genre_cluster');
-      expect(logged.join('\n')).toContain('quantity-entity');
-      expect(logged.join('\n')).toMatch(/\bs2:name\b/);
+      expect(logged).toContain('[Insights] note-attempt:1 check-failed name-unknown,number');
+      expect(logged).toContain('[Insights] note-attempt:2 check-failed name-absent');
 
       const wf = await factsOf(MAY24);
       const forbidden = [
         ...[wf.windowFact, ...wf.facts].map((f) => f.statement),
         ...insights.renderPromptView(wf).split('\n').filter((line) => line.trim() !== ''),
-        S1.text, S2.text, BAD.sentences[1].text, badName.sentences[1].text, NOTE,
+        BAD_TEXT, BAD.raw, absent.note.note, absent.raw, 'Quillon Varga',
         // Names of four or more characters: shorter ones collide with ordinary words in log prefixes.
         ...wf.names.filter((name) => name.length >= 4),
       ];
@@ -670,23 +649,17 @@ describe('/user-insights-summary', () => {
         for (const name of longNames) expect(line).not.toContain(name);
       }
 
-      // No value, unit or date from the facts: guard codes are logged by type only, and the week's play count is not
-      // logged. Small values collide with saliences and call counts, so they are checked as guard payloads.
-      expect(logged.join('\n')).toContain('s2:date');
+      // No value or date from the facts or the replies. Small values collide with saliences and call counts, so only
+      // the week's play counts and values over 100 are checked.
       const all = [wf.windowFact, ...wf.facts];
       const labels = all.flatMap((f) => f.dates.map((t) => insights.dayLabel(t, wf.timezone)));
       for (const line of logged) {
-        expect(line).not.toMatch(/\b(?:quantity(?:-unit|-entity)?|date|day|month|name):[^\s,]/);
-        for (const count of [wf.plays.deduped, wf.plays.raw]) expect(line).not.toMatch(new RegExp(`\\b${count}\\b`));
+        for (const count of [wf.plays.deduped, wf.plays.raw, 9999]) expect(line).not.toMatch(new RegExp(`\\b${count}\\b`));
         for (const q of all.flatMap((f) => f.quantities)) {
           expect(line).not.toContain(`${q.value}:${q.unit}`);
           if (q.value > 100) expect(line).not.toMatch(new RegExp(`\\b${q.value}\\b`));
         }
-        for (const label of labels) {
-          expect(line).not.toContain(label);
-          expect(line.toLowerCase()).not.toContain(label.toLowerCase().split(' ').join('-'));
-          expect(line.toLowerCase()).not.toContain(label.toLowerCase().split(' ').slice(1).join('-'));
-        }
+        for (const label of labels) expect(line).not.toContain(label);
       }
     });
   });
@@ -706,7 +679,7 @@ describe('/user-insights-summary', () => {
     const CORRUPT = `{"note": "${NOTE} ${SENTINEL}`;
     const expectClean = (logged: string[]): void => {
       for (const line of logged) {
-        for (const text of [SENTINEL, NOTE, S1.text, S2.text, 'bordesak', 'JSON', 'KV failed']) expect(line).not.toContain(text);
+        for (const text of [SENTINEL, NOTE, P1, P2, 'bordesak', 'JSON', 'KV failed']) expect(line).not.toContain(text);
       }
     };
 
@@ -810,28 +783,6 @@ describe('/user-insights-summary', () => {
         '[Insights] cache-delete:error insights:generating',
       ]) expect(logged).toContain(code);
       expectClean(logged);
-    });
-  });
-
-  describe('logSafeFailures', () => {
-    it('keeps the sentence and the failure type, and drops every value, unit, date and fact id', () => {
-      expect(logSafeFailures([
-        's2:quantity-entity:41:plays', 's2:quantity:9', 's3:quantity-unit:6:months', 's2:quantity:word:twenty',
-        's2:quantity:fraction:half', 's2:date:fri-may-30', 's2:day:tue', 's2:month:jun', 's2:name:fact4', 's4:name:week',
-        'shape:count:5', 'shape:lead', 's2:shape:unknown-fact:99', 's2:shape:multiple-sentences', 's2:shape:uncited',
-        's2:banned:first-time', 's1:punctuation:em-dash', 's2:something-new:41', 'odd:41:plays',
-      ])).toEqual([
-        's2:quantity-entity', 's2:quantity', 's3:quantity-unit', 's2:quantity',
-        's2:quantity', 's2:date', 's2:day', 's2:month', 's2:name', 's4:name',
-        'shape:count', 'shape:lead', 's2:shape:unknown-fact', 's2:shape:multiple-sentences', 's2:shape:uncited',
-        's2:banned:first-time', 's1:punctuation:em-dash', 's2:other', 'other',
-      ]);
-    });
-
-    it('leaves the guard result itself untouched', () => {
-      const failures = ['s2:quantity-entity:41:plays'];
-      logSafeFailures(failures);
-      expect(failures).toEqual(['s2:quantity-entity:41:plays']);
     });
   });
 });

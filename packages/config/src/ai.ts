@@ -82,7 +82,8 @@ export interface AITaskConfig {
  *   entry because AITaskConfig requires it and it still applies if a task is
  *   flipped back to OpenAI. `verbosity` is left where it was set.
  * - Opus 5.5 defaults to 'medium' effort, which is why every Claude task sets
- *   `reasoning` explicitly ('low', except userInsightsRecommendations). AnthropicClient maps `reasoning` to
+ *   `reasoning` explicitly ('low', except userInsightsSummary and
+ *   userInsightsRecommendations). AnthropicClient maps `reasoning` to
  *   output_config.effort; 'none', 'minimal', and unset all map to 'low'.
  * - On OpenAI, temperature is ignored when reasoning is set, and GPT-5.x only
  *   supports temperature=1.
@@ -208,16 +209,19 @@ export const AI_TASKS = {
   userInsightsSummary: {
     provider: 'anthropic',
     model: 'claude-opus-5-5',
-    // The weekly note: two to four sentences as a JSON array with cited fact
-    // ids. 5000 gives headroom for adaptive thinking (thinking tokens count
-    // against max_tokens, display-omitted so invisible); measured output runs
-    // 80 to 540 tokens including thinking. Only tokens generated are billed.
+    // The weekly note: two or three short paragraphs (120 to 200 words) as
+    // JSON { note, names }. 5000 gives headroom for adaptive thinking (thinking
+    // tokens count against max_tokens, display-omitted so invisible); the
+    // earlier sentence-array note measured 80 to 540 tokens including thinking.
+    // Only tokens generated are billed.
     maxTokens: 5000,
     // temperature is inert on Claude (the AnthropicClient omits it) and is kept
     // only because the AITaskConfig shape requires it.
     temperature: 0.8,
     cacheTtlDays: 1,
-    reasoning: 'low',
+    // Medium: from v8 the note is free prose that frames and connects the
+    // week, set with the insights-simplify plan (2026-11-16).
+    reasoning: 'medium',
   },
 
   userInsightsRecommendations: {

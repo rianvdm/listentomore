@@ -182,9 +182,12 @@ async function runScript(
   return { fetches, innerHtmlWrites, consoleArgs, element, settle };
 }
 
+const PARAGRAPHS = [
+  'You played Eternal Embers by Meltt start to finish three times.',
+  'Nils Frahm sat underneath it all week.',
+];
 const week = {
-  note: 'You played Eternal Embers by Meltt start to finish three times.',
-  question: 'What started it?',
+  note: PARAGRAPHS.join('\n\n'),
   header: 'Your week',
   pulledAt: '2026-11-08T14:30:00.000Z',
   mode: 'note',
@@ -212,8 +215,10 @@ describe('UserInsightsPage', () => {
     expect(script).not.toContain('enrichLinks(');
   });
 
-  it('the question renders in its own element', () => {
-    expect(owner).toMatch(/<p[^>]*id="insights-question"[^>]*\shidden/);
+  it('has no question element or style', () => {
+    expect(owner).not.toContain('insights-question');
+    expect(visitor).not.toContain('insights-question');
+    expect(pageScript(owner)).not.toContain('question');
   });
 
   it('shows when the data was pulled and that counts exclude likely duplicate scrobbles', () => {
@@ -241,51 +246,50 @@ describe('insights client script', () => {
     expect(run.fetches).toContain('/api/internal/user-insights-summary?username=testuser');
   });
 
-  it('shows the note, the question and the meta line to the owner', async () => {
+  it('shows the note as one paragraph element per paragraph, and the meta line, to the owner', async () => {
     const run = await runScript(owner, { data: week });
-    expect(run.element('insights-summary').textContent).toBe(week.note);
-    const question = run.element('insights-question');
-    expect(question.hidden).toBe(false);
-    expect(question.textContent).toBe('What started it?');
+    const summary = run.element('insights-summary');
+    expect(summary.children.map((p) => [p.tagName, p.className, p.textContent])).toEqual([
+      ['p', 'insights-note', PARAGRAPHS[0]],
+      ['p', 'insights-note', PARAGRAPHS[1]],
+    ]);
     const meta = run.element('insights-meta');
     expect(meta.hidden).toBe(false);
     expect(meta.textContent).toMatch(/^Updated .+\. Counts exclude likely duplicate scrobbles\.$/);
     expect(meta.textContent).not.toContain('2026-11-08T');
   });
 
+  it('splits paragraphs on blank lines, including ones with spaces or extra newlines', async () => {
+    const run = await runScript(owner, { data: { ...week, note: 'One.\n \nTwo.\n\n\nThree.' } });
+    expect(run.element('insights-summary').children.map((p) => p.textContent)).toEqual(['One.', 'Two.', 'Three.']);
+  });
+
   it('never parses response text as HTML', async () => {
-    const hostile = {
-      ...week,
-      note: '<img src=x onerror="alert(1)">',
-      question: '<b>bold</b>',
-    };
+    const hostile = { ...week, note: '<img src=x onerror="alert(1)">\n\n<b>bold</b>' };
     const run = await runScript(owner, { data: hostile });
-    expect(run.element('insights-summary').textContent).toBe(hostile.note);
-    expect(run.element('insights-question').textContent).toBe(hostile.question);
+    expect(run.element('insights-summary').children.map((p) => p.textContent)).toEqual([
+      '<img src=x onerror="alert(1)">',
+      '<b>bold</b>',
+    ]);
     expect(run.innerHtmlWrites.join('\n')).not.toContain('<img');
     expect(run.innerHtmlWrites.join('\n')).not.toContain('<b>');
   });
 
-  it('keeps the question hidden when it is null', async () => {
-    const run = await runScript(owner, { data: { ...week, question: null } });
-    expect(run.element('insights-question').hidden).toBe(true);
-    expect(run.element('insights-meta').hidden).toBe(false);
-  });
-
-  it('never shows a question to a visitor', async () => {
-    const run = await runScript(visitor, {
-      data: { ...week, header: "testuser's week", mode: 'line', question: 'What started it?' },
-    });
-    expect(run.element('insights-question').hidden).toBe(true);
+  it('a visitor gets the line and the meta line, and no cooldown request', async () => {
+    const line = "testuser played Meltt 31 times this week.";
+    const run = await runScript(visitor, { data: { ...week, note: line, header: "testuser's week", mode: 'line' } });
+    expect(run.element('insights-summary').children.map((p) => p.textContent)).toEqual([line]);
     expect(run.element('insights-meta').hidden).toBe(false);
     expect(run.fetches.some((url) => url.startsWith('/api/internal/user-insights-cooldown'))).toBe(false);
   });
 
-  it('marks a refreshing note with "Updating..."', async () => {
+  it('marks a refreshing note with "Updating..." on its last paragraph', async () => {
     const run = await runScript(owner, { data: { ...week, refreshing: true } });
-    const summary = run.element('insights-summary');
-    expect(summary.find('insights-updating')?.textContent).toBe('Updating...');
-    expect(summary.textContent).toBe(`${week.note} Updating...`);
+    const [first, last] = run.element('insights-summary').children;
+    expect(first.find('insights-updating')).toBeUndefined();
+    expect(first.textContent).toBe(PARAGRAPHS[0]);
+    expect(last.find('insights-updating')?.textContent).toBe('Updating...');
+    expect(last.textContent).toBe(`${PARAGRAPHS[1]} Updating...`);
   });
 
   it('shows no "Updating..." on a settled note', async () => {
@@ -298,10 +302,9 @@ describe('insights client script', () => {
     expect(run.element('insights-meta').textContent).toBe(DUPLICATES_COPY);
   });
 
-  it('shows the sparse message as text and hides the question and meta line', async () => {
+  it('shows the sparse message as text and hides the meta line', async () => {
     const run = await runScript(owner, { data: null, sparse: true, message: 'Only <i>two</i> plays so far.' });
     expect(run.element('insights-summary').textContent).toBe('Only <i>two</i> plays so far.');
-    expect(run.element('insights-question').hidden).toBe(true);
     expect(run.element('insights-meta').hidden).toBe(true);
   });
 
@@ -310,20 +313,18 @@ describe('insights client script', () => {
     expect(run.element('insights-summary').textContent).toBe(
       'Unable to generate insights right now. Please try again later.',
     );
-    expect(run.element('insights-question').hidden).toBe(true);
     expect(run.element('insights-meta').hidden).toBe(true);
   });
 
-  it('hides the question and meta line while a refresh loads', async () => {
+  it('hides the meta line while a refresh loads', async () => {
     const run = await runScript(owner, { data: week });
-    expect(run.element('insights-question').hidden).toBe(false);
+    expect(run.element('insights-meta').hidden).toBe(false);
     run.element('refresh-btn').dispatch('click');
-    expect(run.element('insights-question').hidden).toBe(true);
     expect(run.element('insights-meta').hidden).toBe(true);
     expect(run.element('insights-summary').textContent).toBe('Reading your week...');
     expect(run.fetches).toContain('/api/internal/user-insights-summary?username=testuser&refresh=true');
     await run.settle();
-    expect(run.element('insights-question').hidden).toBe(false);
+    expect(run.element('insights-meta').hidden).toBe(false);
   });
 
   // The initial summary is still loading when Refresh is clicked, then answers after it.

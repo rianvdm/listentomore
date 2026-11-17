@@ -34,7 +34,7 @@ Claude web search costs $10 per 1,000 searches. Search results are also billed a
 | `albumDetail` | `claude-opus-5-5` | low | Long-form with web search, cached 120 days |
 | `genreSummary` | `claude-opus-5-5` | low | Long-form, cached 180 days |
 | `albumRecommendations` | `claude-opus-5-5` | low | Web search plus judgement about what to recommend |
-| `userInsightsSummary` | `claude-opus-5-5` | low | The weekly note: four to six sentences, returned as JSON with the ids of the ranked week facts each one cites, then checked by the guard. Uncached here; the insights route caches only a note that passes |
+| `userInsightsSummary` | `claude-opus-5-5` | medium | The weekly note: two or three short paragraphs, returned as JSON `{ note, names }`, then checked by `checkNote` (names are this week's and in the text, integers are in the prompt view). Uncached here; the insights route caches only a note that passes |
 | `albumTrivia` | `claude-opus-5-5` | low | The making-of card on the insights page: one fact about an album, with web search capped at 2 searches. Uncached here; the insights route keeps a cited fact that passes the copy rubric for 120 days per album, and a NONE, a missing citation or two rubric failures for 30 days |
 | `userInsightsRecommendations` | `claude-opus-5-5` | medium | At low effort it once leaked its filtering notes into the visible output |
 | `artistSentence` | `claude-opus-5-5` | low | Short output with web search, cached 180 days. Sonnet 5.5 at low effort shipped visible self-corrections on 2 of 9 eval rows (64-74 words against the 38-word cap) |
