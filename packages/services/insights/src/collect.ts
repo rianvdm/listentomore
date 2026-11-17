@@ -4,7 +4,7 @@
 import { CACHE_CONFIG, getTtlSeconds } from '@listentomore/config';
 import { dedupe } from './dedupe';
 import { artistWeeks } from './history';
-import { keys } from './keys';
+import { keyFamily, keys } from './keys';
 import { hasEditionMarker } from './match';
 import { albumRuns, runsToLookUp } from './runs';
 import { norm } from './text';
@@ -98,7 +98,11 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return out;
 }
 
-/** KV reads and writes for one generation. Reads that fail are misses; writes never fail the generation. */
+/**
+ * KV reads and writes for one generation. Reads that fail are misses; writes never fail the generation. Failures log a
+ * fixed code and the key family only: a KV error can quote the key, which holds the username and names, and a JSON
+ * parse error can quote the stored value.
+ */
 class Store {
   private readonly pending: Array<Promise<unknown>> = [];
 
@@ -109,15 +113,16 @@ class Store {
     try {
       return (await this.kv.get(key, 'json')) as T | null;
     } catch (error) {
-      console.error('Insights cache read failed:', errorMessage(error));
+      const code = error instanceof SyntaxError ? 'cache-read:parse' : 'cache-read:error';
+      console.error(`[Insights] ${code} ${keyFamily(key)}`);
       return null;
     }
   }
 
   write(key: string, value: unknown, ttlSeconds: number): void {
     if (keyBytes.encode(key).length > MAX_KEY_BYTES) return;
-    const put = this.kv.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds }).catch((error: unknown) => {
-      console.error('Insights cache write failed:', errorMessage(error));
+    const put = this.kv.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds }).catch(() => {
+      console.error(`[Insights] cache-write:error ${keyFamily(key)}`);
     });
     if (this.defer) this.defer(put);
     else this.pending.push(put);

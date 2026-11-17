@@ -10,6 +10,7 @@ import {
   RULE_VERSION,
   buildWeekFacts,
   collectWeekInputs,
+  keyFamily,
   keys,
   noteSignature,
   renderLine,
@@ -54,12 +55,6 @@ export interface WeekInsightsArgs {
 interface CachedNote { note: string }
 /** The pointer to the note last served to the owner, read while another request is generating. */
 interface LastNote { signature: string; pulledAt: string }
-
-/**
- * A key's family, its first two segments ('insights:facts', 'lastfm:toplist'), for log lines: the rest of a key holds
- * a username or a name.
- */
-const keyFamily = (key: string): string => key.split(':').slice(0, 2).join(':');
 
 /**
  * A KV JSON read where a failed read is a miss: every cache here is an optimisation. Logs a fixed code and the key

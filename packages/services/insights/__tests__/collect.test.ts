@@ -553,6 +553,41 @@ describe('collectWeekInputs', () => {
     expect(again.of('getWeeklyArtistChart')).toHaveLength(0);
   });
 
+  it('KV read and write failures log a fixed code and the key family, never the error message or key', async () => {
+    const kv = createMockKV();
+    // A KV error can quote the whole key, which holds the username and artist and album names.
+    const fail = (key: string) => Promise.reject(new Error(`KV failed for ${key}`));
+    vi.mocked(kv.get).mockImplementation(((key: string) => fail(key)) as never);
+    vi.mocked(kv.put).mockImplementation(((key: string) => fail(key)) as never);
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((level) =>
+      vi.spyOn(console, level).mockImplementation(() => {}));
+
+    await collect(new FakeClient({ scrobbles: hourly(SPAN_FROM, NOW) }), kv);
+
+    const logged = spies.flatMap((spy) => spy.mock.calls.map((args) => args.map((a) =>
+      typeof a === 'string' ? a : a instanceof Error ? `${a.message} ${a.stack}` : JSON.stringify(a)).join(' ')));
+    expect(logged).toContain('[Insights] cache-read:error lastfm:scrobbles');
+    expect(logged).toContain('[Insights] cache-write:error lastfm:scrobbles');
+    for (const line of logged) {
+      for (const text of ['alice', 'Alice', 'KV failed', 'Low', 'Secret']) expect(line).not.toContain(text);
+    }
+    for (const spy of spies) spy.mockRestore();
+  });
+
+  it('a corrupt cached day is a miss and logs a parse code and the key family, never the stored value', async () => {
+    const kv = createMockKV();
+    const settled = dayOf(TODAY - 3 * DAY);
+    await kv.put(keys.scrobbleDay('alice', settled), '{"scrobbles": [{"artist": "Secret Name alice');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await collect(new FakeClient({ scrobbles: hourly(SPAN_FROM, NOW) }), kv);
+
+    const logged = error.mock.calls.map((args) => args.map(String).join(' '));
+    expect(logged).toContain('[Insights] cache-read:parse lastfm:scrobbles');
+    for (const line of logged) for (const text of ['alice', 'Secret', 'JSON']) expect(line).not.toContain(text);
+    error.mockRestore();
+  });
+
   it('hands every KV write to defer when given one', async () => {
     const kv = createMockKV();
     const deferred: Array<Promise<unknown>> = [];

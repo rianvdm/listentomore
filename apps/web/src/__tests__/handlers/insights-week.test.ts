@@ -784,6 +784,42 @@ describe('/user-insights-summary', () => {
       ]) expect(logged).toContain(code);
       expectClean(logged);
     });
+
+    it('a generation failure whose message carries a key and a name logs a fixed code and the error class only', async () => {
+      const services = createServices(OWNER, OWNER);
+      collectWeekInputs.mockRejectedValue(new insights.InsightsFetchError(
+        `Could not read the current week: KV failed for lastfm:scrobbles:bordesak:2026-05-20 (${SENTINEL})`));
+      const spies = consoleSpies();
+
+      const res = await buildApp(services)(URL_SUMMARY);
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: 'Failed to generate insights' });
+
+      const logged = loggedLines(spies);
+      expect(logged).toContain('[Insights] summary:error kind=InsightsFetchError');
+      for (const line of logged) expect(line).not.toContain('Could not read');
+      expectClean(logged);
+    });
+
+    it('refresh-cooldown read and write failures log a fixed code, the key family and the error class only', async () => {
+      const services = createServices(OWNER, OWNER);
+      const fail = (key: string) => Promise.reject(new Error(`KV failed for ${key} (${SENTINEL})`));
+      const kvGet = vi.mocked(services.kv.get) as unknown as Mock<(key: string, ...rest: unknown[]) => Promise<unknown>>;
+      const kvPut = vi.mocked(services.kv.put) as unknown as Mock<(key: string, ...rest: unknown[]) => Promise<void>>;
+      const realGet = kvGet.getMockImplementation()!;
+      const realPut = kvPut.getMockImplementation()!;
+      kvGet.mockImplementation((key, ...rest) => (key.startsWith('insights-refresh:') ? fail(key) : realGet(key, ...rest)));
+      kvPut.mockImplementation((key, ...rest) => (key.startsWith('insights-refresh:') ? fail(key) : realPut(key, ...rest)));
+      const spies = consoleSpies();
+
+      // A failed read allows the refresh, and a failed write lets it go ahead without a cooldown.
+      expect((await buildApp(services)(URL_REFRESH)).status).toBe(200);
+
+      const logged = loggedLines(spies);
+      expect(logged).toContain('[Insights] cache-read:error insights-refresh kind=Error');
+      expect(logged).toContain('[Insights] cache-write:error insights-refresh kind=Error');
+      expectClean(logged);
+    });
   });
 });
 

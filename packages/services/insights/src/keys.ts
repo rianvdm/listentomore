@@ -36,6 +36,12 @@ export const keys = {
 };
 
 /**
+ * A key's family, its first two segments ('insights:facts', 'lastfm:scrobbles'), for log lines: the rest of a key
+ * holds a username or a name.
+ */
+export const keyFamily = (key: string): string => key.split(':').slice(0, 2).join(':');
+
+/**
  * Prefixes of the multi-key families that hold one user's data. Each ends in ':' so that one user's
  * prefix never matches another's ('lastfm:scrobbles:alice:' cannot match 'alice2').
  */

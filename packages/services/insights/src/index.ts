@@ -20,6 +20,6 @@ export { DUPLICATES_CAVEAT, TRUNCATED_CAVEAT, buildWeekFacts } from './build';
 export { PROMPT_FACTS, noteSignature, renderLine, renderPromptView } from './render';
 export { checkNote } from './check';
 export type { NoteCheckFailure } from './check';
-export { keys, userExactKeys, userKeyPrefixes } from './keys';
+export { keyFamily, keys, userExactKeys, userKeyPrefixes } from './keys';
 export { CAPS, InsightsFetchError, collectReleases, collectWeekInputs } from './collect';
 export type { Caps, CollectArgs } from './collect';
