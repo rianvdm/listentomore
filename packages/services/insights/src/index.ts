@@ -23,4 +23,3 @@ export type { NoteCheckFailure } from './check';
 export { keys, userExactKeys, userKeyPrefixes } from './keys';
 export { CAPS, InsightsFetchError, collectReleases, collectWeekInputs } from './collect';
 export type { Caps, CollectArgs } from './collect';
-export { checkCopyRubric, checkNoteRubric, checkRubric, maskNames } from './rubric';

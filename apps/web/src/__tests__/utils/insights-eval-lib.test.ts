@@ -1,10 +1,18 @@
-// ABOUTME: Tests for scripts/insights-eval-lib.ts: the output directory, the names the rubric masks, and the
-// ABOUTME: .dev.vars keys a live run needs.
+// ABOUTME: Tests for scripts/insights-eval-lib.ts: the output directory, fixture tags and gold keys, phrases copied
+// ABOUTME: from the voice examples, word counts, and the .dev.vars keys a live run needs.
 
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-import type { WeekFacts } from '@listentomore/insights';
-import { evalOutputDir, missingDevVarsError, noteNames, requiredDevVars } from '../../../scripts/insights-eval-lib';
+import { USER_INSIGHTS_VOICE_EXAMPLES } from '@listentomore/ai';
+import {
+  copiedPhrases,
+  evalOutputDir,
+  fixtureTag,
+  goldKey,
+  missingDevVarsError,
+  requiredDevVars,
+  wordCount,
+} from '../../../scripts/insights-eval-lib';
 
 const WEB_ROOT = '/repo/apps/web';
 
@@ -21,15 +29,51 @@ describe('evalOutputDir', () => {
   });
 });
 
-describe('noteNames', () => {
-  it('returns the week names and every fact entity, once each', () => {
-    const fact = (entities: string[]) => ({ entities }) as unknown as WeekFacts['facts'][number];
-    const wf = {
-      names: ['Great White', 'Inferno'],
-      windowFact: fact([]),
-      facts: [fact(['Great White', 'Gurriers']), fact(['Boards of Canada'])],
-    } as unknown as WeekFacts;
-    expect(noteNames(wf).sort()).toEqual(['Boards of Canada', 'Great White', 'Gurriers', 'Inferno']);
+describe('fixtureTag and goldKey', () => {
+  it('tags each committed fixture and an extra one, and finds the gold key of a gold week only', () => {
+    const cases: Array<[string, ReturnType<typeof fixtureTag>, string | null]> = [
+      ['bordesak-2026-05-24', 'gold', '2026-05-24'],
+      ['bordesak-2026-05-31', 'gold', '2026-05-31'],
+      ['bordesak-2026-06-12', 'gold, example in prompt', '2026-06-12'],
+      ['bordesak-heldout-2026-08-02', 'held-out', null],
+      ['bordesak-heldout-2026-09-20', 'held-out', null],
+      ['bordesak-live-2026-11-09', 'live', null],
+      ['extra-1', 'extra', null],
+    ];
+    for (const [name, tag, key] of cases) {
+      expect(fixtureTag(name), name).toBe(tag);
+      expect(goldKey(name), name).toBe(key);
+    }
+  });
+
+  it('refuses a fixture name it cannot tag', () => {
+    expect(() => fixtureTag('week-of-plays')).toThrow(/fixture name/);
+    expect(goldKey('week-of-plays')).toBeNull();
+  });
+});
+
+describe('copiedPhrases', () => {
+  it('finds a six-word span copied from an example, whatever its case and punctuation', () => {
+    expect(USER_INSIGHTS_VOICE_EXAMPLES[0]).toContain('You went back to In Rainbows');
+    expect(copiedPhrases('On Tuesday you went back to In Rainbows, twice.', USER_INSIGHTS_VOICE_EXAMPLES)).toEqual([
+      'you went back to in rainbows',
+    ]);
+  });
+
+  it('returns nothing for a five-word overlap', () => {
+    expect(copiedPhrases('Then you went back to In Utero.', USER_INSIGHTS_VOICE_EXAMPLES)).toEqual([]);
+  });
+
+  it('joins overlapping n-grams into one span and takes a shorter n', () => {
+    expect(copiedPhrases('a b c d e f g', ['x a b c d e f g y'])).toEqual(['a b c d e f g']);
+    expect(copiedPhrases('one two three', ['zero one two three four'], 3)).toEqual(['one two three']);
+  });
+});
+
+describe('wordCount', () => {
+  it('counts words across lines and paragraphs', () => {
+    expect(wordCount('a b\n\nc')).toBe(3);
+    expect(wordCount('  ')).toBe(0);
   });
 });
 
