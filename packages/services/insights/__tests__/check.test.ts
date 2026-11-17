@@ -62,6 +62,17 @@ describe('checkNote', () => {
     expect(checkNote({ note: 'Low had 1204 plays.', names: ['Low'] }, week, 'Week: 1,204 plays.')).toEqual([]);
   });
 
+  it('compares an all-punctuation name by norm, since its match key is empty', () => {
+    const bang = buildWeekFacts(makeInputs({ scrobbles: plays('!!!', 8, MON, 'Thr!!!er') }));
+    const bangView = renderPromptView(bang);
+    expect(bang.names).toContain('!!!');
+    expect(checkNote({ note: 'You kept coming back to !!! this week.', names: ['!!!'] }, bang, bangView)).toEqual([]);
+    expect(checkNote({ note: 'You kept coming back to one band this week.', names: ['!!!'] }, bang, bangView))
+      .toEqual(['name-absent']);
+    expect(checkNote({ note: 'You kept coming back to ??? this week.', names: ['???'] }, bang, bangView))
+      .toEqual(['name-unknown']);
+  });
+
   it('reports each failure type once, in order', () => {
     expect(checkNote({ note: 'Slowdive and Ride filled the week.', names: ['Slowdive', 'Ride'] }, week, view)).toEqual(['name-unknown']);
     expect(checkNote({ note: 'Low hit 1997 and 1998.', names: ['Nobody', 'Someone'] }, week, view))
